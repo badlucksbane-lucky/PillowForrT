@@ -124,9 +124,11 @@ func watchdogLoop() {
 	}
 }
 
+// tokenOK: does the request carry the heartbeat token? With no token file configured the token is OFF and nothing matches (fail closed: "no file" once meant
+// "accept any header", which let a made-up X-Beat-Token unlock the per-device detail in /status.json).
 func tokenOK(r *http.Request) bool {
 	if *beatTokenFile == "" {
-		return true
+		return false
 	}
 	want, err := os.ReadFile(*beatTokenFile)
 	if err != nil || len(strings.TrimSpace(string(want))) == 0 {

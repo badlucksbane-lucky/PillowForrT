@@ -34,3 +34,20 @@ func TestHeartbeatOffByDefault(t *testing.T) {
 		t.Errorf("wrong token must be refused, got %d", rec.Code)
 	}
 }
+
+// With no -beat-token-file the heartbeat token is OFF: an X-Beat-Token header must never unlock /status.json detail (devices, browsing).
+func TestBeatTokenHeaderRefusedWhenNoTokenFile(t *testing.T) {
+	old := *beatTokenFile
+	defer func() { *beatTokenFile = old }()
+	*beatTokenFile = ""
+	for _, tok := range []string{"x", "anything"} {
+		req := httptest.NewRequest("GET", "/status.json", nil)
+		req.Header.Set("X-Beat-Token", tok)
+		if tokenOK(req) {
+			t.Errorf("tokenOK accepted %q with no token file configured", tok)
+		}
+		if statusDetailOK(req) {
+			t.Errorf("status detail opened by %q with no token file configured", tok)
+		}
+	}
+}
