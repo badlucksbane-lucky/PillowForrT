@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orbic login</title>
+<style>
+:root{--bg:#f5f5f2;--fg:#1d1d1b;--card:#fff;--mut:#777;--ac:#2a6;--bad:#c33;--ln:#ddd}
+@media(prefers-color-scheme:dark){:root{--bg:#161817;--fg:#e8e8e3;--card:#202321;--mut:#8b8f8c;--ac:#4c9;--bad:#e66;--ln:#333}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center}
+form{background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:20px;width:min(340px,90vw)}
+h1{font-size:20px;margin:0 0 12px}label{display:block;margin:10px 0 4px;color:var(--mut);font-size:13px}
+input{font:inherit;width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--ln);border-radius:8px;background:var(--bg);color:var(--fg)}
+button{font:inherit;margin-top:14px;width:100%;padding:9px;border:0;border-radius:8px;background:var(--ac);color:#fff;cursor:pointer}
+.err{color:var(--bad);margin-top:10px}.note{color:var(--mut);font-size:12px;margin-top:14px;word-break:break-all}
+</style></head><body>
+<form method="post" action="/login" autocomplete="on">
+<h1>Orbic</h1>
+{{NOTE}}
+<label for="u">Username</label><input id="u" name="user" autocomplete="username" autofocus required>
+<label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>
+<button type="submit">Sign in</button>
+<div class="err">{{ERR}}</div>
+<div class="note">This page uses a self-signed certificate. Check that your browser's certificate fingerprint matches (SHA-256):<br>{{FP}}</div>
+</form></body></html>
