@@ -8,7 +8,7 @@
 
 "Orbic" is the trademark of its owner and appears here only to say which hardware this runs on. This project is not affiliated with or endorsed by Orbic or any carrier.
 
-## What it does (each claim has a check on the built-in leak-test page)
+## What it does (tested on one unit; see `docs/INSTALL.md`, "Check it yourself", to verify each one on yours)
 - All DNS leaves encrypted (DoH), or through the VPN or Tor. Plain DNS and DNS-over-TLS are refused at the router.
 - A DNS filter with a catalog of block lists, your own wildcard rules, per-device profiles and a "why was this blocked?" box.
 - Per-device exits: direct, Mullvad (WireGuard, with a kill switch), or Tor. Device IPv6 addresses cannot leak around the tunnel.
@@ -22,9 +22,10 @@
 - It has been tested on **one unit** of one model on one carrier. Rooting the hotspot may void its warranty or breach the carrier's terms, and reading some flash partitions can freeze the device until a power cycle. You are responsible for your own hardware.
 
 ## First install
+There is no supported first-install path yet: getting from a stock, unrooted unit to a running one is not written or tested. Updating, signing in and configuring a unit that already runs it are in `docs/INSTALL.md`.
 
 ## How it was made
 Written by Claude, an AI model made by Anthropic, under the direction of the project's maintainer, who set the goals and decisions and tested it on their own hardware. The maintainer did not write or line-by-line audit the code. It has a large automated test suite and one real unit's worth of use. Read it before you trust it with anything that matters.
 
 ## Status
-Early, and a **source release** for now: the installation guide is still being written (`docs/`), so expect to read the code. Licensed under the MIT license (see `LICENSE`); third-party programs it installs (dnsmasq, dropbear, Tor) are fetched from their own sources and keep their own licenses.
+Early, and a **source release** for now: the install guide in `docs/` covers everything except the first install, so expect to read the code. Licensed under the MIT license (see `LICENSE`); third-party programs it installs (dnsmasq, dropbear, Tor) are fetched from their own sources and keep their own licenses.

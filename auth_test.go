@@ -249,6 +249,29 @@ func TestLoginThrottleAndToken(t *testing.T) {
 	}
 }
 
+// With no token file configured (the default), the script token is OFF: any X-UI-Token header must be refused, never accepted.
+func TestTokenHeaderRefusedWhenNoTokenFile(t *testing.T) {
+	srv, c, _ := testWeb(t)
+	uiTokenFile = ""
+	for _, tok := range []string{"x", "anything", "s3cret-token"} {
+		req, _ := http.NewRequest("GET", srv.URL+"/api/session", nil)
+		req.Header.Set("X-UI-Token", tok)
+		if r, _ := c.Do(req); r.StatusCode != 401 {
+			t.Errorf("token %q with no token file configured: %d (want 401)", tok, r.StatusCode)
+		}
+	}
+	req, _ := http.NewRequest("POST", srv.URL+"/api/wifi", nil)
+	req.Header.Set("X-UI-Token", "x")
+	if r, _ := c.Do(req); r.StatusCode != 401 {
+		t.Errorf("POST with a bogus token and no token file: %d (want 401)", r.StatusCode)
+	}
+	sreq, _ := http.NewRequest("GET", "/status.json", nil)
+	sreq.Header.Set("X-UI-Token", "x")
+	if statusDetailOK(sreq) {
+		t.Error("status detail must not open to a bogus token when no token file is configured")
+	}
+}
+
 func TestNoLoginConfigured(t *testing.T) {
 	allowNets = nil
 	_, n, _ := net.ParseCIDR("127.0.0.0/8")

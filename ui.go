@@ -23,9 +23,11 @@ var (
 	uiTokenFile string
 )
 
+// uiTokenOK: does the request carry the script API-key token? With no token file configured the token is OFF and nothing matches (it must fail closed:
+// "no file" once meant "accept any header", which opened the whole API to anyone on the LAN).
 func uiTokenOK(r *http.Request) bool {
 	if uiTokenFile == "" {
-		return true
+		return false
 	}
 	want, err := os.ReadFile(uiTokenFile)
 	if err != nil || len(strings.TrimSpace(string(want))) == 0 {

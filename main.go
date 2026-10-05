@@ -77,7 +77,7 @@ var (
 	presenceFile   = flag.String("presence-file", "/data/proxy/presence.json", "when each device was last seen, what it calls itself, and which are watched")
 	devNotesFile   = flag.String("dev-notes", "/data/proxy/devnotes.json", "labels and notes for devices (display only)")
 	qcmapCfgFile   = flag.String("qcmap-cfg", "/usrdata/data/qcmap/mobileap_cfg.xml", "stock config holding the DHCP pool")
-	uiTokenFlag    = flag.String("ui-token-file", "", "file holding the token the web page needs for changes (empty = the heartbeat endpoint is off, the default)")
+	uiTokenFlag    = flag.String("ui-token-file", "", "file holding the API-key token that scripts send as X-UI-Token instead of signing in (empty = script tokens are OFF and every such header is refused; the web login is unaffected)")
 	vpnDir         = flag.String("vpn-dir", "/data/proxy/vpn", "directory for the Mullvad exit's state (holds this device's WireGuard key, mode 0600; empty = VPN off)")
 	uiListen       = flag.String("ui-listen", ":3129", "address for the HTTPS web page (login required); empty = the web page is off")
 	onionListen    = flag.String("onion-listen", "127.0.0.1:3130", "loopback address of the web page for the onion door (plain HTTP, read-only by default; Tor is its only client); empty = off")
