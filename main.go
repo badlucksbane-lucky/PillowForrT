@@ -84,6 +84,8 @@ var (
 	uiHost         = flag.String("ui-host", "orbic", "the name plain-HTTP requests are redirected to (https://<name>/...)")
 	secureDir      = flag.String("secure-dir", "/data/proxy/secure", "directory (mode 0700) for the login hash and the HTTPS certificate")
 	setLogin       = flag.String("set-login", "", "set the web login for this user (the password is read from stdin) and exit")
+	setWifi        = flag.String("set-wifi", "", "set the Wi-Fi name (the password is the first line of stdin; an empty line keeps the current one) on both radios and exit")
+	setWifi5       = flag.String("set-wifi-5ghz-name", "", "with -set-wifi: also rename the 5 GHz network (empty leaves its name alone; it must differ from the 2.4 GHz name)")
 	wlanXMLFlag    = flag.String("wlan-xml", "/usrdata/data/usr/wlan/wlan_conf_6174.xml", "the stock Wi-Fi settings file the Wi-Fi page edits")
 	sysDir         = flag.String("sys", "/sys", "sysfs root (a flag so tests can use a fixture)")
 	procDir        = flag.String("proc", "/proc", "procfs root (a flag so tests can use a fixture)")
@@ -280,6 +282,15 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println("login set for", *setLogin)
+		os.Exit(0)
+	}
+	if *setWifi != "" {
+		msg, err := setWifiCLI(newWifiManager(defaultWifiEnv()), *setWifi, *setWifi5, os.Stdin)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "not set:", err)
+			os.Exit(1)
+		}
+		fmt.Println(msg)
 		os.Exit(0)
 	}
 	for _, c := range strings.Split(*allowFlag, ",") {
