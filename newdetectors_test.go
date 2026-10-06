@@ -17,6 +17,7 @@ func TestNewDetectorViewsAreNeverNull(t *testing.T) {
 		"torbypass": newTorBypassWatch(dir + "/exits.txt").View(),
 		"beacon":    newBeaconWatch(dir + "/beacon.json").View(),
 		"dga":       newDGAWatch().View(),
+		"tlssni":    newTLSSNIWatch().View(),
 	}
 	for name, v := range cases {
 		b, err := json.Marshal(v)

@@ -13,9 +13,9 @@ import (
 
 var cip = net.ParseIP("192.168.1.253").To4()
 
-// runBPF is a tiny interpreter for exactly the opcodes bpfProgram uses, so the kernel filter is tested without privileges.
+// runBPF is a tiny interpreter for exactly the opcodes bpfProgram (and the other classic-BPF filters in this codebase) use, so a kernel filter is tested without privileges.
 func runBPF(prog []unix.SockFilter, pkt []byte) uint32 {
-	var a uint32
+	var a, x uint32
 	pc := 0
 	for steps := 0; steps < 64 && pc < len(prog); steps++ {
 		i := prog[pc]
@@ -30,6 +30,22 @@ func runBPF(prog []unix.SockFilter, pkt []byte) uint32 {
 				return 0
 			}
 			a = binary.BigEndian.Uint32(pkt[i.K:])
+		case 0x30: // ldb abs
+			if int(i.K)+1 > len(pkt) {
+				return 0
+			}
+			a = uint32(pkt[i.K])
+		case 0xb1: // ldx 4*([k]&0xf) (MSH)
+			if int(i.K)+1 > len(pkt) {
+				return 0
+			}
+			x = uint32(pkt[i.K]&0x0f) * 4
+		case 0x48: // ldh [x+k] (indirect)
+			off := int(x) + int(i.K)
+			if off+2 > len(pkt) {
+				return 0
+			}
+			a = uint32(binary.BigEndian.Uint16(pkt[off:]))
 		case 0x15: // jeq k
 			if a == i.K {
 				pc += int(i.Jt)
