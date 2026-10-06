@@ -18,7 +18,6 @@ A person who carries a cellular hotspot and wants fewer third parties able to pr
 - **Your carrier knowing where you are.** The hotspot attaches to towers. Location, connection times and volumes are visible to the carrier whatever this software does.
 - **Anonymity.** Mullvad sees what the carrier would otherwise see. Tor is slow and does not protect a device that logs into an account.
 - **Content.** It does not look inside encrypted traffic and does not try to.
-- **Fake cell towers (IMSI catchers).** v1 does not detect them.
 - **Someone with physical access to the unit, or already on your Wi-Fi.** Anyone on the LAN who can reach the web page can try the login; use a strong password and keep the self-signed certificate fingerprint you checked at first sign-in.
 - **Malicious devices that bypass the router** (a second radio, a USB tether).
 - **A vulnerability in this software or in the stock firmware under it.** The stock firmware is old, and rooting the unit is what makes this possible at all. Stone of Heimdall shrinks the exposed surface (the stock admin page is switched off for the network, SSH is key-only); it cannot make the base firmware new.

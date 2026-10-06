@@ -51,7 +51,7 @@ class Base(unittest.TestCase):
     def secretfile(self, name, value):
         p = os.path.join(self.t, name); open(p, "w").write(value + "\n"); os.chmod(p, 0o600); return p
     def answers(self, **over):
-        a = {"wifi": {"ssid": "Hearth Home", "ssid5": "Hearth Home 5G", "password_file": self.wifipw},
+        a = {"confirmed_factory_reset": True, "wifi": {"ssid": "Hearth Home", "ssid5": "Hearth Home 5G", "password_file": self.wifipw},
              "login": {"user": "alice", "password_file": self.loginpw}, "ssh_key": self.pubfile, "token": False, "yes": True}
         a.update(over); p = os.path.join(self.t, "answers.json"); json.dump(a, open(p, "w")); return p
     def run_main(self, argv, dev=None, io=None):
@@ -193,6 +193,22 @@ class Flows(Base):
         rc = si.main(["install", "--payload", self.pay, "--answers", os.path.join(self.t, "a2.json")], dev=FakeDevice(), io=io, home=self.home)
         self.assertEqual(rc, 1); self.assertIn("not confirmed", "\n".join(out))
 
+    def test_unattended_run_needs_factory_reset_confirmed(self):
+        a = json.load(open(self.answers())); del a["confirmed_factory_reset"]; json.dump(a, open(os.path.join(self.t, "a3.json"), "w"))
+        io, out = make_io(); io["interactive"] = False
+        rc = si.main(["install", "--payload", self.pay, "--answers", os.path.join(self.t, "a3.json")], dev=FakeDevice(), io=io, home=self.home)
+        self.assertEqual(rc, 1); self.assertIn("factory reset not confirmed", "\n".join(out)); self.assertEqual(FakeDevice().calls, [])
+
+    def test_interactive_refusing_factory_reset_cancels_before_the_device_is_used(self):
+        io, out = make_io(inputs=["n"])
+        rc = si.main(["install", "--payload", self.pay], dev=FakeDevice(), io=io, home=self.home)
+        self.assertEqual(rc, 1); self.assertIn("cancelled: factory-reset the unit", "\n".join(out))
+
+    def test_dry_run_skips_the_factory_reset_question(self):
+        a = json.load(open(self.answers())); del a["confirmed_factory_reset"]; json.dump(a, open(os.path.join(self.t, "a4.json"), "w"))
+        rc, _, out = self.run_main(["install", "--payload", self.pay, "--answers", os.path.join(self.t, "a4.json"), "--dry-run"])
+        self.assertEqual(rc, 0, out); self.assertNotIn("factory-reset", out)
+
     def test_rollback_sends_only_the_journal_line(self):
         dev = FakeDevice(log_script=["10:00:00 rolled back", "10:00:00 rebooting in 5 s", "10:00:00 STONE-DONE"])
         rc, dev, out = self.run_main(["rollback", "--yes"], dev=dev)
@@ -224,8 +240,8 @@ class Flows(Base):
 
     def test_interactive_questions(self):
         io, out = make_io(inputs=["Hearth Home", "y", "alice", "p", PUB, "n", "install"][:0] or [], secrets_in=[])
-        # scripted terminal session: name, 5G default yes, user, key paste, no token, confirm
-        inputs = ["Hearth Home", "", "alice", "p", PUB, "n", "install"]
+        # scripted terminal session: factory-reset confirm, name, 5G default yes, user, key paste, no token, confirm
+        inputs = ["y", "Hearth Home", "", "alice", "p", PUB, "n", "install"]
         secrets_in = ["short", WIFI_PW, WIFI_PW, LOGIN_PW + "x", LOGIN_PW, LOGIN_PW]
         # the first wifi password "short" is rejected, then the real one is typed twice; web password likewise
         secrets_in = ["short", WIFI_PW, WIFI_PW, LOGIN_PW, LOGIN_PW]

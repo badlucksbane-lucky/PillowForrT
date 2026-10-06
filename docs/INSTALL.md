@@ -163,6 +163,10 @@ install/stone-install rollback                  # undoes the last install from t
 `install --dry-run` shows the plan and the exact commands without touching the unit; `--answers FILE` takes the answers as JSON for unattended runs
 (see `install/stone-install --help`).
 
+**It installs only onto a unit you have just factory-reset.** Before anything else, `install` asks you to confirm this (interactively, or with
+`"confirmed_factory_reset": true` in the answers file); refusing, or leaving it out of an unattended run, cancels before the device is touched.
+Installing over a unit already running this, or carrying other changes, is not supported and risks damaging it.
+
 **What it does.** Over USB, with adb, it stages the files into the unit's RAM disk (the only place adb may write), verifies their hashes there, and starts one
 root script with a single short AT line. The script journals every change before it makes it, then: puts the programs in `/data/proxy`, makes the SSH host key
 and installs your public key, sets the web login (the password arrives on standard input and is never in a command line or a log), sets the Wi-Fi name and password

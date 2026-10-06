@@ -14,7 +14,11 @@ and are wiped afterwards; they are never on a command line or in a log.
 --kit DIR      a restore kit (payload/, identity/identity.tar, state/*.tar): reinstalls a unit exactly as it was
 --answers FILE answers as JSON instead of questions (see ANSWERS below); questions are asked for anything missing when run in a terminal
 
-ANSWERS (all optional): {"wifi": {"ssid": "...", "ssid5": "...", "password_file": "..."} or {"from_snapshot": "settings-snapshot.json"},
+install only installs onto a unit you have just factory-reset: installing over anything else (a unit already running this or something
+else) is not supported and risks damaging it. You are asked to confirm this (or set "confirmed_factory_reset" in the answers file).
+
+ANSWERS ("confirmed_factory_reset" is required for a non-interactive run; the rest are optional):
+  {"confirmed_factory_reset": true, "wifi": {"ssid": "...", "ssid5": "...", "password_file": "..."} or {"from_snapshot": "settings-snapshot.json"},
   "login": {"user": "...", "password_file": "..."} or {"keep_identity": true}, "ssh_key": "path/to/key.pub", "token": true, "tor": false, "yes": true}
 """
 import argparse, getpass, hashlib, html, importlib.util, json, os, re, secrets, shutil, subprocess, sys, tempfile, time
@@ -180,6 +184,17 @@ def gather(args, io, home):
     tty = io["interactive"]; a = {}
     def need(msg):
         if not tty: raise Fatal(msg + " (give it in the answers file, or run in a terminal to be asked)")
+    if not args.dry_run:
+        if ans.get("confirmed_factory_reset") is True:
+            pass
+        elif not tty:
+            raise Fatal("factory reset not confirmed: stone-install only installs onto a unit you have just factory-reset (installing over "
+                        "anything else risks damaging it); add \"confirmed_factory_reset\": true to the answers file once you have reset the unit")
+        else:
+            io["say"]("\nstone-install only installs onto a unit you have just factory-reset. Installing over anything else -- a unit already "
+                       "running this, or carrying other changes -- is not supported and risks damaging it.")
+            if io["input"]("Have you factory-reset this unit since you last touched it? [y/N] ").strip().lower() != "y":
+                raise Fatal("cancelled: factory-reset the unit, then run stone-install again")
     # Wi-Fi
     w = ans.get("wifi", {})
     if "from_snapshot" in w:
