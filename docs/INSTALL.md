@@ -94,6 +94,28 @@ standard input.
   A locked window affects you as well as an attacker: if you mistype five times, wait ten minutes.
 - **There is no "forgot password" page.** Recovery is running `scripts/set-login.sh` again over SSH.
 
+## Scripts: the API token (optional, off by default)
+Out of the box only the web login works. If you want scripts to call the API without a browser
+session, turn on the **script token**:
+
+1. Make a long random secret on your computer, for example `openssl rand -hex 32 > ui.token`.
+2. Put it on the unit, readable by root only:
+   `scripts/orbic-push.sh ui.token /data/proxy/ui.token 600`
+3. Start `tinyfwd` with `-ui-token-file=/data/proxy/ui.token` (the init script that starts it must
+   pass the flag), then restart it.
+4. Keep a copy in `~/.heimdallstone/ui.token`. `scripts/orbic-api.sh GET /api/wifi` then calls the API
+   over HTTPS with the header `X-UI-Token`, pinning the unit's certificate.
+
+Things to know:
+- **It is a master key.** The token does everything a signed-in session can, with no session and no
+  anti-forgery check, and it also unlocks the per-device and browsing detail in `/status.json`. Guard
+  it like the password, and send it **only over HTTPS** (port 3129).
+- **No file, no token.** If the flag is not given, or the file is missing or empty, every
+  `X-UI-Token` header is refused. (Before commit `c2421f4` it was the other way round: with no file,
+  any header was accepted. If you built an earlier version, rebuild.)
+- **A separate heartbeat token** (`-beat-token-file`) belongs to the optional heartbeat from a companion
+  computer. It is off and hidden by default, and fails closed in the same way.
+
 ## 6. First sign-in
 Open `https://orbic/` (plain HTTP requests are redirected there). The web page uses a **self-signed
 certificate**, so your browser will warn. The sign-in page prints the certificate's SHA-256
@@ -137,7 +159,7 @@ header that names its source, with the license text alongside:
 A finished first install has to leave this on the unit, because the scripts above assume it:
 - a root shell with network privileges for the daemon;
 - `/data/proxy/` holding the `tinyfwd` binary (mode 755) and `wpad-guard.sh`;
-- an init script, `/etc/init.d/http_proxy`, that starts and stops `tinyfwd`;
+- an init script, `/etc/init.d/http_proxy`, that starts and stops `tinyfwd` and passes it the flags you want (`-ui-token-file`, `-beat-token-file`; see the script token above);
 - dropbear, key-only on `192.168.1.254:22`, with its key directory at `/data/dropbear/ssh`;
 - `wget` (BusyBox) for the deploy script's health check;
 - the other programs the features use (dnsmasq, dropbear, and Tor if you want it), each fetched from
