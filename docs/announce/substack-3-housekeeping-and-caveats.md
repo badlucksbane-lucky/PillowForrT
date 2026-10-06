@@ -1,6 +1,6 @@
 # Keeping the box, and what it cannot do
 
-A box that guards your traffic is also a box that can be locked, lost or misread. The last section of the Stone of Heimdall page is for keeping the Orbic RC400L hotspot itself in order. After it, the limits, which matter more than the features.
+Stone of Heimdall is firmware for the Orbic RC400L hotspot. The last section of its page keeps the box itself in order. After it, the limits.
 
 ## System
 

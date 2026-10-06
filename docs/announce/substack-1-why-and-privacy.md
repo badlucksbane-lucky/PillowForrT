@@ -1,24 +1,24 @@
-# A watchman for your hotspot
+# Stone of Heimdall
 
-Every device you own asks a question before it does anything on the internet: where is this name? The phone asks it constantly. The television asks it while it is off. The bulb asks it at three in the morning. The question goes to whatever box is giving you Wi-Fi, and that box passes it on, in plain text, to the company that sells you the connection. Nobody shows you the questions. Nobody asks whether you wanted them asked.
+Stone of Heimdall is firmware for the Orbic RC400L, a small cellular hotspot. It replaces the hotspot's admin page with one of its own and changes what the hotspot lets your devices do.
 
-Stone of Heimdall is firmware for one small cellular hotspot, the Orbic RC400L. The first thing it does is show you the questions.
+The reason it exists: a hotspot answers every name lookup your devices make and forwards every connection they open, and it does both without a filter and without a record. The carrier's resolver sees the names in plain text. Trackers are reached by name and nothing refuses them. Devices open connections to wherever they like, on whatever port they like.
 
-A fresh install changes nothing. It listens. It writes down every name each device asked for and every address each device tried to reach, and it shows you the list, by device. Most of the list is what you expected. Some of it is not: a name you have never heard of, asked a thousand times by a device you thought was idle. Then you decide. You tick what you recognise, and only then does the box start refusing the rest. It watches before it guards.
+What the firmware changes:
 
-What it refuses, once you tell it to:
+Name lookups leave encrypted, over DNS-over-HTTPS, or inside the VPN, or through Tor. Plain DNS and DNS-over-TLS are refused on the cellular side.
 
-The carrier's view of your names. Every lookup leaves encrypted, or inside a VPN, or through Tor. The plain kind is refused on the cellular side, so no device can quietly go around the filter.
+A DNS filter: published block lists you tick, rules you write, applied to everyone or to one device.
 
-The names on the lists. Ad networks, trackers, malware domains, from published lists you tick and rules you write yourself, for everyone or for one device.
+An outbound allow-list. In enforce mode a device may only open connections on the ticked services and ports. Web, QUIC, clock sync, ssh, email and push notifications are ticked by default; calls, consoles, VPN protocols, torrents, remote desktop, MQTT and IRC are not. There is a monitor mode first: the box tallies, per device, which ports would have been refused, so the list can be built from what the house actually uses before anything breaks.
 
-Everything else. A device may open a connection to the web, to a clock server, to a mail server, to the push service that wakes its apps. It may not open a connection to anything else until you say so. Calls, game consoles, torrents, remote desktop and the rest are off until ticked.
+Per-device exits: direct, a Mullvad WireGuard tunnel with a kill switch, or Tor.
 
-There is one more leak, and it only shows up after you fix the others. Route a device through a VPN and the tunnel carries one kind of address, IPv4. The device still holds its other address, the real one from the carrier, in IPv6, and any web page can ask the browser for it and get it. The only cure at the router is for the device not to have one. So the LAN gives out no IPv6 unless you turn it on.
+LAN IPv6 off by default. A device behind the tunnel still holds its carrier IPv6 address, the tunnel carries only IPv4, and a browser will give that address to any page that asks for it through WebRTC. The only cure at the router is for the device not to have one.
 
-Each device gets its own exit: direct, a Mullvad WireGuard tunnel with a kill switch, or Tor. The carrier's own update and remote-management engines are kept asleep.
+The carrier's firmware-update and device-management engines kept suspended.
 
-It is not anonymity. The carrier knows where the hotspot is and sees that you connected, when, and how much. A VPN provider sees what the carrier otherwise would. It cannot see inside encrypted traffic and does not try. It has run on one unit, of one model, on one carrier.
+What it is not: anonymity. The carrier knows where the hotspot is and sees that you connected, when, and how much. A VPN provider sees what the carrier otherwise would. It cannot see inside encrypted traffic and does not try. It has run on one unit, of one model, on one carrier.
 
 ## The page
 
