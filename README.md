@@ -1,7 +1,7 @@
 <p align="center"><img src="assets/logo-parchment.svg" width="560" alt="Stone of Heimdall: a watchman for your hotspot"></p>
 
 # Stone of Heimdall
-### a watchman for your hotspot
+### watchman for your hotspot
 
 **A privacy firmware layer for the Orbic RC400L cellular hotspot.** It scrambles what trackers, ad networks and your carrier's resolver can see of your unprivate web traffic: it filters DNS, forces encrypted DNS, sends chosen devices through a VPN, closes IPv6 and WebRTC address leaks, and blocks outbound services you have not approved.
 
