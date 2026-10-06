@@ -34,58 +34,69 @@ h2.cc:focus-visible{outline:2px solid var(--s1);outline-offset:3px;border-radius
 .tools{display:flex;gap:8px;margin:2px 0 0}.tools button{font-size:12px;padding:3px 10px;min-height:0;color:var(--mut)}
 .row input{min-width:96px}input[type=checkbox]{flex:none;min-width:0;width:auto;padding:0}.row input[type=time]{min-width:112px}
 button{min-height:36px}
+.hero{border-width:2px;border-color:var(--ax);padding:16px 14px}
+.hero .n{font-size:26px}
+.hero .grid{gap:14px}
+.stat-bar{height:3px;border-radius:2px;margin-top:6px;opacity:.3}
+.sec{font:11px/1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin:28px 0 2px 4px}
 </style></head><body><main>
 <div class="brand"><img class="mark" src="/favicon.svg" alt=""><div><h1>Stone of Heimdall <span class="mut" id="ver"></span></h1><div class="tag mut">a watchman for your hotspot</div></div></div>
 <div class="row" style="margin-bottom:6px"><span class="mut">Signed in as <b id="who"></b></span><form method="post" action="/logout" style="margin:0"><button>Sign out</button></form></div>
 <div id="banner"></div>
 <div class="tools"><button type="button" onclick="ccAll(true)">Collapse all</button><button type="button" onclick="ccAll(false)">Expand all</button></div>
-<div class="card"><h2>DNS filter</h2>
+<div class="card hero"><h2>Today</h2>
  <div class="row" id="modes"></div>
- <div class="row" style="margin-top:8px"><span id="pause" class="mut"></span><button onclick="post('dns/pause',{minutes:15})">Pause 15 min</button><button onclick="post('dns/resume')">Resume</button><button onclick="post('dns/update')">Update lists now</button></div>
- <div id="msg" class="msg"></div></div>
-<div class="card"><h2>Today</h2><div class="grid" id="counts"></div></div>
-<div class="card"><h2>Events and notifications <span id="evbadge"></span></h2><div id="ev" class="mut">loading</div><div id="evmsg" class="msg"></div></div>
+ <div class="row" style="margin-top:6px"><span id="pause" class="mut"></span><button onclick="post('dns/pause',{minutes:15})">Pause 15 min</button><button onclick="post('dns/resume')">Resume</button><button onclick="post('dns/update')">Update lists</button></div>
+ <div id="msg" class="msg"></div>
+ <div class="grid" id="counts" style="margin-top:12px"></div>
+ <div id="gr" style="margin-top:8px" class="mut">collecting the first samples...</div></div>
+<div class="sec">Monitoring</div>
+<div class="card"><h2>Events <span id="evbadge"></span></h2><div id="ev" class="mut">loading</div><div id="evmsg" class="msg"></div></div>
+<div class="card"><h2>Latency history <span id="lhbadge"></span></h2><div id="lh" class="mut">loading</div></div>
+<div class="card"><h2>Speed history</h2><div id="sp" class="mut">loading</div><div id="spmsg" class="msg"></div></div>
+<div class="sec">Security</div>
+<div class="card"><h2>ARP watch <span id="arbadge"></span></h2><div id="ar" class="mut">loading</div></div>
+<div class="card"><h2>Rogue DHCP <span id="rdbadge"></span></h2><div id="rd" class="mut">loading</div></div>
+<div class="card"><h2>Canary <span id="cnbadge"></span></h2><div id="cn" class="mut">loading</div><div id="cnmsg" class="msg"></div></div>
+<div class="sec">Privacy</div>
 <div class="card"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
 <div class="card"><h2>Onion door <span id="odbadge"></span></h2><div id="od" class="mut">loading</div><div id="odmsg" class="msg"></div></div>
-<div class="card"><h2>Latency and loss history <span id="lhbadge"></span></h2><div id="lh" class="mut">loading</div></div>
-<div class="card"><h2>Uplink speed history</h2><div id="sp" class="mut">loading</div><div id="spmsg" class="msg"></div></div>
-<div class="card"><h2>ARP watch <span id="arbadge"></span></h2><div id="ar" class="mut">loading</div></div>
-<div class="card"><h2>Rogue DHCP watch <span id="rdbadge"></span></h2><div id="rd" class="mut">loading</div></div>
-<div class="card"><h2>Canary address <span id="cnbadge"></span></h2><div id="cn" class="mut">loading</div><div id="cnmsg" class="msg"></div></div>
-<div class="card"><h2>Scheduled actions</h2><div id="ac" class="mut">loading</div><div id="acmsg" class="msg"></div></div>
-<div class="card"><h2>Graphs</h2><div id="gr" class="mut">collecting the first samples...</div></div>
-<div class="card"><h2>Devices</h2><div id="devs" class="mut">loading</div><div id="devmsg" class="msg"></div></div>
-<div class="card"><h2>Wi-Fi</h2><div id="wifi" class="mut">loading</div><div id="wmsg" class="msg"></div></div>
-<div class="card"><h2>Blocked devices</h2><div id="blk" class="mut">loading</div><div id="bmsg" class="msg"></div></div>
-<div class="card"><h2>Messages</h2><div id="sms" class="mut">loading</div></div>
-<div class="card"><h2>Backup and restore</h2><div id="bk" class="mut">loading</div><div id="kmsg" class="msg"></div></div>
-<div class="card"><h2>Web page certificate</h2><div id="crt" class="mut">loading</div><div id="cmsg" class="msg"></div></div>
-<div class="card"><h2>SSH access</h2><div id="ssh" class="mut">loading</div><div id="smsg" class="msg"></div></div>
-<div class="card"><h2>Diagnostics</h2><div id="dg" class="mut">Not run yet.</div><div id="dgmsg" class="msg"></div></div>
-<div class="card"><h2>System</h2><div id="sys" class="mut">loading</div><div id="ymsg" class="msg"></div></div>
-<div class="card"><h2>Cellular</h2><div id="cell" class="mut">loading</div></div>
-<div class="card"><h2>Internet pause and schedules</h2><div id="fws" class="mut">loading</div><div id="fmsg" class="msg"></div></div>
-<div class="card"><h2>Blocked destinations</h2><div id="fwd" class="mut">loading</div><div id="gmsg" class="msg"></div></div>
-<div class="card"><h2>DHCP reservations</h2><div id="dhcp" class="mut">loading</div><div id="dmsg" class="msg"></div></div>
-<div class="card"><h2>DHCP pool</h2><div id="pool" class="mut">loading</div><div id="pmsg" class="msg"></div></div>
 <div class="card"><h2>VPN (Mullvad)</h2><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div></div>
-<div class="card"><h2>Block lists</h2><div class="mut" style="margin-bottom:4px">Tick the lists to use. A list is downloaded the first time it is ticked and refreshed daily. <b>Strict</b> (a per-device choice on the Devices card) applies every downloaded list.</div><table id="lists"></table><div class="mut" id="up" style="margin-top:6px"></div></div>
-<div class="card"><h2>Always allow</h2><div class="mut" style="margin-bottom:6px">Wins over every list and rule. <code>example.com</code> covers its subdomains; <code>*.example.com</code> and <code>cdn*.example.com</code> work too.</div><div class="row"><input id="allowin" placeholder="example.com (covers subdomains)"><button onclick="allow()">Add</button></div><div id="allow" style="margin-top:8px"></div></div>
+<div class="sec">DNS</div>
+<div class="card"><h2>Block lists</h2><div class="mut" style="margin-bottom:4px">Tick to use. <b>Strict</b> (per device) applies all downloaded lists.</div><table id="lists"></table><div class="mut" id="up" style="margin-top:6px"></div></div>
+<div class="card"><h2>Always allow</h2><div class="row"><input id="allowin" placeholder="example.com (covers subdomains)"><button onclick="allow()">Add</button></div><div id="allow" style="margin-top:8px"></div></div>
 <div class="card"><h2>Your block rules</h2>
- <div class="mut" style="margin-bottom:6px">Paste names or whole links (the path is dropped: DNS can only block a host). Several at once, separated by spaces, commas or new lines.</div>
- <div class="row"><input id="cu_p" placeholder="ads.example.com   *.example.com   *track*   *.zip" aria-label="Names or patterns to block" autocomplete="off" autocapitalize="off" spellcheck="false">
-  <select id="cu_t" aria-label="How long"><option value="0">always</option><option value="60">1 hour</option><option value="1440">1 day</option><option value="10080">1 week</option></select>
-  <select id="cu_d" aria-label="For which device"><option value="">everyone</option></select><button onclick="cuadd()">Block</button></div>
+ <div class="row"><input id="cu_p" placeholder="ads.example.com   *.example.com   *track*" aria-label="Names or patterns" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <select id="cu_t" aria-label="Duration"><option value="0">always</option><option value="60">1 hour</option><option value="1440">1 day</option><option value="10080">1 week</option></select>
+  <select id="cu_d" aria-label="Device"><option value="">everyone</option></select><button onclick="cuadd()">Block</button></div>
  <div id="cumsg" class="msg"></div>
- <details style="margin:6px 0"><summary class="mut">How patterns work</summary><div class="mut" style="margin-top:4px"><code>example.com</code> blocks the name and everything under it. <code>*.example.com</code> blocks the subdomains only. <code>*</code> matches any run of characters, dots included, anywhere in the name: <code>ads*.example.com</code>, <code>*track*</code>, <code>*.zip</code> (a whole top-level domain). A rule needs at least three letters or digits besides stars and dots. The always-allow list beats these rules. The Orbic's own lookups are never blocked by them.</div></details>
+ <details style="margin:6px 0"><summary class="mut">How patterns work</summary><div class="mut" style="margin-top:4px"><code>example.com</code> blocks it and subdomains. <code>*.example.com</code> subdomains only. <code>*</code> matches anything: <code>*track*</code>, <code>*.zip</code>. Needs 3+ alphanumerics besides stars and dots. Allow list wins.</div></details>
  <table id="cu"></table>
- <div class="row" style="margin-top:8px"><input id="cu_w" placeholder="why is this name blocked or not? e.g. ads.example.com" aria-label="A name to explain" autocomplete="off" autocapitalize="off" spellcheck="false"><button onclick="cuwhy()">Why?</button></div>
+ <div class="row" style="margin-top:8px"><input id="cu_w" placeholder="check a name, e.g. ads.example.com" aria-label="Explain" autocomplete="off" autocapitalize="off" spellcheck="false"><button onclick="cuwhy()">Why?</button></div>
  <div id="cuwhy" class="mut" style="margin-top:4px"></div></div>
 <div class="card"><h2>Top blocked</h2><table id="tb"></table></div>
 <div class="card"><h2>Top asked</h2><table id="tq"></table></div>
 <div class="card"><h2>Recent</h2><table id="rc"></table></div>
+<div class="sec">Devices</div>
+<div class="card"><h2>Devices</h2><div id="devs" class="mut">loading</div><div id="devmsg" class="msg"></div></div>
+<div class="card"><h2>Wi-Fi</h2><div id="wifi" class="mut">loading</div><div id="wmsg" class="msg"></div></div>
+<div class="card"><h2>Blocked devices</h2><div id="blk" class="mut">loading</div><div id="bmsg" class="msg"></div></div>
+<div class="card"><h2>Internet schedules</h2><div id="fws" class="mut">loading</div><div id="fmsg" class="msg"></div></div>
+<div class="sec">Network</div>
+<div class="card"><h2>DHCP reservations</h2><div id="dhcp" class="mut">loading</div><div id="dmsg" class="msg"></div></div>
+<div class="card"><h2>DHCP pool</h2><div id="pool" class="mut">loading</div><div id="pmsg" class="msg"></div></div>
+<div class="card"><h2>Blocked destinations</h2><div id="fwd" class="mut">loading</div><div id="gmsg" class="msg"></div></div>
+<div class="sec">System</div>
+<div class="card"><h2>Diagnostics</h2><div id="dg" class="mut">Not run yet.</div><div id="dgmsg" class="msg"></div></div>
+<div class="card"><h2>System</h2><div id="sys" class="mut">loading</div><div id="ymsg" class="msg"></div></div>
+<div class="card"><h2>Cellular</h2><div id="cell" class="mut">loading</div></div>
+<div class="card"><h2>Certificate</h2><div id="crt" class="mut">loading</div><div id="cmsg" class="msg"></div></div>
+<div class="card"><h2>SSH access</h2><div id="ssh" class="mut">loading</div><div id="smsg" class="msg"></div></div>
+<div class="card"><h2>Scheduled actions</h2><div id="ac" class="mut">loading</div><div id="acmsg" class="msg"></div></div>
+<div class="card"><h2>Backup</h2><div id="bk" class="mut">loading</div><div id="kmsg" class="msg"></div></div>
+<div class="card"><h2>Messages</h2><div id="sms" class="mut">loading</div></div>
 <div class="card"><h2>Node</h2><table id="node"></table></div>
-<div class="card"><h2>Account</h2><div class="row"><input id="oldpw" type="password" autocomplete="current-password" placeholder="current password"><input id="newpw" type="password" autocomplete="new-password" placeholder="new password (10+ characters)"><button onclick="chpw()">Change password</button></div><div id="amsg" class="msg"></div></div>
+<div class="card"><h2>Account</h2><div class="row"><input id="oldpw" type="password" autocomplete="current-password" placeholder="current password"><input id="newpw" type="password" autocomplete="new-password" placeholder="new password (10+)"><button onclick="chpw()">Change password</button></div><div id="amsg" class="msg"></div></div>
 </main><script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -109,7 +120,8 @@ function render(d){
  $('modes').innerHTML=[['off','Off'],['on','On']].map(m=>'<button class="'+(d.mode===m[0]?'on':'')+'" onclick="post(\'dns/mode\',{mode:\''+m[0]+'\'})">'+m[1]+'</button>').join('');
  $('pause').textContent=d.paused_until?'Paused until '+new Date(d.paused_until).toLocaleTimeString():'';
  const s=d.stats;
- $('counts').innerHTML=[['Queries',s.Queries],['Blocked',s.Blocked],['Cached',s.Cached],['Encrypted',s.DoH],['Plain',s.Plain],['Via VPN',s.VPN||0],['Errors',s.Errors]].map(c=>'<div><div class="n">'+fmt(c[1])+'</div><div class="mut">'+c[0]+'</div></div>').join('');
+ const sc=[['Queries',s.Queries,'--ax'],['Blocked',s.Blocked,'--s2'],['Cached',s.Cached,'--ax'],['Encrypted',s.DoH,'--okc'],['Plain',s.Plain,'--warn'],['Via VPN',s.VPN||0,'--s1'],['Errors',s.Errors,'--bad']];
+ $('counts').innerHTML=sc.map(c=>{const clr=c[1]&&c[2]!=='--ax';return '<div><div class="n"'+(clr?' style="color:var('+c[2]+')"':'')+'>'+fmt(c[1])+'</div><div class="mut">'+c[0]+'</div><div class="stat-bar" style="background:var('+c[2]+')"></div></div>'}).join('');
  const nm={};(s.Clients||[]).forEach(c=>nm[c.ip]=c.name||c.ip);
  DnsC=s.Clients||[];devrender();
  let lc='';$('lists').innerHTML=d.lists.map(l=>{const h=l.category!==lc?'<tr><th colspan="4" style="padding-top:8px">'+esc(l.category||'Other')+'</th></tr>':'';lc=l.category;
@@ -147,7 +159,7 @@ function pickCity(c){vsel.city=c}
 function vrender(d,force){
  const el=$('vpn');if(!force&&el.contains(document.activeElement)&&document.activeElement!==el)return;if(!d||d.available===false){el.textContent='The VPN is not enabled on this build.';return}
  if(!d.registered){
-  el.innerHTML='<p>Register this Orbic as one of your Mullvad devices. It uses <b>one of the 5 device slots</b> on your account. The account number is sent once to Mullvad to register, and is <b>not stored</b> here; only this device\'s own key is kept.</p>'+
+  el.innerHTML='<p>Register as a Mullvad device (<b>uses 1 of 5 slots</b>). Account number sent once, <b>not stored</b>.</p>'+
    '<div class="row"><input id="acct" type="password" inputmode="numeric" autocomplete="off" placeholder="16-digit Mullvad account number"><button onclick="const a=$(\'acct\').value;$(\'acct\').value=\'\';vpost(\'register\',{account:a})">Register</button></div>';return}
  const loc=d.locations||[];const rp=d.relay_pick||{};
  const cc=vsel.country||rp.country||'us';const country=loc.find(c=>c.code===cc)||loc[0];
@@ -179,7 +191,7 @@ function wrender(force){const el=$('wifi');if(!W||guard(el,force))return;const s
  const five='<div style="margin-top:12px"><b>5 GHz network</b> '+(f5.enabled?(L5&&L5.hostapd==='ENABLED'?'<b style="color:var(--ac)">up</b> on channel '+L5.channel+' ('+L5.freq_mhz+' MHz)':'<b class="err">'+esc(L5?L5.hostapd||'down':'down')+'</b>'):'<span class="mut">off</span>')+'</div>'+
   '<div class="row" style="margin-top:6px"><label><input type="checkbox" id="w5_on" '+(f5.enabled?'checked':'')+'> On</label><label>Name <input id="w5_ssid" maxlength="32" value="'+esc(f5.ssid||'')+'" placeholder="not the same as the 2.4 GHz name"></label><label><select id="w5_ch">'+ch5+'</select></label><label><input type="checkbox" id="w5_hid" '+(f5.hidden?'checked':'')+'> Hidden</label></div>'+
   '<div class="row" style="margin-top:6px"><label>New password <input id="w5_pw" type="password" autocomplete="new-password" placeholder="blank = keep (a 2.4 GHz password change carries over if they match)" maxlength="63" style="min-width:260px"></label><label>Again <input id="w5_pw2" type="password" autocomplete="new-password" maxlength="63"></label></div>'+
-  '<div class="mut" style="margin-top:4px">This radio runs 80 MHz channels, so there are two real choices: 36 (5180 MHz) or 149 (5745 MHz). Automatic and the in-between channels do not work. 5 GHz reaches less far through walls than 2.4 GHz.</div>';
+  '<div class="mut" style="margin-top:4px">Two real channel choices: 36 or 149. 5 GHz has shorter range through walls.</div>';
  el.innerHTML='<div><b>'+esc(s.ssid)+'</b>'+(s.hidden?' (hidden)':'')+' on '+(L.channel?('channel '+L.channel+' ('+L.freq_mhz+' MHz)'):'-')+' - Wi-Fi '+(L.hostapd==='ENABLED'?'<b style="color:var(--ac)">up</b>':'<b class="err">'+esc(L.hostapd||'down')+'</b>')+' - '+(W.clients||[]).length+' of '+s.max_clients+' devices</div>'+st+
   '<table style="margin:8px 0">'+cl+'</table>'+
   '<div class="row"><label>Name <input id="w_ssid" maxlength="32" value="'+esc(s.ssid)+'"></label><label>New password <input id="w_pw" type="password" autocomplete="new-password" placeholder="leave blank to keep" maxlength="63"></label><label>Again <input id="w_pw2" type="password" autocomplete="new-password" placeholder="type it again" maxlength="63"></label><label><input type="checkbox" onchange="wshow(this.checked)"> show</label></div>'+
@@ -218,7 +230,7 @@ function drender(force){const el=$('dhcp');if(!Dh||guard(el,force))return;
  el.innerHTML=(Dh.range?'<div class="mut">Other devices get an address from '+esc(Dh.range)+'.</div>':'')+'<table style="margin:8px 0"><tr><th>Name</th><th>Address</th><th>MAC</th><th>Now</th><th></th></tr>'+rows+'</table>'+
   '<div class="row"><select id="d_pick" onchange="dpick(this.value)"><option value="">Add from a connected device...</option>'+free.map(d=>'<option value="'+d.mac+'|'+esc(d.ip||'')+'">'+esc(d.ip||'?')+'  '+esc(d.mac)+(d.wifi?'  (Wi-Fi)':'')+'</option>').join('')+'</select></div>'+
   '<div class="row" style="margin-top:6px"><input id="d_name" placeholder="name" maxlength="32" style="max-width:150px"><input id="d_ip" placeholder="192.168.1.x" style="max-width:150px"><input id="d_mac" placeholder="aa:bb:cc:dd:ee:ff" style="max-width:190px"><button class="on" onclick="dsave()">Save</button></div>'+
-  '<div class="mut" style="margin-top:4px">A device takes its reserved address the next time it renews or reconnects. Addresses .2 to .253; .1 and .254 belong to the Orbic.</div>'}
+  '<div class="mut" style="margin-top:4px">Takes effect on next renew or reconnect. Range .2 to .253.</div>'}
 async function dload(){try{Dh=await (await api('/api/dhcp')).json();drender()}catch(e){}}
 function dpick(v){if(!v)return;const[p,i]=v.split('|');$('d_mac').value=p;$('d_ip').value=i}
 function dedit(mac){const r=Dh.reservations.find(x=>x.mac===mac);if(!r)return;$('d_name').value=r.name;$('d_ip').value=r.ip;$('d_mac').value=r.mac}
@@ -234,25 +246,25 @@ function trrender(force){const el=$('tor');if(!Tr||guard(el,force))return;
  el.innerHTML='<div class="row"><span>'+trstate()+(Tr.running?' <span class="mut">'+(Tr.rss_mb?Tr.rss_mb.toFixed(0)+' MB used, ':'')+Tr.avail_mb.toFixed(0)+' MB free on the router'+(Tr.restarts?', '+Tr.restarts+' restart'+(Tr.restarts===1?'':'s'):'')+'</span>':'')+'</span><span><button class="'+(Tr.enabled?'':'on')+'" onclick="trset('+(!Tr.enabled)+','+Tr.onion+')">'+(Tr.enabled?'Switch off':'Switch on')+'</button></span></div>'+
   (Tr.error?'<div class="err" style="margin-top:4px">'+esc(Tr.error)+'</div>':'')+
   '<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.onion?'checked ':'')+'onchange="trset('+Tr.enabled+',this.checked)"> <b>.onion for the whole house</b></label><span class="mut">any device can open a .onion address with no setup; browsers using the proxy file also get a SOCKS rule</span></div>'+
-  '<div class="mut" style="margin:8px 0 4px"><b>Send a device through Tor</b>: all of its internet traffic is forced through Tor by the router. Tor carries only TCP, so its other traffic (UDP such as QUIC and calls, ICMP, IPv6) is <b>blocked</b>, not allowed around Tor, and its DNS goes through Tor too. If Tor is not ready the device has <b>no internet</b>, by design. Switching Tor off keeps it blocked; give it its direct line back here.</div>'+
+  '<div class="mut" style="margin:8px 0 4px"><b>Send a device through Tor</b>: all traffic forced through Tor (TCP only; UDP, ICMP, IPv6 are blocked). No internet while Tor is not ready.</div>'+
   '<table>'+devs+'</table>'+
   '<div class="row" style="margin-top:6px"><select id="tor_dev">'+devopts('Choose a device...')+'</select><button onclick="trdevpick()">Send through Tor</button><button onclick="trtest()">Test Tor from the router</button></div>'+
   '<div id="trtestout" class="mut" style="margin-top:4px"></div>'+
-  '<div class="mut" style="margin-top:6px">To check a device yourself, open <code>https://check.torproject.org</code> on it: it should say it is using Tor. A device is also hidden from Mullvad while it uses Tor. Tor is a client only: this router never relays other people\'s traffic.</div>'}
+  '<div class="mut" style="margin-top:6px">Verify on the device: <code>check.torproject.org</code>. Client only; never relays.</div>'}
 async function trload(){try{Tr=await (await api('/api/tor')).json();trrender()}catch(e){}odload()}
 let Od=null;
 function odrender(force){const el=$('od');if(!Od||guard(el,force))return;
  if(Od.available===false){el.textContent='The onion door is not available on this build.';return}
  $('odbadge').innerHTML=Od.active?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; '+(Od.address?'published':'on')+'</span>':'';
  const cl=(Od.clients||[]).map(c=>'<tr><td><b>'+esc(c.name)+'</b><div class="mut">key '+esc(c.fingerprint)+'</div></td><td><button onclick="odrm(\''+esc(c.name)+'\')">Remove</button></td></tr>').join('')||'<tr><td class="mut">no device is authorized yet</td></tr>';
- el.innerHTML='<div class="mut">Reach this status page from anywhere through Tor, with no open port. Only the devices listed below can even find it (each holds a private key); the web login still applies after that. Through the door this page is read-only. There is no SSH through the door.</div>'+
+ el.innerHTML='<div class="mut">Reach this page from anywhere through Tor, no open port. Only authorized devices can find it. Read-only through the door; no SSH.</div>'+
   '<div class="row" style="margin-top:8px"><span>'+(Od.enabled?(Od.active?'On':'On, not published yet'):'Off')+'</span><span><button class="'+(Od.enabled?'':'on')+'" onclick="odset('+!Od.enabled+')">'+(Od.enabled?'Switch off':'Switch on')+'</button></span></div>'+
   (Od.note?'<div class="err" style="margin-top:4px">'+esc(Od.note)+'</div>':'')+
   '<div class="row" style="margin-top:6px"><label><input type="checkbox" '+(Od.remote_write?'checked ':'')+'onchange="odset(null,this.checked)"> allow changes through the door</label></div>'+
   (Od.address?'<div class="mut" style="margin-top:6px">Address (private; shown only on this page): <code>'+esc(Od.address)+'.onion</code></div>':'')+
   '<table>'+cl+'</table>'+
   '<div class="row" style="margin-top:6px"><input id="od_name" placeholder="device name, e.g. laptop" maxlength="24"><input id="od_pub" placeholder="its PUBLIC key (52 letters)" maxlength="60" size="40"><button onclick="odadd()">Authorize</button></div>'+
-  '<div class="mut" style="margin-top:6px">Make a key on your own computer: it keeps the private half and prints only the public one to paste here. The private half goes to the device by a way you control. The door\'s own settings, SSH keys and the login can only be changed from this LAN page, never through the door.</div>'}
+  '<div class="mut" style="margin-top:6px">Generate a key on your device; paste the public half here. Door settings, SSH keys and login are LAN-only.</div>'}
 async function odload(){try{Od=await (await api('/api/tor/onion')).json();odrender()}catch(e){}}
 function odpick(v,cur){return v===null||v===undefined?cur:v}
 async function odset(en,rw){const n={enabled:odpick(en,Od.enabled),remote_write:odpick(rw,Od.remote_write)};
@@ -275,7 +287,7 @@ function lhrender(force){const el=$('lh');if(!Lh||guard(el,force))return;
  [[24,'Last 24 hours'],[168,'Last 7 days'],[720,'Last 30 days']].forEach(([h,t])=>{const b=document.createElement('button');b.type='button';b.className=LhH===h?'sel':'';b.textContent=(LhH===h?'\u2713 ':'')+t;b.onclick=()=>{LhH=h;lhload()};bar.appendChild(b)});
  const s=document.createElement('span');s.className='mut';s.textContent=Lh.probes?Lh.probes+' checks, '+Lh.loss_pct.toFixed(2)+'% failed, average '+Math.round(Lh.avg_ms)+' ms':'no checks in this range yet';bar.appendChild(s);el.appendChild(bar);
  $('lhbadge').innerHTML=Lh.outage_now?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; down now</span>':'';
- const n=document.createElement('div');n.className='mut';n.style.margin='6px 0';n.textContent='The Orbic opens a connection to 1.1.1.1 every 30 seconds. A check that does not complete in 5 seconds counts as failed (this measures the link, not single lost packets). Hours the Orbic was off are gaps, not zeros. Kept hourly for about 35 days. Three failed checks in a row are an outage; four of the last twenty failing without a full outage raises a "flaky" event.';el.appendChild(n);
+ const n=document.createElement('div');n.className='mut';n.style.margin='6px 0';n.textContent='TCP to 1.1.1.1 every 30 s; 5 s timeout = failed. Hourly, kept ~35 days. 3 failures = outage.';el.appendChild(n);
  if(Lh.probes)LH_DEFS.forEach(d=>el.appendChild(gchart(d,Lh)));
  const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
  if((Lh.days||[]).length){const t=document.createElement('table');t.style.marginTop='8px';t.innerHTML='<tr><th>Day</th><th>Checks</th><th>Failed</th><th>Average</th><th>Worst</th><th>Outages</th></tr>'+Lh.days.map(d=>'<tr><td>'+esc(d.day)+'</td><td class="mut">'+d.probes+'</td><td'+(d.loss_pct>=2?' class="err"':'')+'>'+d.loss_pct.toFixed(2)+'%</td><td>'+Math.round(d.avg_ms)+' ms</td><td class="mut">'+Math.round(d.max_ms)+' ms</td><td>'+(d.outages||'')+'</td></tr>').join('');el.appendChild(t)}
@@ -298,7 +310,7 @@ function sprender(force){const el=$('sp');if(!Sp||guard(el,force))return;
  const tg=document.createElement('button');tg.textContent=Sp.enabled?'Switch off':'Switch on';tg.onclick=()=>spset(!Sp.enabled,Sp.interval_h);
  const m=document.createElement('span');m.className='mut';m.textContent='about '+Sp.data_per_day_mb.toFixed(0)+' MB of data a day';
  set.append(sel,tg,m);el.appendChild(set);
- const n=document.createElement('div');n.className='mut';n.style.margin='6px 0';n.textContent='A small timed download (1 MB) and upload (256 KB) over the cellular link, for the trend rather than the peak: the same size every time, so the history compares like with like. It waits while the house is using the link. A download under 30% of the recent median raises an event.'+(Sp.median_down?' Median '+fmtBits(Sp.median_down)+', best '+fmtBits(Sp.best_down)+'.':'');el.appendChild(n);
+ const n=document.createElement('div');n.className='mut';n.style.margin='6px 0';n.textContent='1 MB down / 256 KB up over cellular, same size each time. Waits for idle link. < 30% of median raises an event.'+(Sp.median_down?' Median '+fmtBits(Sp.median_down)+', best '+fmtBits(Sp.best_down)+'.':'');el.appendChild(n);
  if(Sp.t.length>=2)SP_DEFS.forEach(d=>el.appendChild(gchart(d,Sp)));else if(Sp.count<2){const e=document.createElement('div');e.className='mut';e.textContent='The chart appears after the second test.';el.appendChild(e)}
  const hs=Sp.by_hour||[],mx=Math.max(...hs);
  if(mx>0&&Sp.count>=12){const h=document.createElement('div');h.style.marginTop='8px';h.innerHTML='<div class="mut">Median download by hour of the day (schedule time)</div><div style="display:flex;gap:2px;align-items:flex-end;height:44px">'+hs.map((v,i)=>'<div title="'+i+':00 &ndash; '+(v?fmtBits(v):'no data')+'" style="flex:1;background:'+(v?'var(--s1)':'transparent')+';height:'+(v?Math.max(3,Math.round(v/mx*42)):0)+'px;border-radius:3px 3px 0 0"></div>').join('')+'</div><div class="mut" style="display:flex;justify-content:space-between"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>';el.appendChild(h)}
@@ -315,7 +327,7 @@ function arrender(force){const el=$('ar');if(!Ar||guard(el,force))return;
  const what={arp_gateway:'<b class="err">impersonating the router</b>',arp_conflict:'<b class="err">claims a reserved address</b>',arp_flip:'address changed owner'};
  const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b></td><td>'+(what[x.kind]||esc(x.kind))+'<div class="mut">now '+esc(x.mac)+(x.name?' ('+esc(x.name)+')':'')+(x.other?', was '+esc(x.other):'')+'</div></td></tr>').join('');
  el.innerHTML='<div class="row"><span>'+(Ar.capture_ok?(al?'<b class="err">something is impersonating an address</b>':f.length?'<b>nothing hostile, a few changes to look at</b>':'<b style="color:var(--ac)">no impersonation seen</b>'):'<b class="err">watcher not running</b>')+'</span><span class="mut">'+Ar.claims_seen+' claims, '+Ar.addresses+' addresses watched</span></div>'+
-  '<div class="mut" style="margin:6px 0">Watches every ARP announcement on the network, passively. A device that is not the Orbic claiming the router\'s address, or claiming an address reserved for another device, is an alert; an address that changes owner within 10 minutes is one to look at (a phone rejoining under a new random MAC looks the same). Unicast ARP between two Wi-Fi devices is relayed inside the radio and cannot be seen. Nothing is ever sent. If you run a second DHCP server on purpose, allow it by its hardware address: its replies are then counted but never raise an alert (and the trust is for that device, so another device forging its address is still caught).</div>'+(rows?'<table>'+rows+'</table>':'')+(al?'<div style="margin-top:8px"><div class="mut">Allowed servers</div>'+al+'</div>':'')+'<div id="rdmsg" class="msg"></div>'}
+  '<div class="mut" style="margin:6px 0">Passive ARP monitoring. Alerts on gateway impersonation or reserved-address conflicts. Address changes within 10 min are flagged (random MAC rejoins look the same).</div>'+(rows?'<table>'+rows+'</table>':'')+(al?'<div style="margin-top:8px"><div class="mut">Allowed servers</div>'+al+'</div>':'')+'<div id="rdmsg" class="msg"></div>'}
 async function rdallow(mac,on){if(on&&!confirm('Allow '+mac+' to answer DHCP on this network? Only do this for a server you run yourself: everything it hands out (gateway, DNS) will be trusted.'))return;const r=await apost('rogue-dhcp/allow',{mac,allow:on});if(!r.ok){const m=$('rdmsg');if(m)m.textContent=r.j.error||'failed';return}rdload()}
 async function arload(){try{Ar=await (await api('/api/arp')).json();arrender()}catch(e){}}
 let Rd=null;
@@ -327,7 +339,7 @@ function rdrender(force){const el=$('rd');if(!Rd||guard(el,force))return;
  const rows=(Rd.servers||[]).map(x=>'<tr><td><b>'+esc(x.ip)+'</b><div class="mut">'+esc(x.mac)+'</div></td><td>'+x.replies+' repl'+(x.replies===1?'y':'ies')+' ('+esc((x.types||[]).join(', '))+')'+(x.offered?'<div class="mut">offered '+esc(x.offered)+'</div>':'')+'</td><td class="mut">'+esc(when(x.first))+' to '+esc(when(x.last))+'</td><td><button onclick="rdallow(\''+x.mac+'\',true)">Allow this server</button></td></tr>').join('');
  const al=(Rd.allowed||[]).map(a=>'<div>'+esc(a.mac)+(a.replies?' <span class="mut">answered '+a.replies+' time'+(a.replies===1?'':'s')+(a.ip?' from '+esc(a.ip):'')+'</span>':' <span class="mut">not seen answering</span>')+' <button onclick="rdallow(\''+a.mac+'\',false)">Stop allowing</button></div>').join('');
  el.innerHTML='<div class="row"><span>'+(Rd.capture_ok?(n?'<b class="err">another server is answering</b>':'<b style="color:var(--ac)">only the Orbic answers</b>'):'<b class="err">watcher not running</b>')+'</span><span class="mut">'+Rd.honest_replies+' honest repl'+(Rd.honest_replies===1?'y':'ies')+' seen</span></div>'+
-  '<div class="mut" style="margin:6px 0">Listens passively on the network for DHCP replies. Only the Orbic (its address and its own hardware address) may answer; a second server, or one forging the gateway address, is an alert, because devices that listen to it get sent to the wrong gateway or DNS. Nothing is ever sent.</div>'+(rows?'<table>'+rows+'</table>':'')}
+  '<div class="mut" style="margin:6px 0">Passive DHCP listener. Only the Orbic may answer; a second server or a forged gateway is an alert.</div>'+(rows?'<table>'+rows+'</table>':'')}
 async function rdload(){try{Rd=await (await api('/api/rogue-dhcp')).json();rdrender()}catch(e){}}
 let Cn=null;
 function cnrender(force){const el=$('cn');if(!Cn||guard(el,force))return;
@@ -338,7 +350,7 @@ function cnrender(force){const el=$('cn');if(!Cn||guard(el,force))return;
  const src=(Cn.sources||[]).map(x=>'<tr><td><b>'+esc(x.src)+'</b>'+(x.name?' <span class="mut">'+esc(x.name)+'</span>':'')+'<div class="mut">'+esc(x.mac||'')+'</div></td><td>'+x.hits+' touch'+(x.hits===1?'':'es')+'<div class="mut">'+esc(when(x.first))+' to '+esc(when(x.last))+'</div></td><td class="mut">'+esc((x.ports||[]).join(', ')||'ping or ARP only')+'</td><td>'+(x.mac?'<button onclick="cnignore(\''+x.mac+'\')">Ignore this device</button>':'')+'</td></tr>').join('')||'<tr><td class="mut">nobody has touched it</td></tr>';
  const ig=(Cn.ignore||[]).map(m=>esc(m)+' <button onclick="cnunignore(\''+m+'\')">stop ignoring</button>').join(' &middot; ');
  el.innerHTML='<div class="row"><span>'+(Cn.enabled?(ok?'<b style="color:var(--ac)">watching</b>':'<b class="err">not fully in place</b> (address '+(Cn.alias_ok?'ok':'missing')+', watcher '+(Cn.capture_ok?'ok':'not running')+')'):'<span class="mut">switched off</span>')+' <code>'+esc(Cn.address)+'</code></span><button class="'+(Cn.enabled?'':'on')+'" onclick="cnset('+(!Cn.enabled)+')">'+(Cn.enabled?'Switch off':'Switch on')+'</button></div>'+
-  '<div class="mut" style="margin:6px 0">A decoy host that no honest device has any reason to talk to. The Orbic answers for this address, listens on '+esc((Cn.listening||[]).join(', ')||'no')+' (a slow tarpit that never serves anything real), and watches for any ping, ARP lookup or connection attempt, including ports nothing listens on. The first touch from a device is an event; five or more ports in 10 minutes is a scan event. The address is never handed out by DHCP.</div>'+
+  '<div class="mut" style="margin:6px 0">Decoy host on '+esc((Cn.listening||[]).join(', ')||'no ports')+' (tarpit). Any touch is an event; 5+ ports in 10 min = scan. Never handed out by DHCP.</div>'+
   '<table>'+src+'</table>'+(ig?'<div class="mut" style="margin-top:6px">Ignored: '+ig+'</div>':'')+
   ((Cn.hits||[]).length?'<details style="margin-top:6px"><summary class="mut">The last '+Cn.hits.length+' touches</summary><table>'+Cn.hits.map(h=>'<tr><td class="mut">'+esc(when(h.t))+'</td><td>'+esc(h.src)+'</td><td>'+esc(h.proto+(h.port?' '+h.port:''))+'</td><td class="mut">'+esc(h.kind)+'</td></tr>').join('')+'</table></details>':'')}
 async function cnload(){try{Cn=await (await api('/api/canary')).json();cnrender()}catch(e){}}
@@ -351,10 +363,10 @@ function acrender(force){const el=$('ac');if(!Ac||guard(el,force))return;
  const dn=d=>d.length===7?'every day':d.length===5&&!d.includes(0)&&!d.includes(6)?'weekdays':d.map(x=>DAYS[x]).join(' ');
  const rows=(Ac.actions||[]).map(a=>'<tr><td><b>'+esc(a.name)+'</b><div class="mut">'+esc(a.label)+'</div></td><td>'+esc(dn(a.days))+' at '+esc(a.time)+(a.enabled&&a.next_run?'<div class="mut">next: '+esc(a.next_run)+'</div>':'<div class="mut">off</div>')+'</td><td class="mut">'+(a.last_run?esc(new Date(a.last_run*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))+': '+esc(a.last_result||''):'not run yet')+'</td><td><button onclick="actoggle('+a.id+')">'+(a.enabled?'Turn off':'Turn on')+'</button> <button onclick="acrun('+a.id+')">Run now</button> <button onclick="acdel('+a.id+')">Delete</button></td></tr>').join('')||'<tr><td class="mut">nothing is scheduled</td></tr>';
  const kinds=Object.entries(Ac.kinds||{}).map(([k,v])=>'<option value="'+k+'">'+esc(v)+'</option>').join('');
- el.innerHTML='<div class="mut">The Orbic does these by itself, at the time shown there (now '+esc(Ac.now)+'). A time it misses because it was off is skipped, not made up. Results are logged in the events list.</div><table style="margin:8px 0">'+rows+'</table>'+
+ el.innerHTML='<div class="mut">Runs automatically at the times shown (now '+esc(Ac.now)+'). Missed times are skipped. Results in the events log.</div><table style="margin:8px 0">'+rows+'</table>'+
   '<div class="row"><select id="ac_kind">'+kinds+'</select><input id="ac_time" value="03:30" style="max-width:80px"><input id="ac_name" placeholder="name (optional)" maxlength="40" style="max-width:180px"></div>'+
   '<div class="row" style="margin-top:4px">'+DAYS.map((d,i)=>'<label class="mut"><input type="checkbox" class="ac_day" value="'+i+'" checked> '+d+'</label>').join(' ')+'<button class="on" onclick="acadd()">Add</button></div>'+
-  '<div class="mut" style="margin-top:4px">A reboot asks you to type the word reboot, and is refused within 10 minutes of the Orbic starting, so a bad schedule can never become a reboot loop.</div>'}
+  '<div class="mut" style="margin-top:4px">Reboot requires confirmation and is blocked within 10 min of startup.</div>'}
 async function acload(){try{Ac=await (await api('/api/actions')).json();acrender()}catch(e){}}
 async function acdo(p,b){const r=await apost(p,b);$('acmsg').textContent=r.j.error||r.j.status||'';acload();return r}
 function acconfirm(kind){if(kind!=='reboot')return '';const w=prompt('This will reboot the Orbic: every device loses Wi-Fi and the internet for about a minute.\n\nType  reboot  to confirm:');return w}
@@ -369,10 +381,10 @@ function evrender(force){const el=$('ev');if(!Ev||guard(el,force))return;
  const ic={alert:'<span class="err"><b>&#10007;</b></span>',attention:'<span class="err">&#9888;</span>',info:'<span class="mut">&middot;</span>'};
  const rows=(Ev.events||[]).slice(0,30).map(e=>'<tr><td style="width:1.5em">'+(ic[e.sev]||'')+'</td><td class="mut" style="white-space:nowrap">'+esc(new Date(e.t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))+'</td><td'+(e.seen||e.sev==='info'?' class="mut"':'')+'>'+esc(e.text)+'</td></tr>').join('')||'<tr><td class="mut">nothing has happened</td></tr>';
  const n=Ev.notify||{};
- el.innerHTML='<div class="row"><button onclick="evact(\'events/seen\')">Mark all as seen</button><button onclick="evact(\'events/clear\')">Clear the list</button><span class="mut">The Orbic watches for new devices, the internet going down, encrypted DNS failing, a service stopping, overheating, failed ssh logins, a Wi-Fi radio dropping, the certificate renewing and the data plan.</span></div>'+
+ el.innerHTML='<div class="row"><button onclick="evact(\'events/seen\')">Mark all seen</button><button onclick="evact(\'events/clear\')">Clear</button><span class="mut">New devices, outages, DNS failures, overheating, failed logins, Wi-Fi drops and more.</span></div>'+
   '<table style="margin:8px 0">'+rows+'</table>'+
   '<div style="margin-top:10px"><b>Push to your phone (ntfy)</b> '+(n.enabled?'<b style="color:var(--ac)">on</b> &rarr; '+esc(n.where||''):'<span class="mut">off</span>')+'</div>'+
-  '<div class="mut" style="margin:4px 0">Off until you give an address. What leaves the house is a short generic sentence only (for example &ldquo;A new device joined the network&rdquo;): never a name, MAC, address, message or key. ntfy.sh is a third-party service; a self-hosted ntfy on your own network keeps it all inside. The address is a secret topic: it is stored on the Orbic and never shown back here.</div>'+
+  '<div class="mut" style="margin:4px 0">Only generic sentences leave the house (no names, MACs or keys). Self-hosted ntfy keeps it all local.</div>'+
   '<div class="row"><input id="nt_url" type="password" autocomplete="off" placeholder="'+(n.url_set?'an address is saved (leave blank to keep it)':'https://ntfy.sh/your-secret-topic')+'"><select id="nt_min"><option value="alert"'+(n.min==='alert'?' selected':'')+'>only alerts</option><option value="attention"'+((n.min||'attention')==='attention'?' selected':'')+'>alerts and things to look at</option><option value="info"'+(n.min==='info'?' selected':'')+'>everything</option></select><label><input type="checkbox" id="nt_on" '+(n.enabled?'checked':'')+'> send</label></div>'+
   '<div class="row" style="margin-top:6px"><button class="on" onclick="ntsave()">Save</button><button onclick="nttest()"'+(n.url_set?'':' disabled')+'>Send a test</button><button onclick="ntclear()"'+(n.url_set?'':' disabled')+'>Remove the address</button>'+(n.last_error?'<span class="err">last push failed: '+esc(n.last_error)+'</span>':'')+'</div>'}
 async function evload(){try{Ev=await (await api('/api/events')).json();evrender()}catch(e){}}
@@ -457,7 +469,7 @@ function dgrender(){const el=$('dg');if(!Dg||!Dg.checks){el.innerHTML='<div clas
   h+='<tr><td style="width:1.5em">'+icon[x.status]+'</td><td>'+esc(x.name)+'</td><td'+(x.status==='warn'||x.status==='fail'?'':' class="mut"')+'>'+esc(x.detail)+(x.hint&&(x.status==='warn'||x.status==='fail')?'<div class="mut">&rarr; '+esc(x.hint)+'</div>':'')+'</td></tr>'});
  el.innerHTML='<div class="row"><button class="on" onclick="dgrun()"'+(DgBusy?' disabled':'')+'>'+(DgBusy?'Running...':'Run again')+'</button><a href="/api/diag/report" download><button type="button">Download the report</button></a><span class="mut">'+esc(Dg.ran_at)+', took '+(Dg.took_ms/1000).toFixed(1)+' s</span></div>'+
   '<div style="margin:8px 0"><b>'+c.ok+'</b> fine, <b'+(c.warn?' class="err"':'')+'>'+c.warn+'</b> to look at, <b'+(c.fail?' class="err"':'')+'>'+c.fail+'</b> broken, '+c.info+' notes</div><table>'+h+'</table>'+
-  '<div class="mut" style="margin-top:6px">The report is safe to share: it has no device names, MACs, messages, keys, passwords or full IPv6 addresses.</div>'}
+  '<div class="mut" style="margin-top:6px">Report is safe to share: no names, MACs, keys or passwords.</div>'}
 async function dgload(){try{const j=await (await api('/api/diag')).json();if(j.checks){Dg=j}dgrender()}catch(e){}}
 async function dgrun(){if(DgBusy)return;DgBusy=true;dgrender();try{const r=await apost('diag/run',{});if(r.ok)Dg=r.j;else $('dgmsg').textContent=r.j.error||''}catch(e){$('dgmsg').textContent='The run did not finish.'}DgBusy=false;dgrender()}
 let Ct=null;
@@ -470,7 +482,7 @@ function ctrender(force){const el=$('crt');if(!Ct||guard(el,force))return;const 
   row('Covers',esc((c.names||[]).concat(c.ips||[]).join(', ')),(c.missing||[]).length?'<span class="err">missing: '+esc(c.missing.join(', '))+'</span>':'')+
   row('Key',esc(c.algorithm),'self-signed, serial '+esc(c.serial))+'</table>'+
   '<div class="row" style="margin-top:8px"><button onclick="ctrenew()">Renew now</button><a href="/api/cert/download" download><button type="button">Download the certificate</button></a></div>'+
-  '<div class="mut" style="margin-top:4px">Renewing makes a new key and a new fingerprint and takes effect at once. Browsers and tools that trusted the old one must trust the new one (the browser warns on the next visit). The old pair is kept on the box as <code>.prev</code>. The download is the public certificate only: install it on a device to trust this page permanently.</div>'}
+  '<div class="mut" style="margin-top:4px">Renewing changes the fingerprint; browsers must re-trust. Old pair kept as <code>.prev</code>. Download is the public cert only.</div>'}
 async function ctload(){try{Ct=await (await api('/api/cert')).json();ctrender()}catch(e){}}
 async function ctrenew(){if(!confirm('Renew the web page certificate now? It gets a new fingerprint: every browser that trusted the old one will warn again until it trusts the new one.'))return;const r=await apost('cert/renew',{});$('cmsg').textContent=r.j.error||('Renewed. New fingerprint: '+r.j.fingerprint);ctload()}
 let Sh=null;
@@ -479,10 +491,10 @@ function shrender(force){const el=$('ssh');if(!Sh||guard(el,force))return;
  const keys=(Sh.keys||[]).map(k=>'<tr><td><b>'+esc(k.comment||'(no comment)')+'</b><div class="mut" style="word-break:break-all">'+esc(k.fingerprint)+'</div></td><td>'+esc(when(k.last_login))+(k.last_from?'<div class="mut">from '+esc(k.last_from)+'</div>':'')+'</td><td class="mut">'+k.logins+' login'+(k.logins===1?'':'s')+'</td><td><button onclick="shdel(\''+esc(k.fingerprint)+'\',\''+esc((k.comment||'').replace(/[\'"]/g,''))+'\')">Remove</button></td></tr>').join('')||'<tr><td class="mut">no keys: ssh login is impossible</td></tr>';
  const sm=Sh.summary||{};
  const evs=(Sh.events||[]).filter(e=>e.kind!=='logout'||false).slice(0,25).map(e=>'<tr><td class="mut">'+esc(when(e.time))+'</td><td>'+(e.kind==='login'?'login':'<span class="err">failed</span>')+'</td><td>'+esc(e.from||'')+'</td><td class="mut" style="word-break:break-all">'+esc(e.kind==='login'?(((Sh.keys||[]).find(k=>k.fingerprint===e.key)||{}).comment||e.key||''):(e.detail||''))+'</td></tr>').join('')||'<tr><td class="mut">nothing in the log yet</td></tr>';
- el.innerHTML='<div class="mut">Key-only root login (ed25519), on the services address, from '+esc((Sh.allowed_from||[]).join(' and ')||'no address')+' only. Every key here can log in as root: only add keys you hold.</div>'+
+ el.innerHTML='<div class="mut">Key-only root (ed25519) from '+esc((Sh.allowed_from||[]).join(' and ')||'no address')+'. Only add keys you hold.</div>'+
   '<table style="margin:8px 0">'+keys+'</table>'+
   '<div class="mut">Server host key (check this when a client asks): <span style="word-break:break-all">'+esc(Sh.host_fingerprint||'unknown')+'</span></div>'+
-  '<div style="margin-top:8px"><textarea id="sh_key" rows="2" style="width:100%" placeholder="Paste ONE public key line: ssh-ed25519 AAAA... comment"></textarea><div class="row" style="margin-top:4px"><button class="on" onclick="shadd()">Add key</button><span class="mut">Public keys only. No port, agent or X11 forwarding is always applied. The last key cannot be removed here.</span></div></div>'+
+  '<div style="margin-top:8px"><textarea id="sh_key" rows="2" style="width:100%" placeholder="ssh-ed25519 AAAA... comment"></textarea><div class="row" style="margin-top:4px"><button class="on" onclick="shadd()">Add key</button><span class="mut">Public keys only. No forwarding. Last key cannot be removed.</span></div></div>'+
   '<div style="margin-top:10px"><b>Audit log</b> <span class="mut">'+sm.logins+' logins, '+sm.failed+' failed attempts since the last reboot'+((sm.failure_sources||[]).length?' (from '+esc(sm.failure_sources.join(', '))+')':'')+'. '+esc(Sh.log_note||'')+'</span></div>'+
   '<table style="margin-top:4px"><tr><th>When</th><th></th><th>From</th><th>Key / reason</th></tr>'+evs+'</table>'}
 async function shload(){try{Sh=await (await api('/api/ssh')).json();shrender()}catch(e){}}
@@ -494,7 +506,7 @@ function smrender(force){const el=$('sms');if(!Sm||guard(el,force))return;
  const rows=list.map(m=>'<div style="border-top:1px solid var(--bd,#8884);padding:6px 0"><div class="row"><b'+(m.unread?'':' style="font-weight:500"')+'>'+(m.unread?'&#9679; ':'')+esc(m.phone||'(no number)')+'</b><span class="mut">'+esc(new Date(m.time*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))+(m.direction!=='received'?' &middot; '+esc(m.direction):'')+'</span></div><div style="white-space:pre-wrap;word-break:break-word;margin-top:2px">'+esc(m.content)+'</div></div>').join('')||'<div class="mut">no messages</div>';
  el.innerHTML='<div class="mut">'+Sm.total+' message'+(Sm.total===1?'':'s')+', '+Sm.unread+' unread'+(Sm.partial?', '+Sm.partial+' long message'+(Sm.partial===1?'':'s')+' still waiting for the rest':'')+'</div>'+rows+
   (Sm.messages.length>15?'<div style="margin-top:6px"><button onclick="SmAll=!SmAll;smrender(true)">'+(SmAll?'Show only the newest 15':'Show all '+Sm.messages.length+(Sm.capped?' (the newest '+Sm.messages.length+' of '+Sm.total+')':''))+'</button></div>':'')+
-  '<div class="mut" style="margin-top:6px">Read-only: these are the messages the carrier and SIM delivered to the Orbic. Reading them here does not mark them read in the stock admin, and nothing can be sent or deleted from this page. Message text never leaves this page: it is not in the status feed or the logs.</div>'}
+  '<div class="mut" style="margin-top:6px">Read-only carrier messages. Text stays on this page only (not in feeds or logs).</div>'}
 async function smload(){try{const r=await api('/api/sms');const j=await r.json();if(r.ok){Sm=j;smrender()}else $('sms').textContent=j.error||'could not read messages'}catch(e){}}
 let Dv=null,DnsC=[];
 function devrender(force){const el=$('devs');if(!Dv||guard(el,force))return;
@@ -515,7 +527,7 @@ function devrender(force){const el=$('devs');if(!Dv||guard(el,force))return;
    !d.reserved&&d.ip?'<button onclick="dvreserve(\''+d.mac+'\',\''+esc(d.ip)+'\',\''+esc(d.hostname||'')+'\')">Reserve address</button>':''].filter(Boolean).join(' ');
   return '<tr><td><b>'+esc(nm)+'</b>'+(d.label&&orig?' <span class="mut">('+esc(orig)+')</span>':'')+'<div class="mut">'+esc(d.mac)+'</div>'+(d.note?'<div class="mut" style="white-space:pre-wrap">'+esc(d.note)+'</div>':'')+'</td><td>'+ip+'</td><td>'+conn+'</td><td>'+(flags||'<span class="mut">-</span>')+'</td><td>'+(c.queries!=null?fmt(c.queries)+' asked, '+fmt(c.blocked)+' blocked<div class="mut">'+ago(c.last)+'</div>':'<span class="mut">no DNS lately</span>')+'</td></tr>'+
    '<tr><td colspan="5" style="border-top:0;padding-top:0"><div class="row">'+(d.ip?modeSel(d.ip)+exitSel(d.ip):'')+btns+'</div></td></tr>'}).join('')||'<tr><td class="mut">no devices</td></tr>';
- el.innerHTML='<table><tr><th>Device</th><th>Address</th><th>Connection</th><th>State</th><th>DNS</th></tr>'+rows+'</table><div class="mut" style="margin-top:6px">Everything the Orbic knows: connected now first, then devices it has only seen in the DHCP records. Pause internet cuts the internet for 30 minutes (LAN, address and this page stay); the Firewall card holds weekly schedules. Per-device traffic totals are not shown: the Orbic'+"'"+'s fast path hides most of a connection from its counters.</div>'}
+ el.innerHTML='<table><tr><th>Device</th><th>Address</th><th>Connection</th><th>State</th><th>DNS</th></tr>'+rows+'</table><div class="mut" style="margin-top:6px">Connected first, then DHCP-known. Pause = 30 min internet cut (LAN stays). Schedules on the Internet schedules card.</div>'}
 async function dvload(){try{Dv=await (await api('/api/devices')).json();devrender()}catch(e){}}
 async function dvact(p,b){const r=await apost(p,b);$('devmsg').textContent=r.j.error||'';setTimeout(()=>{dvload();bload();fload()},1200)}
 function dvname(mac){const d=(Dv.devices||[]).find(x=>x.mac===mac)||{};const l=prompt('Name for this device (shown instead of its DHCP name; blank to clear):',d.label||'');if(l===null)return;const n=prompt('Note (optional, up to 200 characters):',d.note||'');if(n===null)return;dvact('devices/note',{mac,label:l,note:n})}
@@ -528,7 +540,7 @@ function krender(force){const el=$('bk');if(!Bk||guard(el,force))return;
  const rows=(Bk.snapshots||[]).map(x=>'<tr><td>'+esc(x.created?x.created.replace('T',' ').slice(0,16):x.name)+'</td><td>'+esc(x.label||(x.name.startsWith('auto')?'automatic, before a restore':''))+'</td><td class="mut">'+x.sections.length+' sections, '+cb(x.size_b)+'</td><td><button onclick="kopen(\''+x.name+'\')">Restore...</button> <a href="/api/backup/download?name='+x.name+'" download><button type="button">Download</button></a> <button onclick="kdel(\''+x.name+'\')">Delete</button></td></tr>').join('')||'<tr><td class="mut">no snapshots yet</td></tr>';
  el.innerHTML='<div class="row"><input id="k_label" placeholder="label (optional)" maxlength="60" style="max-width:220px"><button class="on" onclick="kmake()">Save a snapshot now</button><label class="mut">or load a downloaded one: <input type="file" id="k_file" accept=".json,application/json" onchange="kupload(this)"></label></div>'+
   '<table style="margin:8px 0">'+rows+'</table><div id="kopen"></div>'+
-  '<div class="mut">A snapshot holds every setting on this page. <b>A downloaded snapshot contains the Wi-Fi passwords: keep it private.</b> The VPN registration and key, the web login and the certificate key are never included. Restoring first saves an automatic snapshot, and Wi-Fi goes through the usual check and automatic revert. Keeps the newest 20.</div>'}
+  '<div class="mut"><b>Downloads contain Wi-Fi passwords.</b> VPN key, login and cert key are never included. Restoring saves an automatic snapshot first. Keeps newest 20.</div>'}
 async function kload(){try{Bk=await (await api('/api/backup')).json();krender()}catch(e){}}
 async function kmake(){const r=await apost('backup/create',{label:$('k_label').value});$('kmsg').textContent=r.j.error||r.j.status||'';$('k_label').value='';kload()}
 async function kdel(n){if(!confirm('Delete this snapshot?'))return;const r=await apost('backup/delete',{name:n});$('kmsg').textContent=r.j.error||r.j.status||'';kload()}
@@ -551,13 +563,13 @@ function yrender(force){const el=$('sys');if(!Sy||guard(el,force))return;const y
   row('Temperatures',tp||'?','')+row('Battery',b.known?(b.mv/1000).toFixed(2)+' V, level '+b.level+', '+b.temp_c+'&deg;':'unknown','the firmware&#39;s own level scale')+'</table>'+
   '<table style="margin-top:8px">'+sv+'</table>'+
   '<div style="margin-top:12px"><b>Stock admin</b> '+(Sa?(Sa.off?'<b style="color:var(--ac)">switched off</b>':'<b class="err">still reachable</b>'):'')+'</div>'+
-  '<div class="mut" style="margin:4px 0">The Orbic'+"'"+'s original admin pages. Everything they did is on this page now. Off means nothing on the network can reach them, and anyone opening <code>192.168.1.1</code> lands here instead. The program itself keeps running (stopping it could upset the Orbic'+"'"+'s other programs). The one thing it is still needed for is a SIM PIN, if the carrier ever asks for one: switch it back on then. To undo without this page: <code>ssh orbic rm /data/proxy/stockadmin.off</code>.</div>'+
+  '<div class="mut" style="margin:4px 0">Off = <code>192.168.1.1</code> redirects here. Still needed for SIM PIN only. Undo: <code>ssh orbic rm /data/proxy/stockadmin.off</code>.</div>'+
   '<div class="row"><button class="'+(Sa&&Sa.off?'':'on')+'" onclick="ysa('+(Sa&&Sa.off?'false':'true')+')">'+(Sa&&Sa.off?'Switch the stock admin back on':'Switch the stock admin off')+'</button>'+(Sa&&Sa.off&&!Sa.rules_in_place?'<span class="err">the firewall rules are not in place yet: they are applied within 20 seconds</span>':'')+'</div>'+
   '<div style="margin-top:12px"><b>LAN IPv6</b> '+(Sl?(Sl.off?'<b style="color:var(--ac)">switched off</b>':'<b>on</b>'):'')+'</div>'+
-  '<div class="mut" style="margin:4px 0">A browser\'s WebRTC lists every address on the device itself, so a device exiting through Mullvad still shows its real carrier IPv6 address. Off stops the Orbic handing that address out and tells devices to drop it (at once if deprecated, within 2 hours at the latest, immediately after a Wi-Fi reconnect); IPv4, the exit selector and the Orbic\'s own IPv6 are unaffected. Applies to every device. Off is the default after every boot. To switch it on without this page: <code>ssh orbic touch /data/proxy/lanv6.on</code>.</div>'+
+  '<div class="mut" style="margin:4px 0">Prevents WebRTC IPv6 leaks. Off = devices drop carrier IPv6 (IPv4 unaffected). Default off after boot. <code>ssh orbic touch /data/proxy/lanv6.on</code>.</div>'+
   '<div class="row"><button class="'+(Sl&&Sl.off?'':'on')+'" onclick="ylv6('+(Sl&&Sl.off?'false':'true')+')">'+(Sl&&Sl.off?'Switch LAN IPv6 back on':'Switch LAN IPv6 off')+'</button>'+(Sl&&Sl.off&&!Sl.rules_in_place?'<span class="err">the firewall rules are not in place yet: they are applied within 20 seconds</span>':'')+'</div>'+
   '<div style="margin-top:14px"><b>Outbound services</b> '+(Eg?'<b style="color:var(--ac)">'+({off:'off',monitor:'watching only',enforce:'enforcing'}[Eg.mode]||Eg.mode)+'</b>':'')+'</div>'+
-  '<div class="mut" style="margin:4px 0">Only the services on this list may open connections from your devices to the internet (DNS is always handled separately). <b>Watching only</b> blocks nothing and lists what would be refused, so you can approve the real ones first. Traffic the Orbic opens itself (the PAC proxy, Tor, encrypted DNS) is not covered. Undo without this page: <code>ssh orbic rm /data/proxy/egress.json</code> then restart, or set the mode here.</div>'+
+  '<div class="mut" style="margin:4px 0">Only listed services may connect out (DNS handled separately). <b>Watch only</b> = log without blocking. Undo: <code>ssh orbic rm /data/proxy/egress.json</code>.</div>'+
   '<div class="row">'+['off','monitor','enforce'].map(m=>'<button class="'+(Eg&&Eg.mode===m?'on':'')+'" onclick="yegm(\''+m+'\')">'+({off:'Off',monitor:'Watch only',enforce:'Enforce'}[m])+'</button>').join('')+(Eg&&!Eg.rules_in_place?'<span class="err">rules not in place yet (20 s)</span>':'')+'</div>'+
   '<div style="margin-top:8px"><b>Allowed services</b> <span class="mut">for</span> <select id="eg_scope" aria-label="Which device these ticks are for" onchange="yegs()"><option value="">everyone</option>'+((Dv&&Dv.devices)||[]).filter(d=>d.mac).map(d=>'<option value="'+esc(d.mac)+'"'+((Eg&&Eg.scope===d.mac)?' selected':'')+'>'+esc(d.label||d.name||d.hostname||d.ip||d.mac)+'</option>').join('')+'</select></div>'+
   '<div class="mut" style="margin:2px 0 4px">Looking at one device: services ticked for everyone show ticked and fixed; tick another to allow it for that device only.</div>'+
@@ -567,7 +579,7 @@ function yrender(force){const el=$('sys');if(!Sy||guard(el,force))return;const y
   (Eg?Object.keys(Eg.devices||{}).map(mac=>Eg.devices[mac].map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td>only '+esc(mac)+' '+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\''+mac+'\')">remove</button></td></tr>').join('')).join(''):'')+'</table>'+
   '<div style="margin-top:6px"><b>Would be refused</b> <span class="mut">(seen since the Orbic started; allowing one removes it)</span></div><table>'+
   (Eg&&Eg.observed&&(Eg.observed||[]).length?(Eg.observed||[]).slice(0,25).map(o=>'<tr><td>'+esc(o.ip||'?')+'</td><td>'+o.proto+' '+o.port+'</td><td>'+o.flows+' flows to '+esc((o.dsts||[]).join(', '))+'</td><td><button onclick="yega(\''+o.proto+'\','+o.port+',\'\')">allow for all</button> <button onclick="yega(\''+o.proto+'\','+o.port+',\''+o.mac+'\')">this device</button></td></tr>').join(''):'<tr><td class="mut">nothing so far</td></tr>')+'</table>'+
-  '<div class="row" style="margin-top:10px"><button onclick="yreboot()">Reboot the Orbic</button><span class="mut">Everything drops for 1 to 2 minutes. The guard puts the DHCP reservations back right after boot, so the companion computer may need a moment to get its address (and the ssh route) back.</span></div>'}
+  '<div class="row" style="margin-top:10px"><button onclick="yreboot()">Reboot the Orbic</button><span class="mut">Everything drops for 1–2 min. DHCP reservations restored on boot.</span></div>'}
 let Sa=null,Sl=null,Eg=null;
 async function yload(){try{Sy=await (await api('/api/system')).json();Sa=await (await api('/api/system/stockadmin')).json();Sl=await (await api('/api/system/lanv6')).json();Eg=await (await api('/api/egress'+(($('eg_scope')||{}).value?'?mac='+encodeURIComponent($('eg_scope').value):''))).json();Eg.scope=($('eg_scope')||{}).value||'';yrender()}catch(e){}}
 async function yegs(){const sc=$('eg_scope').value;Eg=await (await api('/api/egress'+(sc?'?mac='+encodeURIComponent(sc):''))).json();Eg.scope=sc;yrender()}
@@ -594,7 +606,7 @@ function crender(force){const el=$('cell');if(!Ce||guard(el,force))return;const 
   row('This billing cycle',(u.down!=null?cb(u.down)+' down, '+cb(u.up)+' up':'?'),u.cycle?'since '+esc(u.cycle):'')+
   row('Since boot',cb(c.rx_bytes)+' down, '+cb(c.tx_bytes)+' up',c.rx_packets+' / '+c.tx_packets+' packets; errors '+c.rx_errors+'/'+c.tx_errors+', drops '+c.rx_drops+'/'+c.tx_drops)+
   row('Temperature',sy.temp_c_max!=null?sy.temp_c_max+' C':'?','')+
-  '</table><div class="mut" style="margin-top:6px">Signal strength, band and tower are not shown: the modem only gives them through an interface this page cannot read yet (on the roadmap). Settings above are read-only; the APN is changed in the stock admin until it gets a confirmed, rolled-back edit here.</div>'+((c.missing||[]).length?'<div class="err">could not read: '+esc(c.missing.join(', '))+'</div>':'')}
+  '</table><div class="mut" style="margin-top:6px">Signal/band/tower not yet available (on the roadmap). Settings are read-only.</div>'+((c.missing||[]).length?'<div class="err">could not read: '+esc(c.missing.join(', '))+'</div>':'')}
 async function cload(){try{Ce=await (await api('/api/cell')).json();CeS=await (await api('/status.json')).json();crender()}catch(e){}}
 let Fw=null;const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 function devopts(sel){const seen={},o=[];(Dh&&Dh.reservations||[]).forEach(r=>{seen[r.mac]=1;o.push([r.mac,r.name])});(Dh&&Dh.devices||[]).forEach(d=>{if(!seen[d.mac]){seen[d.mac]=1;o.push([d.mac,d.name||d.ip||d.mac])}});return '<option value="">'+sel+'</option>'+o.map(x=>'<option value="'+x[0]+'">'+esc(x[1])+'  '+esc(x[0])+'</option>').join('')}
@@ -602,14 +614,14 @@ function frender(force){const a=$('fws'),b=$('fwd');if(!Fw||guard(a,force)||guar
  const nm=m=>{const r=(Dh&&Dh.reservations||[]).find(x=>x.mac===m);return r?r.name:m};
  const pz=(Fw.paused||[]).map(p=>'<tr><td>'+esc(p.name||p.mac)+'</td><td>paused until '+esc(p.until)+'</td><td><button onclick="fresume(\''+p.mac+'\')">Resume</button></td></tr>').join('');
  const sc=(Fw.sched||[]).map(x=>'<tr><td>'+esc(x.name||x.mac)+'</td><td>'+x.days.map(d=>DAYS[d]).join(' ')+'</td><td>'+esc(x.from)+' to '+esc(x.to)+'</td><td>'+(x.enabled?(x.active?'<span class="err">internet cut now</span>':'on'):'<span class="mut">off</span>')+'</td><td><button onclick="fsoff('+x.id+','+(x.enabled?0:1)+')">'+(x.enabled?'Turn off':'Turn on')+'</button> <button onclick="fsdel('+x.id+')">Delete</button></td></tr>').join('');
- a.innerHTML='<div class="mut">Schedule time: '+esc(Fw.now)+' (the schedule time zone, set with -tz; the Orbic'+"'"+'s own clock is fixed to Eastern). A paused or scheduled device keeps its LAN, address and this page, but loses the internet (and its DNS and proxy here).</div>'+
+ a.innerHTML='<div class="mut">Schedule time: '+esc(Fw.now)+'. Paused devices keep LAN access, lose internet.</div>'+
   '<table style="margin:8px 0">'+(pz||'')+(sc||'')+((pz||sc)?'':'<tr><td class="mut">no pauses or schedules</td></tr>')+'</table>'+
   '<div class="row"><select id="f_pdev">'+devopts('Pause a device...')+'</select><select id="f_pmin"><option value="30">30 min</option><option value="60">1 hour</option><option value="180">3 hours</option><option value="480">8 hours</option><option value="1440">24 hours</option></select><button class="on" onclick="fpause()">Pause internet</button></div>'+
   '<div class="row" style="margin-top:8px"><select id="f_sdev">'+devopts('Schedule for...')+'</select><input id="f_from" value="22:00" style="max-width:70px"><span class="mut">to</span><input id="f_to" value="06:00" style="max-width:70px"></div>'+
   '<div class="row" style="margin-top:4px">'+DAYS.map((d,i)=>'<label class="mut"><input type="checkbox" class="f_day" value="'+i+'" '+'checked'+'> '+d+'</label>').join(' ')+'<button class="on" onclick="fsadd()">Add schedule</button></div>'+
-  '<div class="mut" style="margin-top:4px">Days are the day the window starts: 22:00 to 06:00 on Fri runs into Saturday morning.</div>';
+  '<div class="mut" style="margin-top:4px">Days = start day (22:00 Fri runs into Sat morning).</div>';
  const dz=(Fw.dest||[]).map(d=>'<tr><td>'+esc(d.cidr)+'</td><td class="mut">'+esc(d.note||'')+'</td><td><button onclick="fddel(\''+d.cidr+'\')">Unblock</button></td></tr>').join('')||'<tr><td class="mut">none</td></tr>';
- b.innerHTML='<table style="margin:8px 0">'+dz+'</table><div class="row"><input id="f_cidr" placeholder="203.0.113.7 or 203.0.113.0/24" style="max-width:230px"><input id="f_note" placeholder="note (optional)" maxlength="60" style="max-width:200px"><button class="on" onclick="fdadd()">Block</button></div><div class="mut" style="margin-top:4px">No device, and not the Orbic itself, can reach a blocked address (IPv4 or IPv6). Ranges of /8 or narrower; the local network cannot be blocked.</div>'}
+ b.innerHTML='<table style="margin:8px 0">'+dz+'</table><div class="row"><input id="f_cidr" placeholder="203.0.113.7 or 203.0.113.0/24" style="max-width:230px"><input id="f_note" placeholder="note (optional)" maxlength="60" style="max-width:200px"><button class="on" onclick="fdadd()">Block</button></div><div class="mut" style="margin-top:4px">IPv4 or IPv6, /8 or narrower. Local network cannot be blocked.</div>'}
 async function fload(){try{Fw=await (await api('/api/fw')).json();frender()}catch(e){}}
 async function fdo(path,body,box){const r=await apost(path,body);$(box).textContent=r.j.error||'';fload();return r}
 function fpause(){const m=$('f_pdev').value;if(!m){$('fmsg').textContent='Pick a device.';return}fdo('fw/pause',{mac:m,minutes:parseInt($('f_pmin').value)},'fmsg')}
@@ -624,7 +636,7 @@ function brender(force){const el=$('blk');if(!Bl||guard(el,force))return;
  const rows=(Bl.blocked||[]).map(b=>'<tr><td>'+esc(b.name||'(unknown)')+'</td><td class="mut">'+esc(b.mac)+'</td><td>'+(b.online?'<span class="err">on the Wi-Fi, but cut off</span>':'<span class="mut">cut off</span>')+'</td><td><button onclick="bdel(\''+b.mac+'\')">Unblock</button></td></tr>').join('')||'<tr><td class="mut">nobody is blocked</td></tr>';
  const cand=(Dh&&Dh.devices||[]).filter(d=>d.wifi&&!(Bl.blocked||[]).some(b=>b.mac===d.mac));
  el.innerHTML='<table style="margin:8px 0">'+rows+'</table><div class="row"><select id="b_pick"><option value="">Block a connected device...</option>'+cand.map(d=>'<option value="'+d.mac+'">'+esc(d.name||d.ip||'?')+'  '+esc(d.mac)+'</option>').join('')+'</select><input id="b_mac" placeholder="or a MAC: aa:bb:cc:dd:ee:ff" style="max-width:210px"><button class="on" onclick="badd()">Block</button></div>'+
-  '<div class="mut" style="margin-top:4px">A blocked device gets nothing: no address, no DNS, no internet, no LAN. It is also kicked off the Wi-Fi each time it is seen (this radio driver lets it knock again, so the firewall does the real blocking). Nobody else is disturbed. You cannot block the device you are using. Kept across reboots (re-applied within 20 s).</div>'}
+  '<div class="mut" style="margin-top:4px">Blocked = no address, DNS, internet or LAN. Kicked off Wi-Fi on sight. Cannot block yourself. Persists across reboots.</div>'}
 async function bload(){try{Bl=await (await api('/api/wifi/macfilter')).json();brender()}catch(e){}}
 async function badd(){const mac=($('b_mac').value.trim()||$('b_pick').value).toLowerCase();if(!mac){$('bmsg').textContent='Pick a device or type a MAC.';return}
  if(!confirm('Cut '+mac+' off the network? '))return;const r=await apost('wifi/macfilter/add',{mac});$('bmsg').textContent=r.j.error||r.j.status||'';setTimeout(bload,1500)}
@@ -634,7 +646,7 @@ function prender(force){const el=$('pool');if(!Pl||guard(el,force))return;
  const h=Math.round(Pl.lease_secs/360)/10;
  el.innerHTML=(Pl.running?'<div class="err">dnsmasq is running '+esc(Pl.running.start)+' to '+esc(Pl.running.end)+', '+Pl.running.lease_secs+' s: it differs from the saved settings below.</div>':'')+
   '<div class="row"><label class="mut">first</label><input id="p_a" value="'+esc(Pl.start)+'" style="max-width:150px"><label class="mut">last</label><input id="p_b" value="'+esc(Pl.end)+'" style="max-width:150px"><label class="mut">lease (hours)</label><input id="p_l" value="'+h+'" style="max-width:80px"><button class="on" onclick="psave()">Save</button></div>'+
-  '<div class="mut" style="margin-top:4px">Addresses inside .2 to .253. Reservations may sit inside or outside the pool'+((Pl.reserved_inside||[]).length?' (inside now: '+esc(Pl.reserved_inside.join(', '))+')':'')+'. Saving restarts the DHCP and DNS service for a few seconds; devices keep their address until they renew.</div>'}
+  '<div class="mut" style="margin-top:4px">Range .2 to .253. Saving restarts DHCP/DNS briefly; devices keep their address until renewal.</div>'}
 async function pload(){try{Pl=await (await api('/api/dhcp/pool')).json();prender()}catch(e){}}
 async function psave(){const hrs=parseFloat($('p_l').value);if(!(hrs>0)){$('pmsg').textContent='Enter the lease time in hours.';return}
  if(!confirm('Restart DHCP and DNS (a few seconds) to use '+$('p_a').value+' to '+$('p_b').value+', leases '+hrs+' h? A backup of the stock config is saved first, and the old pool comes back if dnsmasq does not.'))return;
