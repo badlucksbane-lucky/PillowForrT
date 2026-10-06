@@ -572,6 +572,16 @@ func (m *egressMgr) ViewFor(mac string) egressView {
 	}
 	m.mu.Unlock()
 	sort.Slice(v.Observed, func(i, j int) bool { return v.Observed[i].Flows > v.Observed[j].Flows })
+	// A nil slice or map marshals as null, and the page runs .map and .length on these: send real, empty lists so a unit with no rules yet still renders.
+	if v.Allow == nil {
+		v.Allow = []egressRule{}
+	}
+	if v.Devices == nil {
+		v.Devices = map[string][]egressRule{}
+	}
+	if v.Observed == nil {
+		v.Observed = []egressSeen{}
+	}
 	out, _ := run("iptables", "-S", "FORWARD")
 	v.RulesIn = v.Mode == "off" || strings.Contains(out, "-j HS_EGRESS")
 	return v
