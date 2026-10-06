@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/logo-parchment.svg" width="560" alt="Stone of Heimdall: a watchman for your hotspot"></p>
+
 # Stone of Heimdall
 ### a watchman for your hotspot
 
