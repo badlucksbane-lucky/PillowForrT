@@ -80,7 +80,7 @@ footer{margin:56px 0 40px;font-size:14px;color:var(--mut);border-top:1px solid v
 
 <h2>Things that turned out to be interesting</h2>
 <h3>.onion names for the whole house</h3>
-<p>A small client-only Tor runs on the box. Any device can open a v3 .onion with no setup: the DNS stub hands back an address from 198.18.0.0/16 and a firewall rule pushes that traffic through a bridge into Tor's SOCKS port. The odd range is deliberate. dnsmasq's rebind protection silently drops answers that point into private space, and that took a day to find.</p>
+<p>A small client-only Tor runs on the box. Any device can open a v3 .onion with no setup: the DNS stub hands back an address from 198.18.0.0/16 and a firewall rule pushes that traffic through a bridge into Tor's SOCKS port. The odd range is deliberate. dnsmasq's rebind protection silently drops answers that point into private space, which was found the hard way: clients saw an empty reply and nothing in any log.</p>
 <h3>A canary address</h3>
 <p>192.168.1.253 is a decoy that no honest device has a reason to touch. The box answers for it, listens on a few tempting ports as a tarpit, and logs anything that pings it, ARPs for it or knocks on a port. Whatever shows up on that list was looking around.</p>
 <h3>ARP watch, with its limit stated</h3>
