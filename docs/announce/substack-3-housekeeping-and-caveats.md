@@ -1,67 +1,51 @@
-# Stone of Heimdall, part 3 of 3: housekeeping, and what to read before you trust it
+# Keeping the box, and what it cannot do
 
-Parts 1 and 2 covered the privacy and watching halves of the Stone of Heimdall page. This last part covers the System section, the cards that keep the box itself healthy, and then the caveats.
+The last section of the Stone of Heimdall page looks after the hotspot itself. After it, the limits.
 
 ## System
 
-### Diagnostics
+**Diagnostics.** One click runs every check the software can make and says, in plain words, what is fine, what deserves a look, what is broken. The checks run on the box, network probes included. The text report is written to be shared: no device names, MACs, messages, keys, passwords or full IPv6 addresses.
 
-One click runs every check the software can make about the box and says, in plain words, what is fine, what deserves a look and what is broken. The checks run on the hotspot itself, network probes included. The text report is written for sharing: it contains no device names, MAC addresses, messages, keys, passwords or full IPv6 addresses.
+**System.** What the box is and how it is doing, read straight from the kernel: uptime, temperature, memory, battery, storage. Deliberately absent: the IMEI, serial numbers and SIM identifiers, because the page never needs them. Factory reset is not offered. Reboot needs a typed confirmation.
 
-### System
+**Cellular.** Read-only: the APN and data settings the stock firmware keeps, and the kernel's view of the uplink, carrier-grade NAT and counters included. Nothing here writes. An APN change can cut the box off, so it is left to the carrier's own flow.
 
-What the box is and how it is doing, read straight from the kernel: uptime, temperature, memory, battery, storage. Deliberately absent: the IMEI, serial numbers and SIM identifiers, because the page never needs them. Factory reset is not offered at all. Reboot needs a typed confirmation.
+**Certificate.** The page's self-signed certificate, renewable while running. It renews itself under sixty days, or when it stops covering the names it must. A renewal makes a new key and a new fingerprint. The card shows the current one to check against what your browser pinned.
 
-### Cellular
+**SSH access.** The authorised keys of the key-only root login, the host key fingerprint, who may reach the port, and an audit trail of logins and failures. Adding takes a public key line only. Private keys are never generated or stored here. The last key cannot be removed from this page, because that would lock ssh out.
 
-Read-only: the APN and data settings the stock firmware keeps, and what the kernel shows of the uplink, including carrier-grade NAT and counters. Nothing here writes. An APN change can cut the hotspot off, so it is left to the carrier's own flow.
+**Scheduled actions.** Things the box does by itself at a chosen time on chosen days, from a short fixed list, never an arbitrary command: save a snapshot, update the block lists, run the diagnostics, reboot. A missed run is skipped, not made up. A reboot needs the typed word to create, and is refused within ten minutes of boot so a bad schedule cannot become a reboot loop.
 
-### Certificate
+**Backup.** Settings snapshots: one file holding everything the page configures, kept on the box and downloadable, because a factory reset or a firmware update can wipe the flash. Restore is per section. The Wi-Fi settings can come back without touching the firewall.
 
-The page's self-signed HTTPS certificate, renewable while running. It renews itself when under sixty days remain or when it stops covering the names it must. A renewal makes a new key and a new fingerprint, and the card shows the current one so you can check it against what your browser pinned.
+**Messages.** A read-only SMS inbox. The hotspot has a SIM and the carrier writes to it. The live database is never opened; a copy is read from RAM.
 
-### SSH access
+**Node.** Uptime, temperature, free memory, Wi-Fi clients, data used this billing cycle against the plan, and the last heartbeat from a companion computer if there is one.
 
-The authorised keys of the key-only SSH login, the host key fingerprint, who may reach the port, and an audit trail of logins and failures. Adding a key takes a public key line only; private keys are never generated or stored here. The last key can never be removed from this page, because that would lock SSH out.
-
-### Scheduled actions
-
-Things the box does by itself at a chosen time on chosen days, from a short fixed list, never an arbitrary command: save a settings snapshot, update the block lists, run the diagnostics, or reboot. A missed run is skipped, not made up later. A reboot needs the typed word to create, and is refused within ten minutes of boot so a bad schedule cannot become a reboot loop.
-
-### Backup
-
-Settings snapshots: one file holding everything this page configures, kept on the box and downloadable to keep a copy off it, since a factory reset or firmware update can wipe the flash. Restore is per section, so you can bring back the Wi-Fi settings without touching the firewall.
-
-### Messages
-
-A read-only SMS inbox, because the hotspot has a SIM and the carrier sends messages to it. The live database is never opened directly; a copy is read from a RAM disk.
-
-### Node
-
-A small status table for the box as a node: uptime, temperature, free memory, Wi-Fi clients, data used this billing cycle against your plan, and the last heartbeat from a companion computer if you run one.
-
-### Account
-
-Change the login password. There is one account, sessions are cookies over HTTPS only, and a wrong username costs the same time as a wrong password.
+**Account.** Change the password. One account. Sessions are cookies over HTTPS only. A wrong username costs the same time as a wrong password.
 
 ## How it was made
 
-The code was written by Claude, an AI model made by Anthropic, under the direction of the project's maintainer, who set the goals and the decisions and tested the result on their own hardware. The maintainer did not write the code and has not audited it line by line. It has a large automated test suite and one real unit's worth of use. Read it before you trust it with anything that matters.
+The code was written by Claude, an AI model made by Anthropic, under the direction of the maintainer, who set the goals and the decisions and tested the result on their own hardware. The maintainer did not write the code and has not audited it line by line. It has a large automated test suite and one unit's worth of use. Read it before you trust it with anything that matters.
 
 ## Before you install
 
-- **It has run on one unit** of one model on one carrier. Behaviour elsewhere is unknown.
-- **The first-install tool is experimental** and has not yet been run end to end from a factory-fresh unit. Its pieces were tested separately. It installs over USB, journals every change and rolls back on failure, but you should read the install guide and expect to read code.
-- **Rooting the hotspot** may void its warranty or breach your carrier's terms. Reading some flash partitions can freeze the device until a power cycle.
-- **It is not anonymity.** The carrier knows where the hotspot is and sees connection metadata. The VPN provider sees what the carrier otherwise would. Tor is slow and does not protect a device that logs into an account.
-- **It does not protect against** someone with physical access, someone already on your Wi-Fi who guesses the password, devices that bypass the router with a second radio or a USB tether, or a vulnerability in the old stock firmware underneath.
+It has run on one unit of one model on one carrier. Behaviour elsewhere is unknown.
+
+The first-install tool is experimental. It has not yet been run end to end from a factory-fresh unit; its pieces were tested separately. It installs over USB, journals every change and rolls back on failure. Read the install guide and expect to read code.
+
+Rooting the hotspot may void its warranty or breach the carrier's terms. Reading some flash partitions can freeze the device until a power cycle.
+
+It is not anonymity. The carrier knows where the hotspot is and sees connection metadata. The VPN provider sees what the carrier otherwise would. Tor is slow and does not protect a device that logs into an account.
+
+It does not protect against someone with physical access, someone already on the Wi-Fi who guesses the password, a device that bypasses the router through a second radio or a USB tether, or a vulnerability in the old stock firmware underneath.
 
 The threat model in the repository says all of this in a table, with a column for where each claim stops.
 
-## Where to get it
+## Where it is
 
-The source is on GitHub under the MIT licence, with the install guide, the threat model and how to report a vulnerability in the docs folder:
+Source, install guide, threat model and how to report a vulnerability:
 
 https://github.com/badlucksbane-lucky/stone-of-heimdall
 
-"Orbic" is the trademark of its owner and appears here only to say which hardware this runs on. The project is not affiliated with or endorsed by Orbic or any carrier. The third-party programs it installs, dnsmasq, dropbear and Tor, are fetched from their own sources and keep their own licences.
+MIT licence. "Orbic" is the trademark of its owner and appears here only to say which hardware this runs on. Not affiliated with or endorsed by Orbic or any carrier. dnsmasq, dropbear and Tor are fetched from their own sources and keep their own licences.
