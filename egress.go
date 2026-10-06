@@ -351,6 +351,9 @@ func (m *egressMgr) Sample() {
 		if torBypassMgr != nil {
 			torBypassMgr.ObserveFlow(mac, fl.Src, fl.Dst, time.Unix(now, 0))
 		}
+		if beaconMgr != nil {
+			beaconMgr.Observe(mac, fl.Src, fl.Dst, time.Unix(now, 0))
+		}
 		if portListed(effectiveRules(m.cfg, mac), fl.Proto, fl.Port) {
 			continue
 		}

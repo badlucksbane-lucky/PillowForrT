@@ -58,6 +58,13 @@ button{min-height:36px}
 <div class="card"><h2>ARP watch <span id="arbadge"></span></h2><div id="ar" class="mut">loading</div></div>
 <div class="card"><h2>Rogue DHCP <span id="rdbadge"></span></h2><div id="rd" class="mut">loading</div></div>
 <div class="card"><h2>Canary <span id="cnbadge"></span></h2><div id="cn" class="mut">loading</div><div id="cnmsg" class="msg"></div></div>
+<div class="card"><h2>MAC churn <span id="mcbadge"></span></h2><div id="mc" class="mut">loading</div></div>
+<div class="card"><h2>DNS canary <span id="dcbadge"></span></h2><div id="dc" class="mut">loading</div><div id="dcmsg" class="msg"></div></div>
+<div class="card"><h2>NXDOMAIN flood <span id="dgbadge"></span></h2><div id="dg2" class="mut">loading</div></div>
+<div class="card"><h2>Beacon patterns <span id="bcbadge"></span></h2><div id="bc" class="mut">loading</div><div id="bcmsg" class="msg"></div></div>
+<div class="card"><h2>Tor / proxy bypass <span id="tbbadge"></span></h2><div id="tb2" class="mut">loading</div></div>
+<div class="card"><h2>Bare-IP TLS <span id="tsbadge"></span></h2><div id="ts" class="mut">loading</div></div>
+<div class="card"><h2>DHCP fingerprint drift <span id="dfbadge"></span></h2><div id="df" class="mut">loading</div></div>
 <div class="sec">Privacy</div>
 <div class="card"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
 <div class="card"><h2>Onion door <span id="odbadge"></span></h2><div id="od" class="mut">loading</div><div id="odmsg" class="msg"></div></div>
@@ -358,6 +365,72 @@ async function cndo(p,b){const r=await apost(p,b);$('cnmsg').textContent=r.j.err
 function cnset(on){cndo('canary/set',{enabled:on})}
 function cnignore(mac){if(confirm('Ignore this device? It can touch the canary address without raising an event. (Do this only for a scanner you run yourself.)'))cndo('canary/ignore',{mac,ignore:true})}
 function cnunignore(mac){cndo('canary/ignore',{mac,ignore:false})}
+let Mc=null;
+function mcrender(force){const el=$('mc');if(!Mc||guard(el,force))return;
+ const f=Mc.findings||[];
+ $('mcbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.key)+'</b><div class="mut">'+(x.kind==='mac_churn_ip'?'this address':'this device')+'</div></td><td>'+(x.others||[]).length+' distinct '+(x.kind==='mac_churn_ip'?'MACs':'addresses')+'<div class="mut">'+esc((x.others||[]).join(', '))+'</div></td></tr>').join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">Widens the ARP watch\'s address-flip check into a short history: one address claimed by several MACs, or one MAC claiming several addresses, within 10 minutes. A device rejoining with a randomized MAC can look the same, so this is one to look at, not proof.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+async function mcload(){try{Mc=await (await api('/api/macchurn')).json();mcrender()}catch(e){}}
+let Dc=null;
+function dcrender(force){const el=$('dc');if(!Dc||guard(el,force))return;
+ if(Dc.available===false){el.textContent='The DNS canary is not available (the DNS filter is off).';return}
+ const h=Dc.hits||[];
+ $('dcbadge').innerHTML=h.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+h.length+' hit'+(h.length===1?'':'s')+'</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const what={canary:'decoy name','plain_fallback':'plain DNS while DoH is up',exfil:'tunneling-shaped lookups'};
+ const rows=h.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'</td><td class="mut">'+(what[x.kind]||esc(x.kind))+'</td></tr>').join('')||'<tr><td class="mut">nothing yet</td></tr>';
+ el.innerHTML='<div class="row"><span>'+(Dc.enabled?'<b style="color:var(--ac)">watching</b>':'<span class="mut">switched off</span>')+'</span><button class="'+(Dc.enabled?'':'on')+'" onclick="dcset('+(!Dc.enabled)+')">'+(Dc.enabled?'Switch off':'Switch on')+'</button></div>'+
+  '<div class="mut" style="margin:6px 0">Watches every DNS query for decoy names, plain DNS while encrypted DNS is in use, and tunneling-shaped runs of lookups.</div>'+
+  '<table>'+rows+'</table>'}
+async function dcload(){try{Dc=await (await api('/api/dnscanary')).json();dcrender()}catch(e){}}
+async function dcset(on){const r=await apost('dnscanary/set',{enabled:on});$('dcmsg').textContent=r.j.error||'';dcload()}
+let Dg2=null;
+function dg2render(force){const el=$('dg2');if(!Dg2||guard(el,force))return;
+ const f=Dg2.findings||[];
+ $('dgbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+x.count+' different failed lookups</td></tr>').join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">A client racking up many different failed (NXDOMAIN) lookups in a short window is the shape of a domain-generation-algorithm beacon burning through candidate names.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+async function dg2load(){try{Dg2=await (await api('/api/dganxdomain')).json();dg2render()}catch(e){}}
+let Bc=null;
+function bcrender(force){const el=$('bc');if(!Bc||guard(el,force))return;
+ const f=Bc.findings||[];
+ $('bcbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.dst)+'</td><td>every ~'+Math.round(x.period_s)+'s, '+x.n+' times</td><td><button onclick="bcignore(\''+esc(x.src)+'\',\''+esc(x.dst)+'\')">Mark expected</button></td></tr>').join('');
+ const ig=(Bc.ignore||[]).map(k=>{const[s,d]=k.split('|');return esc(s)+' &rarr; '+esc(d)+' <button onclick="bcunignore(\''+esc(s)+'\',\''+esc(d)+'\')">stop ignoring</button>'}).join(' &middot; ');
+ el.innerHTML='<div class="mut" style="margin:6px 0">A device connecting to the same address on a very regular schedule: the shape of a check-in beacon, though plenty of ordinary apps (chat heartbeats, cloud sync, IMAP idle) look the same. Mark a pair expected once you have checked it.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')+(ig?'<div class="mut" style="margin-top:6px">Marked expected: '+ig+'</div>':'')}
+async function bcload(){try{Bc=await (await api('/api/beacon')).json();bcrender()}catch(e){}}
+async function bcignore(src,dst){const r=await apost('beacon/ignore',{src,dst,ignore:true});$('bcmsg').textContent=r.j.error||'';bcload()}
+async function bcunignore(src,dst){const r=await apost('beacon/ignore',{src,dst,ignore:false});$('bcmsg').textContent=r.j.error||'';bcload()}
+let Tb2=null;
+function tb2render(force){const el=$('tb2');if(!Tb2||guard(el,force))return;
+ if(Tb2.available===false){el.textContent='No Tor relay/bridge list is loaded, so direct-exit detection is off; .onion-attempt detection still works.';return}
+ const f=Tb2.findings||[];
+ $('tbbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const what={tor_bypass_exit:'connected directly to a known Tor relay',tor_bypass_onion:'asked for a .onion name while not assigned to Tor'};
+ const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+(what[x.kind]||esc(x.kind))+(x.dst?'<div class="mut">'+esc(x.dst)+'</div>':'')+(x.name?'<div class="mut">'+esc(x.name)+'</div>':'')+'</td></tr>').join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">Devices reaching Tor outside the Orbic\'s own Tor path (tor.go), or attempting a .onion lookup the router refused. A device already sent through Tor on this page is never flagged.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+async function tb2load(){try{Tb2=await (await api('/api/torbypass')).json();tb2render()}catch(e){}}
+let Ts=null;
+function tsrender(force){const el=$('ts');if(!Ts||guard(el,force))return;
+ const f=Ts.findings||[];
+ $('tsbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.dst)+'</td><td class="mut">'+(x.name?'sent the address itself as the TLS server name':'no server name (SNI) at all')+'</td></tr>').join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">Almost every browser and app sends the hostname it wants in the clear, in the TLS ClientHello, even though everything after it is encrypted. A connection with no server name, or one whose server name is literally the destination address, is unusual (a few IoT devices and hand-configured tools do this on purpose). Needs no decryption; TLS 1.3 still hides the certificate itself, so this cannot also check for a self-signed cert.'+(Ts.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+async function tsload(){try{Ts=await (await api('/api/tlssni')).json();tsrender()}catch(e){}}
+let Df=null;
+function dfrender(force){const el=$('df');if(!Df||guard(el,force))return;
+ const f=Df.findings||[];
+ $('dfbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.mac)+'</b></td><td class="mut">was '+esc(x.was)+'<br>now '+esc(x.now)+'</td></tr>').join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">A device\'s DHCP client advertises, in the clear, a fingerprint shaped by its OS and network stack. One that holds steady and then suddenly changes is usually new firmware, but can mean a different device is now answering for that address.'+(Df.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+async function dfload(){try{Df=await (await api('/api/dhcpfp')).json();dfrender()}catch(e){}}
 let Ac=null;
 function acrender(force){const el=$('ac');if(!Ac||guard(el,force))return;
  const dn=d=>d.length===7?'every day':d.length===5&&!d.includes(0)&&!d.includes(6)?'weekdays':d.map(x=>DAYS[x]).join(' ');
@@ -652,7 +725,7 @@ async function psave(){const hrs=parseFloat($('p_l').value);if(!(hrs>0)){$('pmsg
  if(!confirm('Restart DHCP and DNS (a few seconds) to use '+$('p_a').value+' to '+$('p_b').value+', leases '+hrs+' h? A backup of the stock config is saved first, and the old pool comes back if dnsmasq does not.'))return;
  const r=await apost('dhcp/pool/set',{start:$('p_a').value.trim(),end:$('p_b').value.trim(),lease_secs:Math.round(hrs*3600)});$('pmsg').textContent=r.j.error||r.j.status||'';setTimeout(()=>{Pl=null;pload();dload()},5000)}
 let tickN=0;
-async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
+async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Df)dfload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
 
 (function(){
  let st={};try{st=JSON.parse(localStorage.getItem('cc')||'{}')}catch(e){}
