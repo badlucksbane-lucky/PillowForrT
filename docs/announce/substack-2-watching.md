@@ -1,6 +1,6 @@
 # What it watches
 
-Stone of Heimdall is firmware for the Orbic RC400L hotspot. These are the cards on its page that only observe: the wire, the radio, the link out, the devices. They record and show. Acting on any of it is yours to do.
+Stone of Heimdall, firmware for the Orbic RC400L hotspot. The cards that observe: wire, radio, uplink, devices. They record. You act.
 
 ## Monitoring
 

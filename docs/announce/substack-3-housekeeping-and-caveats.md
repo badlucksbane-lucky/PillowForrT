@@ -1,6 +1,6 @@
 # Keeping the box, and what it cannot do
 
-Stone of Heimdall is firmware for the Orbic RC400L hotspot. The last section of its page keeps the box itself in order. After it, the limits.
+Stone of Heimdall, firmware for the Orbic RC400L hotspot. The System section, then the limits.
 
 ## System
 
