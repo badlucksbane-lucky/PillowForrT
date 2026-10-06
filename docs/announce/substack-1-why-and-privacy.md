@@ -24,13 +24,13 @@ What it is not: anonymity. The carrier knows where the hotspot is and sees that 
 
 One page, served over HTTPS from the hotspot, behind a login. Cards in sections: Today, Monitoring, Security, Privacy, DNS, Devices, Network, System. Every card collapses. No telemetry. Nothing leaves the house unless you configure it to.
 
-**Today.** Query count, how many were blocked, the share that left encrypted. Pause filtering for fifteen minutes, resume, update the lists now.
+**Today.** Counts since the box started: queries, blocked, cached, encrypted, plain, via VPN, errors. The filter on or off. Pause it for fifteen minutes, resume, update the lists now. A banner when encrypted DNS is down and plain carrier DNS is being used instead.
 
 **Tor.** A minimal client-only Tor runs on the box, supervised by the firmware. Any device can open a .onion address with no setup: the DNS stub answers the name with an address from a reserved range and a firewall rule sends that traffic through Tor. A device can also be assigned to exit through Tor entirely. While Tor is down an assigned device gets no answer, never a public one. The card shows bootstrap state, memory use and assignments.
 
 **Onion door.** A Tor onion service that lets a few keyed devices reach this page from anywhere, with no open port. Three locks: v3 client authorisation, so a visitor without a listed key cannot find the service at all; the web login; and a read-only view unless remote writing is on. No SSH through it.
 
-**VPN (Mullvad).** One WireGuard key, run in-process. The whole house can exit through it, with a kill switch so a dead tunnel blocks instead of leaking, or single devices by MAC address. Registration takes a Mullvad account number, used once and not stored. The card shows tunnel state, exit server and assignments.
+**VPN (Mullvad).** One WireGuard key, run in-process. The whole house can exit through it, with a kill switch so a dead tunnel blocks instead of leaking, or single devices by MAC address. Registration takes a Mullvad account number, used once and not stored. The card shows the tunnel state, the relay chosen by country and city, and each device's exit.
 
 **Block lists.** A catalogue of published lists, each a tick box. Lists are held in memory as hashes, so switching one on or off is instant, with no reload and no DNS stall. A per-device "strict" profile applies every list downloaded.
 
@@ -38,4 +38,4 @@ One page, served over HTTPS from the hotspot, behind a login. Cards in sections:
 
 **Your block rules.** A bare name blocks it and its subdomains. A star prefix blocks subdomains only. Stars anywhere match anything. A rule applies to everyone or to one device, and can expire after an hour, a day or a week. Below it, a "Why?" box: type a name and it says which list or rule blocks it, or that nothing does.
 
-**Top blocked. Top asked. Recent.** The last day: names blocked most, names asked most, the newest queries, each with the device that asked. These live in RAM only. There is no query history on flash.
+**Top blocked. Top asked. Recent.** Counted since the box started: the names blocked most, the names asked most, and the newest queries, each with the device that asked and how it was answered. These live in RAM only. There is no query history on flash.

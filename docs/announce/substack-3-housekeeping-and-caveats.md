@@ -20,9 +20,9 @@ Stone of Heimdall is firmware for the Orbic RC400L hotspot. The last section of 
 
 **Messages.** A read-only SMS inbox. The hotspot has a SIM and the carrier writes to it. The live database is never opened; a copy is read from RAM.
 
-**Node.** Uptime, temperature, free memory, Wi-Fi clients, data used this billing cycle against the plan, and the last heartbeat from a companion computer if there is one.
+**Node.** Uptime, temperature, free memory, Wi-Fi clients, whether the uplink is up, data used this billing cycle against the plan, and the proxy's connection counts.
 
-**Account.** Change the password. One account. Sessions are cookies over HTTPS only. A wrong username costs the same time as a wrong password.
+**Account.** Change the password. One login. Sessions are cookies over HTTPS only. A wrong username costs the same time as a wrong password.
 
 ## How it was made
 
