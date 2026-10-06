@@ -522,6 +522,63 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 			return
 		}
 		writeJSON(w, 200, map[string]string{"status": "saved"})
+	case path == "dnscanary" && r.Method == http.MethodGet:
+		if dnsCanaryMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, dnsCanaryMgr.View())
+	case path == "dnscanary/set" && r.Method == http.MethodPost:
+		if dnsCanaryMgr == nil {
+			writeJSON(w, 400, map[string]string{"error": "the DNS canary is not available (the DNS filter is off)"})
+			return
+		}
+		var b struct{ Enabled bool }
+		if json.NewDecoder(r.Body).Decode(&b) != nil {
+			writeJSON(w, 400, map[string]string{"error": "bad request"})
+			return
+		}
+		dnsCanaryMgr.SetEnabled(b.Enabled)
+		writeJSON(w, 200, map[string]string{"status": "saved"})
+	case path == "macchurn" && r.Method == http.MethodGet:
+		if macChurnMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, macChurnMgr.View())
+	case path == "torbypass" && r.Method == http.MethodGet:
+		if torBypassMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, torBypassMgr.View())
+	case path == "beacon" && r.Method == http.MethodGet:
+		if beaconMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, beaconMgr.View())
+	case path == "beacon/ignore" && r.Method == http.MethodPost:
+		if beaconMgr == nil {
+			writeJSON(w, 400, map[string]string{"error": "beacon detection is not available"})
+			return
+		}
+		var b struct {
+			Src, Dst string
+			Ignore   bool
+		}
+		if json.NewDecoder(r.Body).Decode(&b) != nil {
+			writeJSON(w, 400, map[string]string{"error": "bad request"})
+			return
+		}
+		beaconMgr.Ignore(b.Src, b.Dst, b.Ignore)
+		writeJSON(w, 200, beaconMgr.View())
+	case path == "dganxdomain" && r.Method == http.MethodGet:
+		if dgaMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, dgaMgr.View())
 	case path == "actions" && r.Method == http.MethodGet:
 		writeJSON(w, 200, actions.View())
 	case (path == "actions/set" || path == "actions/delete" || path == "actions/run") && r.Method == http.MethodPost:
