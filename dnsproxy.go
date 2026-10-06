@@ -514,6 +514,9 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 			return buildBlocked(q, dq, p.BlockTTL)
 		}
 		p.Stats.Cached.Add(1)
+		if dgaMgr != nil && dq.Class == qclassI && rcodeOf(resp) == 3 {
+			dgaMgr.Observe(client, dq.Name, t0)
+		}
 		finish("cached")
 		return resp
 	}
@@ -547,6 +550,9 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 		ev.List = by
 		finish("blocked")
 		return buildBlocked(q, dq, p.BlockTTL)
+	}
+	if dgaMgr != nil && dq.Class == qclassI && rcodeOf(resp) == 3 {
+		dgaMgr.Observe(client, dq.Name, t0)
 	}
 	finish(via)
 	return resp

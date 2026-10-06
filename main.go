@@ -409,9 +409,11 @@ func main() {
 	}
 	if dnsProxy != nil {
 		dnsCanaryMgr = newDNSCanaryWatch()
+		dgaMgr = newDGAWatch()
 	}
 	macChurnMgr = newMACChurnWatch()
 	torBypassMgr = newTorBypassWatch(*torExitFile)
+	beaconMgr = newBeaconWatch("/data/proxy/beacon.json")
 	if *rogueWatchOn {
 		rogueMgr = newRogueWatch()
 		rogueMgr.Start()
