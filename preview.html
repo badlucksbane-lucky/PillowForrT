@@ -1,0 +1,290 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stone of Heimdall — Preview</title>
+<style>
+:root{--s1:#2a78d6;--s2:#eb6834;--gl:#e6d8b8;--ax:#cdb98e;--bg:#f1e4c8;--fg:#3f2a18;--card:#f8f0dc;--mut:#7a5638;--ac:#7b502d;--onac:#fff;--okc:#2e6b3f;--bad:#a3322a;--warn:#c08a1e;--ln:#d9c7a0}
+@media(prefers-color-scheme:dark){:root{--s1:#3987e5;--s2:#d95926;--gl:#2e2214;--ax:#40301d;--bg:#1b130c;--fg:#ecd9b0;--card:#26190f;--mut:#b98b55;--ac:#d3a96e;--onac:#1b130c;--okc:#7fc08a;--bad:#e8776a;--warn:#e0b04a;--ln:#3a2a1a}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
+main{max-width:760px;margin:0 auto;padding:12px 16px 40px}
+h1{font-size:20px;margin:8px 0}.brand{display:flex;gap:12px;align-items:center;margin:6px 0 10px}.brand h1{margin:0}.brand .mark{width:44px;height:44px;flex:none;border-radius:8px;background:var(--ac);display:flex;align-items:center;justify-content:center;font-size:22px}.tag{font-size:12px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:10px;padding:12px;margin:12px 0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button{font:inherit;padding:6px 12px;border:1px solid var(--ln);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer;min-height:36px}
+button.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
+input{font:inherit;padding:6px 8px;border:1px solid var(--ln);border-radius:8px;background:var(--bg);color:var(--fg);min-width:0;flex:1}
+.err{color:var(--bad)}.mut{color:var(--mut)}.blk{color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:3px 6px 3px 0;border-bottom:1px solid var(--ln);word-break:break-all}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px}
+.n{font-size:22px;font-weight:600}
+.gwrap{position:relative;margin:10px 0 4px}.gtitle{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;margin-bottom:2px}.gtitle b{font-size:14px}
+.gkey{display:inline-flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}.gkey i{display:inline-block;width:16px;height:2px;border-radius:1px}
+h2.cc{cursor:pointer;user-select:none;display:flex;flex-wrap:wrap;align-items:center;gap:0 6px}
+h2.cc::before{content:"";flex:none;width:7px;height:7px;border:solid var(--mut);border-width:0 2px 2px 0;transform:rotate(45deg);margin:0 5px 3px 2px;transition:transform .15s}
+.card.closed>h2.cc::before{transform:rotate(-45deg);margin-bottom:0}
+.card.closed>*:not(h2){display:none}.card.closed>h2{margin-bottom:0}
+.msg{color:var(--bad)}.msg.ok{color:var(--okc)}
+.tools{display:flex;gap:8px;margin:2px 0 0}.tools button{font-size:12px;padding:3px 10px;min-height:0;color:var(--mut)}
+.hero{border-width:2px;border-color:var(--ax);padding:16px 14px}
+.hero .n{font-size:26px}
+.hero .grid{gap:14px}
+.stat-bar{height:3px;border-radius:2px;margin-top:6px;opacity:.3}
+.sec{font:11px/1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin:28px 0 2px 4px}
+
+.gsvg{width:100%;height:auto;display:block}
+.range{display:flex;gap:4px;margin:4px 0}
+.range button{font-size:11px;padding:2px 8px;min-height:0}
+.range button.sel{border-color:var(--fg);font-weight:600}
+</style></head><body><main>
+
+<div class="brand">
+  <div class="mark">⟁</div>
+  <div><h1>Stone of Heimdall <span class="mut">v0.9.3</span></h1><div class="tag mut">a watchman for your hotspot</div></div>
+</div>
+<div class="row" style="margin-bottom:6px"><span class="mut">Signed in as <b>admin</b></span><button>Sign out</button></div>
+
+<div class="tools"><button type="button" onclick="ccAll(true)">Collapse all</button><button type="button" onclick="ccAll(false)">Expand all</button></div>
+
+<!-- ═══════ HERO CARD ═══════ -->
+<div class="card hero">
+  <h2>Today</h2>
+  <div class="row">
+    <button>Off</button>
+    <button class="on">On</button>
+  </div>
+  <div class="row" style="margin-top:6px">
+    <span class="mut">Active</span>
+    <button>Pause 15 min</button>
+    <button>Resume</button>
+    <button>Update lists</button>
+  </div>
+
+  <div class="grid" style="margin-top:12px">
+    <div><div class="n">14.2k</div><div class="mut">Queries</div><div class="stat-bar" style="background:var(--ax)"></div></div>
+    <div><div class="n" style="color:var(--s2)">3.1k</div><div class="mut">Blocked</div><div class="stat-bar" style="background:var(--s2)"></div></div>
+    <div><div class="n">8.7k</div><div class="mut">Cached</div><div class="stat-bar" style="background:var(--ax)"></div></div>
+    <div><div class="n" style="color:var(--okc)">11.4k</div><div class="mut">Encrypted</div><div class="stat-bar" style="background:var(--okc)"></div></div>
+    <div><div class="n" style="color:var(--warn)">204</div><div class="mut">Plain</div><div class="stat-bar" style="background:var(--warn)"></div></div>
+    <div><div class="n" style="color:var(--s1)">1.2k</div><div class="mut">Via VPN</div><div class="stat-bar" style="background:var(--s1)"></div></div>
+    <div><div class="n" style="color:var(--bad)">3</div><div class="mut">Errors</div><div class="stat-bar" style="background:var(--bad)"></div></div>
+  </div>
+
+  <!-- Mock graphs -->
+  <div style="margin-top:12px">
+    <div class="gtitle"><b>Queries</b>
+      <span class="gkey"><i style="background:var(--s1)"></i>total</span>
+      <span class="gkey"><i style="background:var(--s2)"></i>blocked</span>
+    </div>
+    <svg class="gsvg" viewBox="0 0 700 120" preserveAspectRatio="none">
+      <rect width="700" height="120" fill="var(--gl)" rx="6"/>
+      <polyline fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"
+        points="10,95 50,80 90,85 130,60 170,55 210,70 250,45 290,50 330,35 370,40 410,30 450,25 490,38 530,20 570,28 610,15 650,22 690,18"/>
+      <polyline fill="none" stroke="var(--s2)" stroke-width="2" stroke-linejoin="round" stroke-dasharray="6 3"
+        points="10,105 50,100 90,102 130,95 170,92 210,98 250,88 290,90 330,85 370,87 410,82 450,80 490,84 530,78 570,81 610,75 650,79 690,76"/>
+    </svg>
+    <div class="range"><button class="sel">24h</button><button>7d</button><button>30d</button></div>
+  </div>
+
+  <div style="margin-top:8px">
+    <div class="gtitle"><b>Latency</b>
+      <span class="gkey"><i style="background:var(--okc)"></i>dns ms</span>
+    </div>
+    <svg class="gsvg" viewBox="0 0 700 80" preserveAspectRatio="none">
+      <rect width="700" height="80" fill="var(--gl)" rx="6"/>
+      <polyline fill="none" stroke="var(--okc)" stroke-width="2" stroke-linejoin="round"
+        points="10,55 50,50 90,45 130,52 170,38 210,42 250,35 290,40 330,30 370,32 410,28 450,35 490,22 530,25 570,20 610,18 650,22 690,15"/>
+    </svg>
+  </div>
+</div>
+
+<!-- ═══════ MONITORING ═══════ -->
+<div class="sec">Monitoring</div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Events</h2>
+<table>
+<tr><td class="mut">2 min ago</td><td>New device <b>iPhone-Laura</b> joined Wi-Fi</td></tr>
+<tr><td class="mut">18 min ago</td><td>VPN tunnel established (Mullvad se-mma-007)</td></tr>
+<tr><td class="mut">1 h ago</td><td>DNS lists updated — 142,831 rules loaded</td></tr>
+<tr><td class="mut">3 h ago</td><td>ARP: new host 192.168.1.47 (aa:bb:cc:11:22:33)</td></tr>
+</table></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Latency history</h2>
+<div class="mut">Avg 24 ms — last check 12 ms</div></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Speed history</h2>
+<div class="mut">Last test: ↓ 48.2 Mbps ↑ 12.1 Mbps — 6 h ago</div></div>
+
+<!-- ═══════ SECURITY ═══════ -->
+<div class="sec">Security</div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">ARP watch <span style="color:var(--okc)">✓</span></h2>
+<div class="mut">Passive ARP monitoring. Alerts on gateway impersonation or reserved-address conflicts.</div>
+<table>
+<tr><td>192.168.1.1</td><td class="mut">aa:bb:cc:00:00:01</td><td class="mut">gateway</td></tr>
+<tr><td>192.168.1.22</td><td class="mut">dd:ee:ff:11:22:33</td><td class="mut">3 h ago</td></tr>
+</table></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Rogue DHCP <span style="color:var(--okc)">✓</span></h2>
+<div class="mut">No rogue DHCP servers detected. Last scan 14 min ago.</div></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Canary <span style="color:var(--okc)">✓</span></h2>
+<div class="mut">Token not tripped. Alerts if a DNS canary name is resolved anywhere on the internet.</div></div>
+
+<!-- ═══════ PRIVACY ═══════ -->
+<div class="sec">Privacy</div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Tor</h2>
+<div class="mut">All traffic forced through Tor (TCP only; UDP, ICMP, IPv6 are blocked). No internet while Tor is not ready.</div>
+<div class="row" style="margin-top:6px">
+  <button>Add device</button>
+</div>
+<table style="margin-top:8px">
+<tr><td>iPhone-Laura</td><td style="color:var(--okc)">routed</td><td class="mut">since 1 h ago</td></tr>
+</table></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Onion door</h2>
+<div class="mut">Expose a local port as a Tor hidden service (.onion). Traffic stays inside the Tor network.</div></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">VPN (Mullvad)</h2>
+<div class="row">
+  <span style="color:var(--okc);font-weight:600">● Connected</span>
+  <span class="mut">se-mma-007 · 45.83.221.x</span>
+</div>
+<div class="row" style="margin-top:6px">
+  <button>Disconnect</button>
+  <button>Change server</button>
+</div></div>
+
+<!-- ═══════ DNS ═══════ -->
+<div class="sec">DNS</div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Block lists</h2>
+<div class="mut" style="margin-bottom:4px">Tick to use. <b>Strict</b> (per device) applies all downloaded lists.</div>
+<table>
+<tr><td><input type="checkbox" checked></td><td>OISD Big</td><td class="mut">98,421 rules</td></tr>
+<tr><td><input type="checkbox" checked></td><td>Hagezi Pro</td><td class="mut">31,204 rules</td></tr>
+<tr><td><input type="checkbox"></td><td>Steven Black</td><td class="mut">12,806 rules</td></tr>
+</table>
+<div class="mut" style="margin-top:6px">Updated 6 h ago · 142,831 active rules</div></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Always allow</h2>
+<div class="row"><input placeholder="example.com (covers subdomains)"><button>Add</button></div>
+<table style="margin-top:8px">
+<tr><td>apple.com</td><td><button style="font-size:12px;padding:2px 8px;min-height:0">remove</button></td></tr>
+</table></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Your block rules</h2>
+<div class="row"><input placeholder="ads.example.com   *.example.com   *track*"><button>Block</button></div>
+<table style="margin-top:8px">
+<tr><td>*track*</td><td class="mut">always</td><td class="mut">everyone</td></tr>
+<tr><td>*.doubleclick.net</td><td class="mut">always</td><td class="mut">everyone</td></tr>
+</table></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Top blocked</h2>
+<table>
+<tr><td>graph.facebook.com</td><td class="mut">842</td></tr>
+<tr><td>ads.google.com</td><td class="mut">631</td></tr>
+<tr><td>analytics.tiktok.com</td><td class="mut">418</td></tr>
+<tr><td>pixel.facebook.com</td><td class="mut">305</td></tr>
+</table></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Top asked</h2>
+<table>
+<tr><td>dns.google</td><td class="mut">2,104</td></tr>
+<tr><td>cloudflare.com</td><td class="mut">1,847</td></tr>
+<tr><td>apple.com</td><td class="mut">1,203</td></tr>
+</table></div>
+
+<div class="card closed"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Recent</h2>
+<table>
+<tr><td class="mut">just now</td><td>dns.google</td><td style="color:var(--okc)">allowed</td></tr>
+</table></div>
+
+<!-- ═══════ DEVICES ═══════ -->
+<div class="sec">Devices</div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Devices</h2>
+<table>
+<tr><th>Name</th><th>IP</th><th>Status</th></tr>
+<tr><td>iPhone-Laura</td><td>192.168.1.22</td><td style="color:var(--okc)">online</td></tr>
+<tr><td>MacBook-Pro</td><td>192.168.1.15</td><td style="color:var(--okc)">online</td></tr>
+<tr><td>Chromecast</td><td>192.168.1.30</td><td class="mut">offline · 2 h ago</td></tr>
+<tr><td>Ring-Doorbell</td><td>192.168.1.41</td><td style="color:var(--okc)">online</td></tr>
+</table></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Wi-Fi</h2>
+<div class="row">
+  <span><b>Heimdall-5G</b></span><span class="mut">channel 36 · 80 MHz · 4 clients</span>
+</div></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Blocked devices</h2>
+<div class="mut">No devices blocked.</div></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Internet schedules</h2>
+<div class="mut">No schedules set.</div></div>
+
+<!-- ═══════ NETWORK ═══════ -->
+<div class="sec">Network</div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">DHCP reservations</h2>
+<table>
+<tr><td>MacBook-Pro</td><td>192.168.1.15</td><td class="mut">aa:bb:cc:dd:ee:ff</td></tr>
+</table></div>
+
+<div class="card closed"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">DHCP pool</h2>
+<div class="mut">192.168.1.10 – 192.168.1.250 · lease 24 h</div></div>
+
+<div class="card closed"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Blocked destinations</h2>
+<div class="mut">No outbound rules set.</div></div>
+
+<!-- ═══════ SYSTEM ═══════ -->
+<div class="sec">System</div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Diagnostics</h2>
+<div class="mut">Not run yet.</div>
+<div class="row" style="margin-top:6px"><button>Run report</button></div></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">System</h2>
+<table>
+<tr><td class="mut">Uptime</td><td>14 d 6 h</td></tr>
+<tr><td class="mut">CPU</td><td>8% · 42 °C</td></tr>
+<tr><td class="mut">Memory</td><td>218 / 512 MB</td></tr>
+<tr><td class="mut">Disk</td><td>1.2 / 7.4 GB</td></tr>
+</table>
+<div class="row" style="margin-top:8px"><button>Reboot</button><button>Shut down</button></div></div>
+
+<div class="card"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Cellular</h2>
+<table>
+<tr><td class="mut">Carrier</td><td>T-Mobile</td></tr>
+<tr><td class="mut">Signal</td><td>-74 dBm (good)</td></tr>
+<tr><td class="mut">Type</td><td>LTE Band 4</td></tr>
+<tr><td class="mut">Data used</td><td>12.4 GB / 50 GB</td></tr>
+</table></div>
+
+<div class="card closed"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Certificate</h2>
+<div class="mut">Valid · expires in 62 days</div></div>
+
+<div class="card closed"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">SSH access</h2>
+<div class="mut">Disabled.</div></div>
+
+<div class="card closed"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Scheduled actions</h2>
+<div class="mut">No actions scheduled.</div></div>
+
+<div class="card closed"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Backup</h2>
+<div class="mut">Last backup 2 d ago.</div></div>
+
+<div class="card closed"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Messages</h2>
+<div class="mut">No messages.</div></div>
+
+<div class="card closed"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Node</h2>
+<table>
+<tr><td class="mut">Hostname</td><td>heimdall</td></tr>
+<tr><td class="mut">Kernel</td><td>5.15.148</td></tr>
+</table></div>
+
+<div class="card closed"><h2 class="cc" onclick="this.parentElement.classList.toggle('closed')">Account</h2>
+<div class="row"><input type="password" placeholder="current password"><input type="password" placeholder="new password (10+)"><button>Change password</button></div></div>
+
+</main>
+<script>
+function ccAll(close){document.querySelectorAll('.card:not(.hero)').forEach(c=>{close?c.classList.add('closed'):c.classList.remove('closed')})}
+</script>
+</body></html>
