@@ -1,6 +1,6 @@
 # Keeping the box, and what it cannot do
 
-The last section of the Stone of Heimdall page looks after the hotspot itself. After it, the limits.
+A box that guards your traffic is also a box that can be locked, lost or misread. The last section of the Stone of Heimdall page is for keeping the Orbic RC400L hotspot itself in order. After it, the limits, which matter more than the features.
 
 ## System
 
@@ -28,11 +28,11 @@ The last section of the Stone of Heimdall page looks after the hotspot itself. A
 
 The code was written by Claude, an AI model made by Anthropic, under the direction of the maintainer, who set the goals and the decisions and tested the result on their own hardware. The maintainer did not write the code and has not audited it line by line. It has a large automated test suite and one unit's worth of use. Read it before you trust it with anything that matters.
 
-## Before you install
+## Before you trust it
 
 It has run on one unit of one model on one carrier. Behaviour elsewhere is unknown.
 
-The first-install tool is experimental. It has not yet been run end to end from a factory-fresh unit; its pieces were tested separately. It installs over USB, journals every change and rolls back on failure. Read the install guide and expect to read code.
+The first-install tool is experimental. It has not yet been run end to end from a factory-fresh unit; its pieces were tested separately. It is a source release. Expect to read code.
 
 Rooting the hotspot may void its warranty or breach the carrier's terms. Reading some flash partitions can freeze the device until a power cycle.
 

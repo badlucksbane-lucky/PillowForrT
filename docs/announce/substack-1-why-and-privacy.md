@@ -1,16 +1,24 @@
 # A watchman for your hotspot
 
-A cellular hotspot is a router you never configured. It hands out addresses, answers every DNS question your devices ask, and forwards the rest to the carrier. The carrier's resolver sees every name you look up, in plain text. Ad and tracker networks are reached by name and nothing refuses them. Apps and gadgets phone home on any port, to any address, and you only find out if you go looking.
+Every device you own asks a question before it does anything on the internet: where is this name? The phone asks it constantly. The television asks it while it is off. The bulb asks it at three in the morning. The question goes to whatever box is giving you Wi-Fi, and that box passes it on, in plain text, to the company that sells you the connection. Nobody shows you the questions. Nobody asks whether you wanted them asked.
 
-Put a device behind a VPN and a fourth problem appears. The tunnel carries IPv4. The device still holds its real carrier IPv6 address, and its browser will hand that address to any page that asks through WebRTC.
+Stone of Heimdall is firmware for one small cellular hotspot, the Orbic RC400L. The first thing it does is show you the questions.
 
-Stone of Heimdall is firmware for the Orbic RC400L that fixes these at the router, where every device's traffic passes anyway.
+A fresh install changes nothing. It listens. It writes down every name each device asked for and every address each device tried to reach, and it shows you the list, by device. Most of the list is what you expected. Some of it is not: a name you have never heard of, asked a thousand times by a device you thought was idle. Then you decide. You tick what you recognise, and only then does the box start refusing the rest. It watches before it guards.
 
-All DNS leaves encrypted, over DNS-over-HTTPS, inside the VPN, or through Tor. Plain DNS and DNS-over-TLS are refused on the cellular side. A filter blocks names from published lists and your own rules, per device if you like. Outbound connections are denied by default: a fresh install passes web, QUIC, clock sync, ssh, email and push notifications, and nothing else until you tick it. Each device gets its own exit: direct, Mullvad WireGuard with a kill switch, or Tor. LAN IPv6 is off, so a device has no carrier address to leak. The carrier's firmware-update and device-management engines are kept suspended.
+What it refuses, once you tell it to:
 
-It watches before it guards. Default-deny would be unusable on day one, because you do not yet know what your devices need. So a fresh install only records what each device tried to reach and shows it as a "would be refused" list. You tick what you recognise. Then you switch enforcement on.
+The carrier's view of your names. Every lookup leaves encrypted, or inside a VPN, or through Tor. The plain kind is refused on the cellular side, so no device can quietly go around the filter.
 
-It is not anonymity. The carrier knows where the hotspot is and sees connection metadata. The VPN provider sees what the carrier otherwise would. It cannot see inside encrypted traffic and does not try. It has run on one unit, of one model, on one carrier.
+The names on the lists. Ad networks, trackers, malware domains, from published lists you tick and rules you write yourself, for everyone or for one device.
+
+Everything else. A device may open a connection to the web, to a clock server, to a mail server, to the push service that wakes its apps. It may not open a connection to anything else until you say so. Calls, game consoles, torrents, remote desktop and the rest are off until ticked.
+
+There is one more leak, and it only shows up after you fix the others. Route a device through a VPN and the tunnel carries one kind of address, IPv4. The device still holds its other address, the real one from the carrier, in IPv6, and any web page can ask the browser for it and get it. The only cure at the router is for the device not to have one. So the LAN gives out no IPv6 unless you turn it on.
+
+Each device gets its own exit: direct, a Mullvad WireGuard tunnel with a kill switch, or Tor. The carrier's own update and remote-management engines are kept asleep.
+
+It is not anonymity. The carrier knows where the hotspot is and sees that you connected, when, and how much. A VPN provider sees what the carrier otherwise would. It cannot see inside encrypted traffic and does not try. It has run on one unit, of one model, on one carrier.
 
 ## The page
 

@@ -1,6 +1,6 @@
 # What the watchman sees
 
-Half of the Stone of Heimdall page is for seeing. The box reports what is on the wire. You decide what to do about it.
+A home network is a room where everything talks and nothing listens. Stone of Heimdall is firmware for the Orbic RC400L hotspot, and half of its page does nothing but listen: to the wire, to the radio, to the link out. It reports. You decide.
 
 ## Monitoring
 
