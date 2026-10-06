@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stone of Heimdall</title>
+<meta name="description" content="Privacy firmware for the Orbic RC400L hotspot: encrypted DNS, a filter, default-deny outbound, per-device VPN or Tor exits. It watches before it guards.">
+<meta property="og:title" content="Stone of Heimdall">
+<meta property="og:description" content="A watchman for your hotspot. Privacy firmware for the Orbic RC400L.">
+<meta property="og:image" content="social-preview.png">
+<link rel="icon" href="favicon.ico">
+<style>
+:root{--s1:#2a78d6;--s2:#eb6834;--ax:#cdb98e;--bg:#f1e4c8;--fg:#3f2a18;--card:#f8f0dc;--mut:#7a5638;--ac:#7b502d;--onac:#fff;--okc:#2e6b3f;--bad:#a3322a;--ln:#d9c7a0}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--s1:#3987e5;--s2:#d95926;--ax:#40301d;--bg:#1b130c;--fg:#ecd9b0;--card:#26190f;--mut:#b98b55;--ac:#d3a96e;--onac:#1b130c;--okc:#7fc08a;--bad:#e8776a;--ln:#3a2a1a}}
+:root[data-theme="dark"]{--s1:#3987e5;--s2:#d95926;--ax:#40301d;--bg:#1b130c;--fg:#ecd9b0;--card:#26190f;--mut:#b98b55;--ac:#d3a96e;--onac:#1b130c;--okc:#7fc08a;--bad:#e8776a;--ln:#3a2a1a}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.55 Georgia,"Iowan Old Style","Palatino Linotype",serif;-webkit-font-smoothing:antialiased}
+a{color:var(--ac)}
+.wrap{max-width:860px;margin:0 auto;padding:0 16px}
+header{padding:40px 0 16px;text-align:center}
+header img{width:min(560px,100%);height:auto}
+.logo-dark{display:none}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .logo-light{display:none}:root:not([data-theme="light"]) .logo-dark{display:inline}}
+:root[data-theme="dark"] .logo-light{display:none}:root[data-theme="dark"] .logo-dark{display:inline}
+.lede{font-size:21px;max-width:640px;margin:18px auto 0}
+.cta{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:22px 0 8px}
+.cta a{display:inline-block;padding:9px 16px;border:1.5px solid var(--ac);border-radius:6px;text-decoration:none;font-size:15px}
+.cta a.primary{background:var(--ac);color:var(--onac)}
+h2{font-size:22px;margin:44px 0 12px;border-bottom:1px solid var(--ln);padding-bottom:6px;font-weight:normal;letter-spacing:.02em}
+h3{font-size:17px;margin:22px 0 4px}
+p{margin:0 0 14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:14px 0}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:8px;padding:14px 16px}
+.card b{display:block;margin-bottom:4px}
+.card p{margin:0;font-size:15.5px;color:var(--fg)}
+.mut{color:var(--mut)}
+ul{padding-left:22px;margin:8px 0 14px}
+li{margin:4px 0}
+figure{margin:24px 0;text-align:center}
+figure img{max-width:420px;width:100%;border:1px solid var(--ln);border-radius:8px}
+figcaption{font-size:14px;color:var(--mut);margin-top:8px}
+.warn{background:var(--card);border-left:4px solid var(--s2);padding:12px 16px;border-radius:0 8px 8px 0;margin:16px 0}
+code{font:14px/1.4 ui-monospace,Menlo,Consolas,monospace;background:var(--card);border:1px solid var(--ln);border-radius:4px;padding:1px 5px}
+footer{margin:56px 0 40px;font-size:14px;color:var(--mut);border-top:1px solid var(--ln);padding-top:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <img class="logo-light" src="logo-parchment.svg" alt="Stone of Heimdall: a watchman for your hotspot">
+  <img class="logo-dark" src="logo-dark.svg" alt="Stone of Heimdall: a watchman for your hotspot">
+  <p class="lede">Privacy firmware for the Orbic RC400L cellular hotspot. It replaces the stock admin page and decides, with you, what your devices get to do.</p>
+  <div class="cta">
+    <a class="primary" href="https://github.com/badlucksbane-lucky/stone-of-heimdall">Source on GitHub</a>
+    <a href="https://github.com/badlucksbane-lucky/stone-of-heimdall/blob/main/docs/INSTALL.md">Install guide</a>
+    <a href="https://github.com/badlucksbane-lucky/stone-of-heimdall/blob/main/docs/THREAT-MODEL.md">Threat model</a>
+  </div>
+</header>
+
+<h2>Why bother</h2>
+<p>A hotspot is a router you never got to configure. Out of the box it sends every DNS query to the carrier in the clear, resolves tracker domains like anything else, and forwards whatever connection any device feels like opening. There's no filter, no log and no switch. This is the filter, the log and the switch, running on the hotspot itself, so every device is covered without touching any of them.</p>
+
+<h2>What it does</h2>
+<div class="grid">
+  <div class="card"><b>Encrypted DNS, no exceptions</b><p>Every lookup leaves as DoH, or inside the VPN, or over Tor. Plain port 53 and DoT are refused on the cellular side, so no device can route around it.</p></div>
+  <div class="card"><b>A DNS filter you can question</b><p>Published block lists, your own wildcard rules, per-device profiles, and a "Why?" box that tells you exactly which list or rule blocked a name.</p></div>
+  <div class="card"><b>Default-deny outbound</b><p>Devices get only the services you tick. Web, QUIC, NTP, ssh, email and push start on. Calls, consoles, torrents, remote desktop and the rest start off.</p></div>
+  <div class="card"><b>Per-device exits</b><p>Direct, Mullvad WireGuard with a kill switch, or Tor, chosen by device. A dead tunnel blocks instead of leaking.</p></div>
+  <div class="card"><b>No IPv6 to leak</b><p>LAN IPv6 is off by default, because WebRTC will hand a device's real carrier address to any page that asks, tunnel or no tunnel.</p></div>
+  <div class="card"><b>Carrier daemons asleep</b><p>The firmware-update and remote-management engines stay suspended.</p></div>
+</div>
+
+<h2>It watches before it guards</h2>
+<p>Default-deny on day one would break everything, because you don't know yet what your devices actually need. So a fresh install starts in monitor mode: it samples the connection table every ten seconds and tallies, per device, what <em>would</em> have been refused. You read the list, tick what you recognise, and only then switch to enforce. Nothing breaks that you didn't choose to break.</p>
+<figure>
+  <img src="screenshot-ui.jpg" alt="The Stone of Heimdall web page: collapsible cards for the DNS filter, Tor, events, ARP watch, devices, Wi-Fi and more">
+  <figcaption>One page over HTTPS, behind a login. Cards collapse. No telemetry.</figcaption>
+</figure>
+
+<h2>Things that turned out to be interesting</h2>
+<h3>.onion names for the whole house</h3>
+<p>A small client-only Tor runs on the box. Any device can open a v3 .onion with no setup: the DNS stub hands back an address from 198.18.0.0/16 and a firewall rule pushes that traffic through a bridge into Tor's SOCKS port. The odd range is deliberate. dnsmasq's rebind protection silently drops answers that point into private space, which was found the hard way: clients saw an empty reply and nothing in any log.</p>
+<h3>A canary address</h3>
+<p>192.168.1.253 is a decoy that no honest device has a reason to touch. The box answers for it, listens on a few tempting ports as a tarpit, and logs anything that pings it, ARPs for it or knocks on a port. Whatever shows up on that list was looking around.</p>
+<h3>ARP watch, with its limit stated</h3>
+<p>A passive socket sees every ARP frame on the bridge. A stranger claiming the router's address is an alert. An address changing hands inside ten minutes is flagged to look at, because poisoning looks like that, but so does a phone coming back with a fresh random MAC. Honest limit: ARP between two Wi-Fi clients is relayed inside the radio and never reaches the bridge, so the box only sees broadcasts and what's aimed at itself.</p>
+<h3>The deny list that didn't hold</h3>
+<p>The stock firmware's Wi-Fi block list looks like it works. It doesn't, on this driver: a dropped device walked straight back in. So blocked devices go in the firewall, where the block sticks.</p>
+<h3>A back door with three locks</h3>
+<p>An onion service lets you reach the page from anywhere with no open port. Without a listed client key the service isn't even discoverable. Then the normal login. Then read-only, unless you've turned remote write on. No SSH through it, ever.</p>
+
+<h2>Also on the page</h2>
+<ul>
+  <li>Events: new device, uplink down and back, encrypted DNS failing, box running hot, bursts of failed ssh logins, certificate renewed, data-plan threshold, restarts. Optional push to an ntfy topic, generic text only.</li>
+  <li>Weeks of latency and speed history on flash, in hourly buckets, so "was Tuesday evening bad?" has an answer.</li>
+  <li>Rogue DHCP detection. Any offer or ack that didn't come from the box is flagged.</li>
+  <li>A devices table joined from the radio, ARP, NDP, leases, reservations, schedules, DNS and VPN. Labels, notes, wake-on-LAN.</li>
+  <li>Wi-Fi settings for both bands, write-only password, every change backed up and verified.</li>
+  <li>Per-device internet schedules and pauses. LAN and this page stay reachable.</li>
+  <li>DHCP reservations and pool. Blocked destinations by IP or CIDR.</li>
+  <li>One-click diagnostics with a shareable report that names nothing.</li>
+  <li>Certificate renewal, key-only SSH with an audit trail, scheduled actions from a fixed list, settings snapshots restorable per section, a read-only SMS inbox.</li>
+</ul>
+
+<h2>Before you trust it</h2>
+<div class="warn">
+<p>Written by Claude, Anthropic's model, under the maintainer's direction. The maintainer set the goals, made the calls and tested it on their own hardware, but did not write the code and has not audited it line by line. There's a large test suite and one unit's worth of real use. Read it before you trust it with anything that matters.</p>
+<p style="margin:0">One unit, one model, one carrier. The first-install tool has not yet been run end to end from a factory-fresh box. Rooting the hotspot may void its warranty or breach your carrier's terms, and reading some flash partitions freezes the device until a power cycle.</p>
+</div>
+<p>It is not anonymity. The carrier still knows where the hotspot is and when it's online. Mullvad sees what the carrier otherwise would. It doesn't cover physical access, someone on your Wi-Fi guessing the password, a device with its own radio, or holes in the old stock firmware underneath. The <a href="https://github.com/badlucksbane-lucky/stone-of-heimdall/blob/main/docs/THREAT-MODEL.md">threat model</a> has all of this in a table, with a column for where each claim stops.</p>
+
+<footer>
+<p>MIT licensed. Third-party programs it installs (dnsmasq, dropbear, Tor) come from their own sources under their own licences. "Orbic" is the trademark of its owner and appears here only to say which hardware this runs on. This project is not affiliated with or endorsed by Orbic or any carrier.</p>
+<p><a href="https://github.com/badlucksbane-lucky/stone-of-heimdall">github.com/badlucksbane-lucky/stone-of-heimdall</a> · <a href="https://github.com/badlucksbane-lucky/stone-of-heimdall/blob/main/docs/SECURITY.md">report a vulnerability</a></p>
+</footer>
+</div>
+</body>
+</html>
