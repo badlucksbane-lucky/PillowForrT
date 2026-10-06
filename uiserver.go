@@ -137,6 +137,7 @@ func (u *webUI) page(w http.ResponseWriter, r *http.Request) {
 func (u *webUI) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/login", u.login)
+	mux.HandleFunc("/favicon.svg", serveFavicon)
 	mux.HandleFunc("/logout", u.logout)
 	mux.HandleFunc("/ui", u.page)
 	mux.HandleFunc("/api/", u.apiAuthed(handleAPI))

@@ -1,15 +1,16 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Orbic</title>
+<title>Stone of Heimdall</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
-:root{--s1:#2a78d6;--s2:#eb6834;--gl:#e1e0d9;--ax:#c3c2b7;--bg:#f5f5f2;--fg:#1d1d1b;--card:#fff;--mut:#666;--ac:#1d8348;--okc:#1d8348;--bad:#c33;--warn:#c80;--ln:#ddd}
-@media(prefers-color-scheme:dark){:root{--s1:#3987e5;--s2:#d95926;--gl:#2c2c2a;--ax:#383835;--bg:#161817;--fg:#e8e8e3;--card:#202321;--mut:#9a9e9b;--ac:#4c9;--okc:#4c9;--bad:#e66;--warn:#eb4;--ln:#333}button.on{color:#04231a}}
+:root{--s1:#2a78d6;--s2:#eb6834;--gl:#e6d8b8;--ax:#cdb98e;--bg:#f1e4c8;--fg:#3f2a18;--card:#f8f0dc;--mut:#7a5638;--ac:#7b502d;--onac:#fff;--okc:#2e6b3f;--bad:#a3322a;--warn:#c08a1e;--ln:#d9c7a0}
+@media(prefers-color-scheme:dark){:root{--s1:#3987e5;--s2:#d95926;--gl:#2e2214;--ax:#40301d;--bg:#1b130c;--fg:#ecd9b0;--card:#26190f;--mut:#b98b55;--ac:#d3a96e;--onac:#1b130c;--okc:#7fc08a;--bad:#e8776a;--warn:#e0b04a;--ln:#3a2a1a}}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,sans-serif}
 main{max-width:760px;margin:0 auto;padding:12px 16px 40px}
-h1{font-size:20px;margin:8px 0}h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 8px}
+h1{font-size:20px;margin:8px 0}.brand{display:flex;gap:12px;align-items:center;margin:6px 0 10px}.brand h1{margin:0}.brand .mark{width:44px;height:44px;flex:none}.tag{font-size:12px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 8px}
 .card{background:var(--card);border:1px solid var(--ln);border-radius:10px;padding:12px;margin:12px 0}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 button{font:inherit;padding:6px 12px;border:1px solid var(--ln);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer}
-button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+button.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 input{font:inherit;padding:6px 8px;border:1px solid var(--ln);border-radius:8px;background:var(--bg);color:var(--fg);min-width:0;flex:1}
 .banner{padding:10px 12px;border-radius:8px;background:var(--warn);color:#000;margin:12px 0;font-weight:600}
 .err{color:var(--bad)}.mut{color:var(--mut)}.blk{color:var(--bad)}
@@ -34,7 +35,7 @@ h2.cc:focus-visible{outline:2px solid var(--s1);outline-offset:3px;border-radius
 .row input{min-width:96px}input[type=checkbox]{flex:none;min-width:0;width:auto;padding:0}.row input[type=time]{min-width:112px}
 button{min-height:36px}
 </style></head><body><main>
-<h1>Orbic <span class="mut" id="ver"></span></h1>
+<div class="brand"><img class="mark" src="/favicon.svg" alt=""><div><h1>Stone of Heimdall <span class="mut" id="ver"></span></h1><div class="tag mut">a watchman for your hotspot</div></div></div>
 <div class="row" style="margin-bottom:6px"><span class="mut">Signed in as <b id="who"></b></span><form method="post" action="/logout" style="margin:0"><button>Sign out</button></form></div>
 <div id="banner"></div>
 <div class="tools"><button type="button" onclick="ccAll(true)">Collapse all</button><button type="button" onclick="ccAll(false)">Expand all</button></div>
