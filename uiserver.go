@@ -88,13 +88,13 @@ func (u *webUI) login(w http.ResponseWriter, r *http.Request) {
 		setSessionCookie(w, r, id, int(sessionLife.Seconds()))
 		http.Redirect(w, r, "/ui", http.StatusSeeOther)
 	default:
-		http.Error(w, "method not allowed", 405)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
 func (u *webUI) logout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", 405)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	u.auth.EndSession(r)

@@ -339,6 +339,11 @@ func TestTorViewBlockedAndStart(t *testing.T) {
 	os.WriteFile(filepath.Join(m.dataDir, "cached-microdescs.new"), []byte("big cache"), 0o600)
 	os.WriteFile(filepath.Join(m.dataDir, "cached-microdesc-consensus"), []byte("consensus"), 0o600)
 	os.WriteFile(m.bin, []byte("#!/bin/sh\nsleep 30\n"), 0o755)
+	if os.Geteuid() == 0 { // startTorProc drops to "nobody", which must be able to reach the test's private temp dir
+		for d := filepath.Dir(m.bin); d != os.TempDir() && d != "/"; d = filepath.Dir(d) {
+			os.Chmod(d, 0o755)
+		}
+	}
 	cmd, err := startTorProc(m)
 	if err != nil {
 		t.Fatal(err)
