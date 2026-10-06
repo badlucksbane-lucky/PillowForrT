@@ -4,48 +4,46 @@ Stone of Heimdall, firmware for the Orbic RC400L hotspot. The System section, th
 
 ## System
 
-**Diagnostics.** One click runs every check the software can make and says, in plain words, what is fine, what deserves a look, what is broken. The checks run on the box, network probes included. The text report is written to be shared: no device names, MACs, messages, keys, passwords or full IPv6 addresses.
+**Diagnostics.** One click. Every check the software can make, run on the box, network probes included. Verdict per check: fine, look, broken. Text report built for sharing: no device names, MACs, SMS, keys, passwords or full IPv6 addresses. The evaluation is a pure function of the gathered inputs; every threshold is unit-tested.
 
-**System.** What the box is and how it is doing, read straight from the kernel: uptime, temperature, memory, battery, storage. Deliberately absent: the IMEI, serial numbers and SIM identifiers, because the page never needs them. Factory reset is not offered. Reboot needs a typed confirmation.
+**System.** Product, firmware, kernel, uptime, load, RAM, flash partitions, temperatures, battery, services. Read from /proc, /sys and the filesystem. Not shown: IMEI, serial numbers, SIM identifiers. Factory reset not offered. Reboot confirmed twice: the page and a typed word.
 
-**Cellular.** Read-only: the APN and data settings the stock firmware keeps, and the kernel's view of the uplink, carrier-grade NAT and counters included. Nothing here writes. An APN change can cut the box off, so it is left to the carrier's own flow.
+**Cellular.** Read-only. APN and data settings from the stock firmware's XML. Uplink interface: addresses, CGNAT, counters. Nothing writes. An APN change can drop the data session; it stays with the carrier's flow.
 
-**Certificate.** The page's self-signed certificate, renewable while running. It renews itself under sixty days, or when it stops covering the names it must. A renewal makes a new key and a new fingerprint. The card shows the current one to check against what your browser pinned.
+**Certificate.** Self-signed, renewable while running. Auto-renews under 60 days or when it stops covering the names and addresses it must. New key, new fingerprint on every renewal. Fingerprint shown to check against the browser's.
 
-**SSH access.** The authorised keys of the key-only root login, the host key fingerprint, who may reach the port, and an audit trail of logins and failures. Adding takes a public key line only. Private keys are never generated or stored here. The last key cannot be removed from this page, because that would lock ssh out.
+**SSH access.** dropbear, key-only, ed25519. Authorised keys list, host key fingerprint, who may reach the port, audit trail from dropbear's RAM log. Public key lines only; no private key is generated or stored. Standard restrictions always written: no port, agent or X11 forwarding. The last key cannot be removed here.
 
-**Scheduled actions.** Things the box does by itself at a chosen time on chosen days, from a short fixed list, never an arbitrary command: save a snapshot, update the block lists, run the diagnostics, reboot. A missed run is skipped, not made up. A reboot needs the typed word to create, and is refused within ten minutes of boot so a bad schedule cannot become a reboot loop.
+**Scheduled actions.** Fixed list, never a command: save a snapshot, update block lists, run diagnostics, reboot. Chosen time, chosen days, schedule time zone. Missed run is skipped, not made up. Reboot needs the typed word `reboot` to create, edit or run, and is refused within 10 minutes of boot. Each run's result kept with the action and logged as an event.
 
-**Backup.** Settings snapshots: one file holding everything the page configures, kept on the box and downloadable, because a factory reset or a firmware update can wipe the flash. Restore is per section. The Wi-Fi settings can come back without touching the firewall.
+**Backup.** One JSON snapshot of everything the page configures. Kept on the box (0700 dir, 0600 files), downloadable. Restore per section: wifi, pool, reservations, blocklist, firewall, dns, and the rest.
 
-**Messages.** A read-only SMS inbox. The hotspot has a SIM and the carrier writes to it. The live database is never opened; a copy is read from RAM.
+**Messages.** Read-only SMS inbox from the firmware's SQLite. Live file never opened: copied to RAM, then queried.
 
-**Node.** Uptime, temperature, free memory, Wi-Fi clients, whether the uplink is up, data used this billing cycle against the plan, and the proxy's connection counts.
+**Node.** Uptime, temperature, free RAM, Wi-Fi clients, uplink up or down, plan used against cap, proxy connections active and total.
 
-**Account.** Change the password. One login. Sessions are cookies over HTTPS only. A wrong username costs the same time as a wrong password.
+**Account.** Username and password, bcrypt hash on disk. One login. Session cookie, per-session CSRF token, HTTPS only. A wrong username costs the same time as a wrong password.
 
 ## How it was made
 
-The code was written by Claude, an AI model made by Anthropic, under the direction of the maintainer, who set the goals and the decisions and tested the result on their own hardware. The maintainer did not write the code and has not audited it line by line. It has a large automated test suite and one unit's worth of use. Read it before you trust it with anything that matters.
+Written by Claude, an AI model made by Anthropic, under the direction of the maintainer, who set the goals and decisions and tested on their own hardware. The maintainer did not write the code and has not audited it line by line. Large automated test suite. One unit's worth of use. Read it before you trust it with anything that matters.
 
 ## Before you trust it
 
-It has run on one unit of one model on one carrier. Behaviour elsewhere is unknown.
+One unit, one model, one carrier. Behaviour elsewhere unknown.
 
-The first-install tool is experimental. It has not yet been run end to end from a factory-fresh unit; its pieces were tested separately. It is a source release. Expect to read code.
+First-install tool is experimental. Not yet run end to end from a factory-fresh unit. Pieces tested separately. Source release. Expect to read code.
 
-Rooting the hotspot may void its warranty or breach the carrier's terms. Reading some flash partitions can freeze the device until a power cycle.
+Rooting may void the warranty or breach the carrier's terms. Reading some flash partitions freezes the device until a power cycle.
 
-It is not anonymity. The carrier knows where the hotspot is and sees connection metadata. The VPN provider sees what the carrier otherwise would. Tor is slow and does not protect a device that logs into an account.
+Not anonymity. The carrier sees location, connection times, volume. Mullvad sees what the carrier otherwise would. Tor is slow and does not protect a device that logs into an account.
 
-It does not protect against someone with physical access, someone already on the Wi-Fi who guesses the password, a device that bypasses the router through a second radio or a USB tether, or a vulnerability in the old stock firmware underneath.
+Not covered: physical access, someone on the Wi-Fi guessing the password, a device bypassing the router (second radio, USB tether), a vulnerability in the stock firmware underneath. The stock firmware is old. This shrinks the exposed surface (stock admin off for the network, ssh key-only); it cannot make the base new.
 
-The threat model in the repository says all of this in a table, with a column for where each claim stops.
+The threat model in the repo has all of this in a table with a column for where each claim stops.
 
 ## Where it is
 
-Source, install guide, threat model and how to report a vulnerability:
-
 https://github.com/badlucksbane-lucky/stone-of-heimdall
 
-MIT licence. "Orbic" is the trademark of its owner and appears here only to say which hardware this runs on. Not affiliated with or endorsed by Orbic or any carrier. dnsmasq, dropbear and Tor are fetched from their own sources and keep their own licences.
+MIT. Install guide, threat model and vulnerability reporting in `docs/`. "Orbic" is the trademark of its owner, named only to say which hardware this runs on. Not affiliated with or endorsed by Orbic or any carrier. dnsmasq, dropbear and Tor fetched from their own sources, under their own licences.

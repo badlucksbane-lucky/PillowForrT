@@ -4,34 +4,34 @@ Stone of Heimdall, firmware for the Orbic RC400L hotspot. The cards that observe
 
 ## Monitoring
 
-**Events.** A detector looks at the box every twenty seconds and records what deserves attention: a device never seen before, the uplink dropping and coming back, encrypted DNS failing, a service dying, the box running hot, a burst of failed ssh logins, a radio dropping out, the certificate being renewed, the data plan crossing a threshold, a restart. The newest hundred are kept. Events above a chosen severity can be pushed to an ntfy topic you give it. That is the one outward-facing thing on the page, so it is off until you give a URL, and what is sent is a generic sentence, never a name, address or key.
+**Events.** A detector runs every 20 s. Records: new device, uplink down and back, DoH failing, a service dead, box hot, burst of failed ssh logins, radio dropped, certificate renewed, data plan threshold crossed, restart. Newest 100 kept. Optional push to an ntfy topic above a chosen severity. Off until you give a URL. The pushed text is a generic sentence: no name, MAC, address or key.
 
-**Latency history.** The live graphs keep a day in memory. This keeps weeks on flash, in hourly buckets: probes run, probes failed, average and worst connect time, and an outage log. "Was last Tuesday evening bad?" has an answer. A link that is lossy without being down raises its own event.
+**Latency history.** Live graphs hold a day in RAM. This holds weeks on flash in hourly buckets: probes run, probes failed, mean and worst connect time. Probe is a TCP connect to 1.1.1.1:443 every 30 s. Three failures in a row is an outage, logged from first failure to first success. Lossy but not down raises `uplink_flaky`.
 
-**Speed history.** Every few hours the box times a small download and upload over the cellular link and charts it. About five megabytes a day at the default. The point is the trend: is the evening slower, did the carrier throttle, did moving the antenna help.
+**Speed history.** Every 6 h by default: 1 MB down, 256 KB up, Cloudflare speed endpoints. About 5 MB a day. Kept on flash, charted. Same size every run, so the trend is the point, not the peak.
 
 ## Security
 
-**ARP watch.** ARP has no authentication. Any device can claim to be the gateway and pull everyone's traffic through itself. The box watches every ARP frame on the bridge, passively, and looks at who claims which address. A foreign MAC claiming the router's address is an alert. So is a MAC claiming an address reserved for a different device. An address that changes owner within ten minutes is marked to look at, since poisoning looks like that, but so does a device rejoining under a new random MAC. The box sees broadcasts and what is aimed at itself; ARP between two Wi-Fi clients is relayed inside the radio and never reaches it.
+**ARP watch.** Passive AF_PACKET socket on the bridge, kernel filter passes ARP only. Looks at who claims an address. `arp_gateway` (alert): a foreign MAC claims the router's address. `arp_conflict` (alert): a MAC claims an address reserved for another device. `arp_flip` (to look at): an address changes owner within 10 minutes. Poisoning looks like that; so does a device rejoining under a random MAC. One event per address per 10 minutes. Limit: unicast ARP between two Wi-Fi clients is relayed inside the radio and never reaches the bridge.
 
-**Rogue DHCP.** A second DHCP server on the network, from a plugged-in router, a phone sharing its connection, or something hostile, can hand out its own gateway and DNS and steer every device that listens. The box is the only legitimate server. It watches every DHCP reply on the wire and flags any that did not come from itself.
+**Rogue DHCP.** AF_PACKET socket, filter passes UDP from port 67 only. Every offer, ack and nak is checked. Honest only if it comes from the box's own address and the bridge's own MAC. Anything else is flagged.
 
-**Canary.** A decoy address no honest device has a reason to touch. The box answers for it, listens on tempting ports there (a slow tarpit, never a real service), and watches for any packet aimed at it, pings and dead ports included. Whatever touches the canary is looking around: a scanner, a worm, a compromised device, a curious guest. The card lists who, and when.
+**Canary.** 192.168.1.253, an alias on the LAN bridge. No honest device has a reason to touch it. TCP listeners on tempting ports (tarpit, never a service). Any packet or ARP who-has aimed at it is recorded: time, source, MAC, protocol, port, kind (syn, connect, udp, echo, who-has).
 
 ## Devices
 
-**Devices.** Every device the box knows, one row each, joined from the separate sources: the radio (band, time connected), the ARP and neighbour tables (IPv4 and IPv6 addresses), reservations and leases (names), the block list, schedules, DNS activity, the VPN exit. A wired or sleeping device still shows from its reservation or lease. A device can carry a label and a note, and be woken over the LAN.
+**Devices.** One row per device, joined from: radio (band, time connected), ARP and NDP (IPv4, global IPv6), reservations and leases (names), block list, pauses and schedules, DNS activity, VPN exit. Wired or asleep still shows from reservation or lease. Label and note per device. Wake-on-LAN.
 
-**Wi-Fi.** Network name, password, channel, client isolation and the 5 GHz band's own settings, taken over from the stock admin. The password is write-only: never returned, logged or shown. Every change is backed up first and checked against the configuration the firmware regenerates. Devices rejoin in about twenty seconds.
+**Wi-Fi.** SSID, password, hidden, channel, max clients, client isolation, country, bandwidth. 5 GHz band has its own SSID, hidden, channel, enabled. Password is write-only: never returned, logged or shown. Each change: backup, edit the firmware's XML, restart `wland`, verify the regenerated hostapd config, roll back on mismatch. Devices rejoin in about 20 s.
 
-**Blocked devices.** Devices, by MAC, cut off from the network. The stock firmware's own deny list does not hold on this driver: a dropped device walked straight back in. So the block is enforced where it does hold, in the firewall.
+**Blocked devices.** By MAC. The stock deny list does not hold on this driver (a dropped device walked straight back in). Enforced in the firewall instead.
 
-**Internet schedules.** A device's internet is cut during a weekly window, or paused until a time. Its LAN access, DHCP and this page stay.
+**Internet schedules.** Weekly windows and pause-until-time, per device. Cuts internet. LAN, DHCP and this page stay.
 
 ## Network
 
-**DHCP reservations.** Fixed addresses and names for chosen devices.
+**DHCP reservations.** MAC to fixed IP and name. One line per device in dnsmasq's hostsfile. SIGHUP to reload. Validated, backed up, written atomically.
 
-**DHCP pool.** First address, last address, lease time. A change edits the firmware's own configuration file, so a reboot keeps it, and relaunches the DHCP server now.
+**DHCP pool.** First, last, lease time. Edits the firmware's own XML so a reboot keeps it, relaunches dnsmasq now with the new range.
 
-**Blocked destinations.** An address or range no device may reach, the box itself included, so proxied traffic is covered too. The blunt instrument for a tracker reached by hard-coded address, which no DNS rule can catch.
+**Blocked destinations.** IP or CIDR no device may reach. Applies to the box too, so proxied traffic is covered. For trackers reached by hard-coded address, which DNS rules cannot catch.
