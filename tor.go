@@ -586,6 +586,9 @@ func (m *torMgr) DNS(client string, dq dnsQuery, q []byte) (resp []byte, handled
 	house := m.cfg.Onion
 	m.mu.Unlock()
 	if onion && !house && !dev {
+		if torBypassMgr != nil {
+			torBypassMgr.ObserveOnionAttempt(m.macOfIP()[client], client, dq.Name, m.now())
+		}
 		return buildRcode(q, dq, 3), true // house-wide .onion is off: NXDOMAIN, and never upstream
 	}
 	if onion {

@@ -141,6 +141,9 @@ func (w *arpWatch) observe(c arpClaim) {
 	defer w.mu.Unlock()
 	now := w.now()
 	w.claims++
+	if macChurnMgr != nil { // macchurn.go: a wider, two-directional view of the same claims
+		macChurnMgr.Observe(c, now)
+	}
 	prev := w.bind[c.IP]
 	w.bind[c.IP] = &arpBinding{MAC: c.MAC, Last: now}
 	if len(w.bind) > 2048 { // a flood of invented addresses must not grow memory: drop the stale ones

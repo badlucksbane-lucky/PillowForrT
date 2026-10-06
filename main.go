@@ -70,6 +70,7 @@ var (
 	torFile        = flag.String("tor-file", "/data/proxy/tor.json", "Tor settings (daemon on/off, house-wide .onion, the devices sent through Tor)")
 	torBin         = flag.String("tor-bin", "/data/proxy/tor", "the Tor client binary (recipe orbic-tor)")
 	rogueFile      = flag.String("rogue-file", "/data/proxy/rogue.json", "DHCP servers the owner allowed (their MAC addresses)")
+	torExitFile    = flag.String("tor-exit-file", "/data/proxy/tor-exits.txt", "known Tor relay/bridge addresses, one IP or CIDR per line; empty or missing turns tor_bypass_exit off")
 	rogueWatchOn   = flag.Bool("rogue-dhcp", true, "watch the bridge for DHCP replies from any server other than this Orbic")
 	linkFile       = flag.String("link-file", "/data/proxy/linkhist.json", "uplink latency and loss history (hourly, about 35 days)")
 	speedFile      = flag.String("speed-file", "/data/proxy/speed.json", "uplink speed test settings and history")
@@ -406,6 +407,11 @@ func main() {
 		arpMgr = newARPWatch()
 		arpMgr.Start()
 	}
+	if dnsProxy != nil {
+		dnsCanaryMgr = newDNSCanaryWatch()
+	}
+	macChurnMgr = newMACChurnWatch()
+	torBypassMgr = newTorBypassWatch(*torExitFile)
 	if *rogueWatchOn {
 		rogueMgr = newRogueWatch()
 		rogueMgr.Start()

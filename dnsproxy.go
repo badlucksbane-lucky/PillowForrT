@@ -497,6 +497,9 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 			return resp
 		}
 	}
+	if dnsCanaryMgr != nil && dq.Class == qclassI { // a decoy name or a tunneling-shaped run of lookups is worth flagging whatever the query resolves to
+		dnsCanaryMgr.Observe(client, dq.Name, false, t0)
+	}
 	key := cacheKey(dq)
 	viaVPN := p.VPN.UseVPNDNS(client)
 	if viaVPN {
@@ -529,6 +532,9 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	}
 	setID(resp, dq.ID)
 	p.Cache.put(key, resp, time.Now())
+	if dnsCanaryMgr != nil && via == "plain" && dq.Class == qclassI {
+		dnsCanaryMgr.Observe(client, dq.Name, true, t0)
+	}
 	if via == "doh" {
 		p.Stats.DoH.Add(1)
 	} else if via == "vpn" {
