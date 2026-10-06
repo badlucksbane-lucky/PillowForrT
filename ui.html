@@ -64,6 +64,7 @@ button{min-height:36px}
 <div class="card"><h2>Beacon patterns <span id="bcbadge"></span></h2><div id="bc" class="mut">loading</div><div id="bcmsg" class="msg"></div></div>
 <div class="card"><h2>Tor / proxy bypass <span id="tbbadge"></span></h2><div id="tb2" class="mut">loading</div></div>
 <div class="card"><h2>Bare-IP TLS <span id="tsbadge"></span></h2><div id="ts" class="mut">loading</div></div>
+<div class="card"><h2>DHCP fingerprint drift <span id="dfbadge"></span></h2><div id="df" class="mut">loading</div></div>
 <div class="sec">Privacy</div>
 <div class="card"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
 <div class="card"><h2>Onion door <span id="odbadge"></span></h2><div id="od" class="mut">loading</div><div id="odmsg" class="msg"></div></div>
@@ -422,6 +423,14 @@ function tsrender(force){const el=$('ts');if(!Ts||guard(el,force))return;
  const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.dst)+'</td><td class="mut">'+(x.name?'sent the address itself as the TLS server name':'no server name (SNI) at all')+'</td></tr>').join('');
  el.innerHTML='<div class="mut" style="margin:6px 0">Almost every browser and app sends the hostname it wants in the clear, in the TLS ClientHello, even though everything after it is encrypted. A connection with no server name, or one whose server name is literally the destination address, is unusual (a few IoT devices and hand-configured tools do this on purpose). Needs no decryption; TLS 1.3 still hides the certificate itself, so this cannot also check for a self-signed cert.'+(Ts.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
 async function tsload(){try{Ts=await (await api('/api/tlssni')).json();tsrender()}catch(e){}}
+let Df=null;
+function dfrender(force){const el=$('df');if(!Df||guard(el,force))return;
+ const f=Df.findings||[];
+ $('dfbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.mac)+'</b></td><td class="mut">was '+esc(x.was)+'<br>now '+esc(x.now)+'</td></tr>').join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">A device\'s DHCP client advertises, in the clear, a fingerprint shaped by its OS and network stack. One that holds steady and then suddenly changes is usually new firmware, but can mean a different device is now answering for that address.'+(Df.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+async function dfload(){try{Df=await (await api('/api/dhcpfp')).json();dfrender()}catch(e){}}
 let Ac=null;
 function acrender(force){const el=$('ac');if(!Ac||guard(el,force))return;
  const dn=d=>d.length===7?'every day':d.length===5&&!d.includes(0)&&!d.includes(6)?'weekdays':d.map(x=>DAYS[x]).join(' ');
@@ -716,7 +725,7 @@ async function psave(){const hrs=parseFloat($('p_l').value);if(!(hrs>0)){$('pmsg
  if(!confirm('Restart DHCP and DNS (a few seconds) to use '+$('p_a').value+' to '+$('p_b').value+', leases '+hrs+' h? A backup of the stock config is saved first, and the old pool comes back if dnsmasq does not.'))return;
  const r=await apost('dhcp/pool/set',{start:$('p_a').value.trim(),end:$('p_b').value.trim(),lease_secs:Math.round(hrs*3600)});$('pmsg').textContent=r.j.error||r.j.status||'';setTimeout(()=>{Pl=null;pload();dload()},5000)}
 let tickN=0;
-async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
+async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Df)dfload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
 
 (function(){
  let st={};try{st=JSON.parse(localStorage.getItem('cc')||'{}')}catch(e){}

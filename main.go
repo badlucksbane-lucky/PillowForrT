@@ -72,6 +72,7 @@ var (
 	rogueFile      = flag.String("rogue-file", "/data/proxy/rogue.json", "DHCP servers the owner allowed (their MAC addresses)")
 	torExitFile    = flag.String("tor-exit-file", "/data/proxy/tor-exits.txt", "known Tor relay/bridge addresses, one IP or CIDR per line; empty or missing turns tor_bypass_exit off")
 	tlsSNIWatchOn  = flag.Bool("tls-sni-watch", true, "watch the bridge for TLS connections with no SNI or an IP-literal SNI (bare-IP TLS)")
+	dhcpFPWatchOn  = flag.Bool("dhcp-fp-watch", true, "watch the bridge for DHCP fingerprint drift (option 55 shape changing on a MAC that had settled)")
 	rogueWatchOn   = flag.Bool("rogue-dhcp", true, "watch the bridge for DHCP replies from any server other than this Orbic")
 	linkFile       = flag.String("link-file", "/data/proxy/linkhist.json", "uplink latency and loss history (hourly, about 35 days)")
 	speedFile      = flag.String("speed-file", "/data/proxy/speed.json", "uplink speed test settings and history")
@@ -418,6 +419,10 @@ func main() {
 	if *tlsSNIWatchOn {
 		tlsSNIMgr = newTLSSNIWatch()
 		tlsSNIMgr.Start()
+	}
+	if *dhcpFPWatchOn {
+		dhcpFPMgr = newDHCPFPWatch()
+		dhcpFPMgr.Start()
 	}
 	if *rogueWatchOn {
 		rogueMgr = newRogueWatch()

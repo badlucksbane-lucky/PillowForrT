@@ -585,6 +585,12 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 			return
 		}
 		writeJSON(w, 200, tlsSNIMgr.View())
+	case path == "dhcpfp" && r.Method == http.MethodGet:
+		if dhcpFPMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, dhcpFPMgr.View())
 	case path == "actions" && r.Method == http.MethodGet:
 		writeJSON(w, 200, actions.View())
 	case (path == "actions/set" || path == "actions/delete" || path == "actions/run") && r.Method == http.MethodPost:
