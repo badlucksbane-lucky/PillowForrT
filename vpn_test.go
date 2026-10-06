@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -18,12 +19,11 @@ const testAccount = "1234567890123456"
 // fakeMullvad is a stand-in for api.mullvad.net.
 type fakeMullvad struct {
 	*httptest.Server
-	devices   map[string]string // id -> pubkey
-	failCode  string            // make /accounts/v1/devices fail with this code
-	legacy    bool              // 404 the device endpoint, answer /wg/ instead
-	deleted   []string
-	sawAcct   bool
-	lastToken string
+	devices  map[string]string // id -> pubkey
+	failCode string            // make /accounts/v1/devices fail with this code
+	legacy   bool              // 404 the device endpoint, answer /wg/ instead
+	deleted  []string
+	sawAcct  bool
 }
 
 func newFakeMullvad(t *testing.T) *fakeMullvad {
@@ -360,7 +360,7 @@ func TestKillSwitchBlocksProxyAndDNS(t *testing.T) {
 	v, _ := testVPN(t, f)
 	v.Register(testAccount)
 	v.SetDefaultExit("mullvad") // tunnel is not up in a test
-	if _, err := v.DialFor(nil, "192.168.1.40", "tcp", "example.com:443"); err != errKillSwitch {
+	if _, err := v.DialFor(context.Background(), "192.168.1.40", "tcp", "example.com:443"); err != errKillSwitch {
 		t.Errorf("dial with the tunnel down: %v", err)
 	}
 	if _, err := v.TransportFor("192.168.1.40"); err != errKillSwitch {

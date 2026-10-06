@@ -169,7 +169,6 @@ type torMgr struct {
 	dataDir   string
 	torrc     string
 	logPath   string
-	stateBak  string // the guard state, kept on flash
 	cfg       torConfig
 	cmd       *exec.Cmd
 	startedAt time.Time

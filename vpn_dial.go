@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"sync"
 	"syscall"
 	"time"
 )
@@ -87,8 +86,6 @@ func (v *VPN) UseVPNDNS(client string) bool {
 	v.mu.Unlock()
 	return on && v.ExitFor(client) == "mullvad"
 }
-
-var vpnDNSOnce sync.Once
 
 // ResolveDNS asks Mullvad's resolver (10.64.0.1, reachable only inside the tunnel). With the tunnel down it fails rather than leaking the lookup (unless the kill switch is off).
 func (v *VPN) ResolveDNS(q []byte) ([]byte, error) {

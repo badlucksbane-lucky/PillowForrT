@@ -203,7 +203,7 @@ func TestPerDeviceMode(t *testing.T) {
 		{"192.168.1.20", "wild.example.com", false}, // stevenblack only: the OISD name passes
 		{"192.168.1.20", "exact.example.org", true}, // and its own list still blocks
 		{"192.168.1.99", "wild.example.com", true},  // everyone else: the default (both)
-		{"", "wild.example.com", true},               // no attribution: the default
+		{"", "wild.example.com", true},              // no attribution: the default
 	} {
 		if got, _ := f.MatchFor(c.client, c.name, now); got != c.want {
 			t.Errorf("%s %s: blocked=%v want %v", c.client, c.name, got, c.want)

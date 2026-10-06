@@ -404,7 +404,6 @@ func (v *VPN) Register(account string) error {
 			return v.fail(err)
 		}
 	}
-	account = "" // not kept
 	v.mu.Lock()
 	v.cfg.Registered, v.cfg.DeviceID, v.cfg.DeviceName = true, d.ID, d.Name
 	v.cfg.PrivKey, v.cfg.PubKey, v.cfg.IPv4, v.cfg.IPv6 = b64(priv[:]), b64(pub[:]), d.IPv4, d.IPv6

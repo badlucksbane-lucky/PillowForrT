@@ -124,9 +124,9 @@ func TestIPv6TiedToDevice(t *testing.T) {
 	for in, want := range map[string]string{
 		"fe80::c443:b2ff:fe14:e0b4": "192.168.1.20", // link-local, MAC from the neighbour table
 		"2600:1::5":                 "192.168.1.20", // a global address of the same device
-		"fe80::dead":                "fe80::dead",    // MAC known, no IPv4 for it: unchanged
-		"fe80::beef":                "fe80::beef",    // unknown: unchanged
-		"192.168.1.5":              "192.168.1.5",  // IPv4 is never touched
+		"fe80::dead":                "fe80::dead",   // MAC known, no IPv4 for it: unchanged
+		"fe80::beef":                "fe80::beef",   // unknown: unchanged
+		"192.168.1.5":               "192.168.1.5",  // IPv4 is never touched
 		"not-an-ip":                 "not-an-ip",
 	} {
 		if got := n.canonical(in); got != want {

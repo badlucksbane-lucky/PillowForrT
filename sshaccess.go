@@ -95,12 +95,11 @@ type sshEvent struct {
 }
 
 var (
-	logLineRe  = regexp.MustCompile(`^\[(\d+)\] (\w{3} \d{2} \d{2}:\d{2}:\d{2}) (.*)$`)
-	logAuthRe  = regexp.MustCompile(`^Pubkey auth succeeded for '([^']*)' with ssh-ed25519 key (SHA256:\S+) from (\S+)`)
-	logExitRe  = regexp.MustCompile(`^Exit \(([^)]*)\) from <([^>]+)>: (.*)$`)
-	logChildRe = regexp.MustCompile(`^Child connection from (\S+)`)
-	logFailRe  = regexp.MustCompile(`(?i)^(Exit before auth|Bad password|Login attempt for nonexistent user|Pubkey auth failed|Bad pubkey|Max auth tries|Failed|Login (attempt|failed))`)
-	logAnyIP   = regexp.MustCompile(`from <?(\d{1,3}(?:\.\d{1,3}){3})`)
+	logLineRe = regexp.MustCompile(`^\[(\d+)\] (\w{3} \d{2} \d{2}:\d{2}:\d{2}) (.*)$`)
+	logAuthRe = regexp.MustCompile(`^Pubkey auth succeeded for '([^']*)' with ssh-ed25519 key (SHA256:\S+) from (\S+)`)
+	logExitRe = regexp.MustCompile(`^Exit \(([^)]*)\) from <([^>]+)>: (.*)$`)
+	logFailRe = regexp.MustCompile(`(?i)^(Exit before auth|Bad password|Login attempt for nonexistent user|Pubkey auth failed|Bad pubkey|Max auth tries|Failed|Login (attempt|failed))`)
+	logAnyIP  = regexp.MustCompile(`from <?(\d{1,3}(?:\.\d{1,3}){3})`)
 )
 
 func sshHost(hp string) string {

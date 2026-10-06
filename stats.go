@@ -121,7 +121,6 @@ type usageState struct {
 var (
 	usageMu sync.Mutex
 	usage   usageState
-	dirty   bool
 )
 
 // cycleStart returns the start of the billing cycle containing now. Days above 28 are

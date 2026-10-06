@@ -68,14 +68,6 @@ func (p *porchRelay) release(src string) {
 	p.mu.Unlock()
 }
 
-func hostIP(a net.Addr) net.IP {
-	if t, ok := a.(*net.TCPAddr); ok {
-		return t.IP
-	}
-	h, _, _ := net.SplitHostPort(a.String())
-	return net.ParseIP(h)
-}
-
 func proxyLine(src, dst *net.TCPAddr) string {
 	fam := "TCP6"
 	if src.IP.To4() != nil && dst.IP.To4() != nil {

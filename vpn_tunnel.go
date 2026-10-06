@@ -25,12 +25,11 @@ import (
 )
 
 type tunnel struct {
-	mu     sync.Mutex
-	dev    *device.Device
-	up     bool
-	relay  vpnRelay
-	since  time.Time
-	failed time.Time
+	mu    sync.Mutex
+	dev   *device.Device
+	up    bool
+	relay vpnRelay
+	since time.Time
 }
 
 // run executes a helper (ip, iptables...) with a timeout and returns its combined output.
