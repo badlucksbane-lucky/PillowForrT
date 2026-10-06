@@ -24,10 +24,10 @@
 - It has been tested on **one unit** of one model on one carrier. Rooting the hotspot may void its warranty or breach the carrier's terms, and reading some flash partitions can freeze the device until a power cycle. You are responsible for your own hardware.
 
 ## First install
-There is no supported first-install path yet: getting from a stock, unrooted unit to a running one is not written or tested. Updating, signing in and configuring a unit that already runs it are in `docs/INSTALL.md`.
+**Experimental and untested from a factory-fresh unit.** `install/stone-install` installs over the USB cable with questions in the terminal, journals every change and rolls back on failure. Its pieces were tested separately, but the whole path has not yet been run from a stock unit. Read `docs/INSTALL.md` ("First install") before you try it. Updating, signing in and configuring a unit that already runs it are documented there too.
 
 ## How it was made
 Written by Claude, an AI model made by Anthropic, under the direction of the project's maintainer, who set the goals and decisions and tested it on their own hardware. The maintainer did not write or line-by-line audit the code. It has a large automated test suite and one real unit's worth of use. Read it before you trust it with anything that matters.
 
 ## Status
-Early, and a **source release** for now: the install guide in `docs/` covers everything except the first install, so expect to read the code. Licensed under the MIT license (see `LICENSE`); third-party programs it installs (dnsmasq, dropbear, Tor) are fetched from their own sources and keep their own licenses.
+Early, and a **source release** for now: the install guide is in `docs/`; the first-install tool is experimental and untested from a stock unit, so expect to read the code. Licensed under the MIT license (see `LICENSE`); third-party programs it installs (dnsmasq, dropbear, Tor) are fetched from their own sources and keep their own licenses.

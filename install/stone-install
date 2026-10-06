@@ -1,0 +1,417 @@
+#!/usr/bin/env python3
+"""stone-install -- install Stone of Heimdall on an Orbic RC400L over its USB cable.
+
+  stone-install install   [--payload DIR | --kit DIR] [--answers FILE] [--dry-run] [--yes]
+  stone-install check     read-only: stage the checker and report what the unit looks like (changes nothing)
+  stone-install rollback  undo the last install from the journal kept on the unit (works with no network), then the unit reboots
+  stone-install uninstall same as rollback
+
+Everything goes over the USB cable (adb to stage files into the unit's RAM disk, the AT channel to start one root script). The root script keeps a
+journal of every change, so a failed install undoes itself and `rollback` undoes a finished one. Passwords travel in files on the unit's RAM disk
+and are wiped afterwards; they are never on a command line or in a log.
+
+--payload DIR  a folder holding tinyfwd, dnsmasq, dropbearmulti, the guard scripts and http_proxy.init (and optionally tor)
+--kit DIR      a restore kit (payload/, identity/identity.tar, state/*.tar): reinstalls a unit exactly as it was
+--answers FILE answers as JSON instead of questions (see ANSWERS below); questions are asked for anything missing when run in a terminal
+
+ANSWERS (all optional): {"wifi": {"ssid": "...", "ssid5": "...", "password_file": "..."} or {"from_snapshot": "settings-snapshot.json"},
+  "login": {"user": "...", "password_file": "..."} or {"keep_identity": true}, "ssh_key": "path/to/key.pub", "token": true, "tor": false, "yes": true}
+"""
+import argparse, getpass, hashlib, html, importlib.util, json, os, re, secrets, shutil, subprocess, sys, tempfile, time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+STAGE = "/tmp/stone"
+AT = {"install": "AT+SYSCMD=sh /tmp/stone/boot.sh install", "check": "AT+SYSCMD=sh /tmp/stone/boot.sh check",
+      "rollback": "AT+SYSCMD=sh /data/stone/boot.sh rollback"}
+REQUIRED = ["tinyfwd", "dnsmasq", "dropbearmulti", "wpad-guard.sh", "dhcp-hook.sh", "dnsmasq-swap.sh", "wps-guard.sh", "http_proxy.init"]
+OPTIONAL = ["tor"]
+
+
+class Fatal(Exception):
+    pass
+
+
+# ---------------------------------------------------------------- validation (mirrors what the program itself enforces)
+def valid_ssid(s):
+    b = s.encode("utf-8")
+    if not 1 <= len(b) <= 32: return "the network name must be 1 to 32 bytes"
+    if any(ord(c) < 0x20 or ord(c) == 0x7F for c in s): return "the network name cannot contain control characters"
+
+def valid_wifi_pw(p):
+    if not 8 <= len(p) <= 63: return "a Wi-Fi password must be 8 to 63 characters"
+    if any(ord(c) < 0x20 or ord(c) > 0x7E for c in p): return "the Wi-Fi password may only use printable ASCII characters (a WPA2 rule)"
+
+def valid_user(u):
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", u): return "use 1 to 64 letters, digits, dot, underscore or dash"
+
+def valid_login_pw(p):
+    n = len(p.encode("utf-8"))
+    if n < 10: return "the password must be at least 10 characters"
+    if n > 72: return "the password can be at most 72 bytes"
+
+def valid_pubkey(line):
+    if not re.fullmatch(r"(ssh-ed25519|ecdsa-sha2-nistp\d+|ssh-rsa|sk-ssh-ed25519@openssh\.com) [A-Za-z0-9+/=]+( .*)?", line.strip()):
+        return "that does not look like a single SSH public key line"
+
+
+# ---------------------------------------------------------------- the device (the only thing that touches USB; tests replace it)
+class Device:
+    def __init__(self):
+        spec = importlib.util.spec_from_file_location("orbic_at", os.path.join(HERE, "orbic-at.py"))
+        self.oa = importlib.util.module_from_spec(spec); spec.loader.exec_module(self.oa)
+
+    def usb(self):
+        u = self.oa.Usb()
+        try:
+            return sorted({p for v, p, _ in u.devices() if v == self.oa.VENDOR})
+        finally:
+            u.release(); u.close()
+
+    def mode_switch(self):
+        u = self.oa.Usb()
+        try:
+            if self.oa.cmd_mode_switch(u) != 0: raise Fatal("the unit did not switch into command mode")
+        finally:
+            u.close()
+
+    def adb(self, *args, input_bytes=None, timeout=120):
+        r = subprocess.run(["adb", "-d", *args], capture_output=True, input=input_bytes, timeout=timeout)
+        return r.returncode, r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")
+
+    def at(self, line):
+        """Send one AT line. The root script it starts can outlive the reply, so a read timeout is not an error; a failed write is."""
+        u = self.oa.Usb()
+        try:
+            try:
+                h = self.oa.serial_handle(u)
+            except self.oa.AtError as e:
+                raise Fatal(str(e))
+            try:
+                self.oa.exchange(h, line)
+                return True, ""
+            except self.oa.AtError as e:
+                if "write failed" in str(e): raise Fatal(str(e))
+                return False, str(e)
+            finally:
+                h.close()
+        finally:
+            u.close()
+
+
+# ---------------------------------------------------------------- helpers
+def read_text(path):
+    with open(os.path.expanduser(path), encoding="utf-8") as f: return f.read()
+
+def sha256_file(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""): h.update(chunk)
+    return h.hexdigest()
+
+def fingerprint(pubkey_line):
+    try:
+        r = subprocess.run(["ssh-keygen", "-lf", "-"], input=pubkey_line.encode(), capture_output=True, timeout=10)
+        return r.stdout.decode().strip() if r.returncode == 0 else "(fingerprint unavailable)"
+    except Exception:
+        return "(fingerprint unavailable)"
+
+def wifi_from_snapshot(path):
+    """(ssid, ssid5 or '', password) from a settings snapshot's Wi-Fi section. The password is returned, never printed."""
+    sn = json.loads(read_text(path)); xml = sn["sections"]["wifi"]["xml"]
+    def get(sec, tag):
+        m = re.search(r"<%s>.*?<%s>(.*?)</%s>" % (sec, tag, tag), xml, re.S)
+        return html.unescape(m.group(1)) if m else ""
+    ssid, ssid5, psk = get("Basic_0", "ssid"), get("Basic_1", "ssid"), get("Basic_0", "psk")
+    if not ssid or not psk: raise Fatal("the snapshot has no Wi-Fi name or password")
+    return ssid, ("" if ssid5 == ssid else ssid5), psk
+
+def read_secret_file(path):
+    return read_text(path).split("\n", 1)[0].rstrip("\r")
+
+def ask(io, prompt, check=None, secret=False, default=None):
+    while True:
+        raw = io["getpass"](prompt + ": ") if secret else io["input"](prompt + (" [%s]" % default if default else "") + ": ")
+        raw = raw if raw != "" or default is None else default
+        err = check(raw) if check else None
+        if err is None: return raw
+        io["say"]("  " + err)
+
+def ask_twice(io, prompt, check):
+    while True:
+        a = ask(io, prompt, check, secret=True); b = io["getpass"]("  again: ")
+        if a == b: return a
+        io["say"]("  the two entries differ")
+
+def say_default(*a): print(*a, flush=True)
+
+
+# ---------------------------------------------------------------- gathering answers
+def candidate_keys(home):
+    out = []
+    d = os.path.join(home, ".ssh")
+    for n in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+        if n.endswith(".pub"):
+            try: line = read_text(os.path.join(d, n)).strip().splitlines()[0]
+            except Exception: continue
+            if valid_pubkey(line) is None: out.append((os.path.join(d, n), line))
+    return out
+
+def choose_key(io, home):
+    keys = candidate_keys(home)
+    io["say"]("\nSSH key: this is how you will log in to the unit (key only, no password).")
+    for i, (p, line) in enumerate(keys, 1): io["say"]("  %d) %s   %s" % (i, os.path.basename(p), fingerprint(line)))
+    io["say"]("  g) generate a new key for this unit      p) paste a public key")
+    while True:
+        c = io["input"]("choose: ").strip().lower()
+        if c.isdigit() and 1 <= int(c) <= len(keys): return keys[int(c) - 1][1]
+        if c == "p":
+            line = io["input"]("paste the public key line: ").strip()
+            if valid_pubkey(line) is None: return line
+            io["say"]("  " + valid_pubkey(line))
+        if c == "g":
+            path = os.path.join(home, ".ssh", "stone_orbic_ed25519")
+            if os.path.exists(path): io["say"]("  %s already exists: choose it from the list instead" % path); continue
+            os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+            if subprocess.run(["ssh-keygen", "-t", "ed25519", "-f", path, "-C", "stone-of-heimdall"]).returncode != 0: raise Fatal("ssh-keygen failed")
+            return read_text(path + ".pub").strip()
+
+def gather(args, io, home):
+    ans = json.loads(read_text(args.answers)) if args.answers else {}
+    tty = io["interactive"]; a = {}
+    def need(msg):
+        if not tty: raise Fatal(msg + " (give it in the answers file, or run in a terminal to be asked)")
+    # Wi-Fi
+    w = ans.get("wifi", {})
+    if "from_snapshot" in w:
+        a["ssid"], a["ssid5"], a["wifi_pw"] = wifi_from_snapshot(os.path.expanduser(w["from_snapshot"]))
+    else:
+        if "ssid" in w: a["ssid"] = w["ssid"]
+        else: need("Wi-Fi name missing"); a["ssid"] = ask(io, "\nWi-Fi name for the unit (1 to 32 characters)", valid_ssid)
+        a["ssid5"] = w.get("ssid5", "")
+        if "password_file" in w: a["wifi_pw"] = read_secret_file(w["password_file"])
+        else: need("Wi-Fi password missing"); a["wifi_pw"] = ask_twice(io, "Wi-Fi password (8 to 63 printable characters)", valid_wifi_pw)
+        if not a["ssid5"] and tty and "ssid" not in w and io["input"]("Give the 5 GHz network its own name, \"%s-5G\"? [Y/n] " % a["ssid"]).strip().lower() != "n":
+            a["ssid5"] = a["ssid"] + "-5G"
+    for what, err in (("Wi-Fi name", valid_ssid(a["ssid"])), ("5 GHz name", valid_ssid(a["ssid5"]) if a["ssid5"] else None), ("Wi-Fi password", valid_wifi_pw(a["wifi_pw"]))):
+        if err: raise Fatal("%s: %s" % (what, err))
+    if a["ssid5"] and a["ssid5"] == a["ssid"]: raise Fatal("the 5 GHz name must differ from the 2.4 GHz name")
+    # web login
+    lg = ans.get("login", {})
+    if lg.get("keep_identity") or (args.kit and "user" not in lg):
+        a["user"], a["login_pw"] = "", ""
+    elif "user" in lg:
+        a["user"] = lg["user"]; a["login_pw"] = read_secret_file(lg["password_file"])
+    else:
+        need("web login missing")
+        a["user"] = ask(io, "\nWeb login: username (letters, digits . _ -)", valid_user)
+        a["login_pw"] = ask_twice(io, "Web login: password (10 to 72 characters)", valid_login_pw)
+    if a["user"]:
+        for what, err in (("username", valid_user(a["user"])), ("web password", valid_login_pw(a["login_pw"]))):
+            if err: raise Fatal("%s: %s" % (what, err))
+    # ssh key
+    if "ssh_key" in ans: a["pubkey"] = read_text(ans["ssh_key"]).strip().splitlines()[0]
+    elif args.ssh_key: a["pubkey"] = read_text(args.ssh_key).strip().splitlines()[0]
+    else: need("SSH key missing"); a["pubkey"] = choose_key(io, home)
+    if valid_pubkey(a["pubkey"]): raise Fatal("SSH key: " + valid_pubkey(a["pubkey"]))
+    # script token, tor
+    if "token" in ans: a["token"] = bool(ans["token"])
+    elif args.kit or not tty: a["token"] = False
+    else: a["token"] = io["input"]("\nCreate a script token (lets scripts call the web API without signing in; it is a master key)? [y/N] ").strip().lower() == "y"
+    a["tor"] = bool(ans.get("tor", False))
+    a["yes"] = bool(ans.get("yes", False)) or args.yes
+    return a
+
+
+# ---------------------------------------------------------------- payload
+def locate(args):
+    if args.kit:
+        pay = os.path.join(args.kit, "payload"); ident = os.path.join(args.kit, "identity", "identity.tar")
+        states = [os.path.join(args.kit, "state", n) for n in ("proxy-state.tar", "dnsfilter-user.tar", "extra.tar") if os.path.exists(os.path.join(args.kit, "state", n))]
+        return pay, (ident if os.path.exists(ident) else None), states
+    return args.payload, None, []
+
+BINARIES = ["tinyfwd", "dnsmasq", "dropbearmulti"]
+
+def find_file(pay, name):
+    """The binaries must come from --payload; the scripts come from --payload if it has them, else from this repository (install/payload, scripts)."""
+    dirs = [pay] if name in BINARIES + OPTIONAL else [pay, os.path.join(HERE, "payload"), os.path.join(HERE, "..", "scripts")]
+    for d in dirs:
+        if d and os.path.isfile(os.path.join(d, name)): return os.path.join(d, name)
+    return None
+
+def check_payload(pay, want_tor):
+    """{name: path} of every file to stage, or a Fatal naming what is missing."""
+    found = {f: find_file(pay, f) for f in REQUIRED}
+    miss = [f for f, p in found.items() if p is None]
+    if miss:
+        hint = " (give --payload DIR holding the built binaries; see docs/INSTALL.md)" if any(m in BINARIES for m in miss) else ""
+        raise Fatal("missing: " + ", ".join(miss) + hint)
+    if want_tor:
+        for f in OPTIONAL:
+            path = find_file(pay, f)
+            if path: found[f] = path
+    return found
+
+
+# ---------------------------------------------------------------- the run
+def run_device_script(dev, io, which, timeout=900):
+    """Start the root script with one short AT line and follow its log over adb until STONE-DONE."""
+    line = AT[which]; assert len(line.encode()) <= 64, line
+    dev.adb("shell", "rm -f /tmp/stone/log")
+    ok, err = dev.at(line)
+    if not ok: io["say"]("  (no reply from the AT channel yet, which is normal for a script that keeps running: following its log)")
+    seen, end, started, gone = 0, time.time() + timeout, False, 0
+    while time.time() < end:
+        rc, out, _ = dev.adb("shell", "cat /tmp/stone/log")
+        if rc != 0:
+            gone += 1
+            if started and gone == 1: io["say"]("  (the unit is not answering over adb: it may be rebooting)")
+            if gone > 90: raise Fatal("lost contact with the unit")
+            io["sleep"](2); continue
+        gone = 0; lines = [l for l in out.splitlines() if re.match(r"\d\d:\d\d:\d\d ", l)]   # only real log lines: adb hands back "cat: can't open" as plain text before the log exists
+        for l in lines[seen:]:
+            started = True; io["say"]("  " + re.sub(r"^\d\d:\d\d:\d\d ", "", l))
+        seen = len(lines)
+        text = "\n".join(lines)
+        if "STONE-DONE" in text: return "STONE-OK" in text, text
+        if not started and time.time() > end - timeout + 25: raise Fatal("the root script never started: is the AT channel wedged? (power-cycle or reboot the unit and try again)")
+        io["sleep"](3)
+    raise Fatal("timed out waiting for the unit to finish")
+
+def stage(dev, io, tmp, pay, files, ident, states, a, only_boot=False):
+    """Build the stage in a temp folder and push it into the unit's RAM disk."""
+    d = os.path.join(tmp, "stage"); os.makedirs(os.path.join(d, "payload")); os.makedirs(os.path.join(d, "secrets"), mode=0o700); os.makedirs(os.path.join(d, "state"))
+    if only_boot: files = {}          # a read-only check stages just the checker, not 17 MB of payload
+    for f, src in files.items(): shutil.copy2(src, os.path.join(d, "payload", f))
+    if files:
+        with open(os.path.join(d, "MANIFEST.sha256"), "w") as m:
+            for f in files: m.write("%s  %s\n" % (sha256_file(os.path.join(d, "payload", f)), f))
+    shutil.copy2(os.path.join(HERE, "device", "bootstrap.sh"), os.path.join(d, "boot.sh"))
+    if only_boot:                       # nothing but the checker goes over: no env, no secrets, no keys
+        dev.adb("shell", "rm -rf /tmp/stone; mkdir -p /tmp/stone")
+        rc, _, err = dev.adb("push", os.path.join(d, "boot.sh"), "/tmp/stone/boot.sh")
+        if rc != 0: raise Fatal("could not push the checker: " + err.strip()[:200])
+        io["say"]("  staged the checker"); return
+    env = ["WIFI_SSID=" + a["ssid"], "TOKEN=" + ("yes" if a["token"] else "no")]
+    if a["ssid5"]: env.append("WIFI_SSID5=" + a["ssid5"])
+    if a["user"]: env.append("LOGIN_USER=" + a["user"])
+    with open(os.path.join(d, "env"), "w") as f: f.write("\n".join(env) + "\n")
+    def secret(name, value):
+        p = os.path.join(d, "secrets", name); fd = os.open(p, os.O_WRONLY | os.O_CREAT, 0o600)
+        with os.fdopen(fd, "w") as f: f.write(value + "\n")
+    secret("wifi.pw", a["wifi_pw"])
+    if a["user"]: secret("login.pw", a["login_pw"])
+    if a.get("token_value"): secret("ui.token", a["token_value"])
+    with open(os.path.join(d, "authorized_keys"), "w") as f: f.write(a["pubkey"].strip() + "\n")
+    if ident: shutil.copy2(ident, os.path.join(d, "identity.tar"))
+    for s in states: shutil.copy2(s, os.path.join(d, "state", os.path.basename(s)))
+    dev.adb("shell", "rm -rf /tmp/stone; mkdir -p /tmp/stone/payload /tmp/stone/secrets /tmp/stone/state")
+    for root, _, names in os.walk(d):
+        for n in sorted(names):
+            local = os.path.join(root, n); rel = os.path.relpath(local, d)
+            rc, _, err = dev.adb("push", local, "/tmp/stone/" + rel)
+            if rc != 0: raise Fatal("could not push %s: %s" % (rel, err.strip()[:200]))
+    dev.adb("shell", "chmod 600 /tmp/stone/secrets/* 2>/dev/null; chmod 700 /tmp/stone/secrets")
+    rc, out, err = dev.adb("shell", "cd /tmp/stone/payload && sha256sum -c ../MANIFEST.sha256 >/dev/null 2>&1 && echo VERIFIED")
+    if "VERIFIED" not in out: raise Fatal("the files did not arrive intact (hash check on the unit failed): nothing was changed; try again")
+    io["say"]("  staged and verified in the unit's RAM disk")
+
+def ensure_ready(dev, io, yes):
+    pids = dev.usb()
+    if not pids: raise Fatal("no Orbic on the USB cable (looked for vendor 05c6): check the cable between this computer and the unit")
+    ready = {0xF601, 0xF622}
+    if not (set(pids) & ready):
+        if 0xF626 not in pids: raise Fatal("the Orbic is on USB as an unknown product %s" % ", ".join("%04x" % p for p in pids))
+        io["say"]("The unit is in its normal mode (no serial port). It must be switched into command mode (it restarts its USB side; nothing is changed on it).")
+        if not yes and io["input"]("switch now? [Y/n] ").strip().lower() == "n": raise Fatal("cancelled")
+        dev.mode_switch()
+    for _ in range(30):
+        rc, out, _e = dev.adb("get-state")
+        if rc == 0 and "device" in out: break
+        io["sleep"](2)
+    else:
+        raise Fatal("adb does not see the unit (try: adb kill-server, then run this again)")
+    # a freshly booted unit loses AT lines sent before its AT daemon is up, so wait for it (other installers for this unit do the same)
+    for i in range(90):
+        rc, out, _e = dev.adb("shell", "pidof atfwd_daemon")
+        if rc == 0 and out.strip().split()[:1] and out.strip().split()[0].isdigit(): return
+        if i == 0: io["say"]("  waiting for the unit's AT daemon to finish starting...")
+        io["sleep"](2)
+    raise Fatal("the unit's AT daemon (atfwd_daemon) never started: give it a few more minutes, or reboot the unit")
+
+def summary(io, a, pay, files, ident, states, args):
+    io["say"]("\n=== About to install on the unit ===")
+    io["say"]("  Wi-Fi 2.4 GHz name : %s" % a["ssid"]); io["say"]("  Wi-Fi 5 GHz name   : %s" % (a["ssid5"] or "(unchanged)"))
+    io["say"]("  Wi-Fi password     : set (not shown)")
+    io["say"]("  Web login          : %s" % (a["user"] + " (password set)" if a["user"] else "kept from the restored identity"))
+    io["say"]("  SSH key            : %s" % fingerprint(a["pubkey"]))
+    io["say"]("  Script token       : %s" % ("yes (a new one; saved on this computer)" if a["token"] else "no"))
+    io["say"]("  Restore kit        : %s" % ("yes: identity + %d saved-state file(s)" % len(states) if args.kit else "no (a fresh install)"))
+    io["say"]("  Files              : %s" % ", ".join("%s %s" % (f, sha256_file(files[f])[:8]) for f in files))
+    io["say"]("  Rollback           : automatic if anything fails; later: stone-install rollback")
+
+def after(io, a, home):
+    io["say"]("\nDone. Next:")
+    io["say"]("  1. Join the new Wi-Fi \"%s\" with the password you chose (the unit restarted its Wi-Fi)." % a["ssid"])
+    io["say"]("  2. SSH: add this to ~/.ssh/config, then `ssh orbic`:\n       Host orbic\n           HostName 192.168.1.254\n           User root\n           IdentitiesOnly yes\n           IdentityFile <the private key matching the public key you chose>")
+    io["say"]("  3. Web page: https://orbic/   (self-signed certificate: compare the fingerprint on the sign-in page with your browser's)")
+    if a["token"]: io["say"]("  4. Your script token is in %s (scripts/orbic-api.sh uses it)." % os.path.join(home, ".heimdallstone", "ui.token"))
+
+def main(argv=None, dev=None, io=None, home=None):
+    ap = argparse.ArgumentParser(prog="stone-install", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("command", nargs="?", default="install", choices=["install", "check", "rollback", "uninstall"])
+    ap.add_argument("--payload"); ap.add_argument("--kit"); ap.add_argument("--answers"); ap.add_argument("--ssh-key")
+    ap.add_argument("--dry-run", action="store_true"); ap.add_argument("--yes", action="store_true")
+    ap.add_argument("--with-payload", action="store_true", help="check: also stage the payload (checks space and the hashes on the unit)")
+    args = ap.parse_args(argv)
+    home = home or os.path.expanduser("~")
+    io = io or {"say": say_default, "input": input, "getpass": getpass.getpass, "sleep": time.sleep, "interactive": sys.stdin.isatty()}
+    try:
+        if args.command in ("rollback", "uninstall"):
+            if args.dry_run: io["say"]("would send: " + AT["rollback"]); return 0
+            dev = dev or Device(); ensure_ready(dev, io, True)
+            io["say"]("Rolling back the last install from the journal on the unit (the unit reboots afterwards).")
+            if not args.yes and io["interactive"] and io["input"]("roll back now? [y/N] ").strip().lower() != "y": raise Fatal("cancelled")
+            ok, text = run_device_script(dev, io, "rollback")
+            io["say"]("rolled back" if "rolled back" in text else "nothing to roll back (no journal on the unit)")
+            return 0 if ok or "rolled back" in text else 1
+        pay, ident, states = locate(args)
+        if args.command == "check":
+            files = check_payload(pay, True)
+            if args.dry_run: io["say"]("would stage the checker and %d payload files, then send: %s" % (len(files), AT["check"])); return 0
+            dev = dev or Device(); ensure_ready(dev, io, True)
+            with tempfile.TemporaryDirectory() as tmp:
+                dummy = {"ssid": "x", "ssid5": "", "wifi_pw": "x", "user": "", "login_pw": "", "pubkey": "ssh-ed25519 AAAA x", "token": False}
+                stage(dev, io, tmp, pay, files, None, [], dummy, only_boot=not args.with_payload)
+            ok, text = run_device_script(dev, io, "check", timeout=120)
+            dev.adb("shell", "rm -rf /tmp/stone"); return 0
+        a = gather(args, io, home); files = check_payload(pay, a["tor"])
+        if a["token"]: a["token_value"] = secrets.token_hex(32)
+        summary(io, a, pay, files, ident, states, args)
+        if args.dry_run:
+            io["say"]("\n(dry run) would stage %d files, then send: %s" % (len(files), AT["install"])); return 0
+        if not a["yes"]:
+            if not io["interactive"]: raise Fatal("not confirmed: add --yes (or \"yes\": true in the answers file)")
+            if io["input"]("\nType install to go ahead: ").strip() != "install": raise Fatal("cancelled; nothing was changed")
+        dev = dev or Device(); ensure_ready(dev, io, a["yes"])
+        with tempfile.TemporaryDirectory() as tmp:
+            stage(dev, io, tmp, pay, files, ident, states, a)
+        io["say"]("\nRunning the installer on the unit (this takes a minute or two; do not unplug anything):")
+        ok, text = run_device_script(dev, io, "install")
+        if not ok:
+            io["say"]("\nThe install FAILED and was rolled back: the unit is as it was. The lines above say which step.")
+            return 1
+        if a["token"]:
+            d = os.path.join(home, ".heimdallstone"); os.makedirs(d, mode=0o700, exist_ok=True); p = os.path.join(d, "ui.token")
+            if os.path.exists(p): shutil.copy2(p, p + ".old")
+            fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f: f.write(a["token_value"] + "\n")
+        after(io, a, home); return 0
+    except Fatal as e:
+        io["say"]("stone-install: %s" % e); return 1
+    except KeyboardInterrupt:
+        io["say"]("\ninterrupted: if the install had started on the unit, run `stone-install rollback`"); return 130
+
+
+if __name__ == "__main__":
+    sys.exit(main())

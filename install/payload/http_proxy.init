@@ -1,0 +1,46 @@
+#!/bin/sh
+# Standalone forward-proxy service (tinyfwd) on :3128. Installed as /etc/init.d/http_proxy with an rc5.d/S99 symlink so it starts at boot with
+# full capabilities (needed to create the listening socket). -ui-token-file turns on the optional script token (a missing or empty file means no
+# script token is accepted).
+BIN=/data/proxy/tinyfwd
+PIDF=/tmp/http_proxy.pid
+LOG=/data/proxy/tinyfwd.log
+ALLOW=127.0.0.0/8,::1/128,192.168.1.0/24
+
+case "$1" in
+  start)
+    echo -n "Starting http_proxy: "
+    [ -f "$PIDF" ] && ! kill -0 "$(cat "$PIDF" 2>/dev/null)" 2>/dev/null && rm -f "$PIDF"
+    start-stop-daemon -S -b --make-pidfile --pidfile "$PIDF" \
+      --startas /bin/sh -- -c "exec $BIN -4 -listen 0.0.0.0:3128 -allow $ALLOW -proxy-host 192.168.1.1:3128 -state /data/proxy/state.json -dns-plain-after=-1s -dns-resolv /tmp/resolv_rmnet_data.conf -dns-listen 127.0.0.1:5354 -dns-dir /data/dnsfilter -ui-token-file /data/proxy/ui.token >> $LOG 2>&1"
+    # WPS must stay off: wps-guard.sh re-checks the generated hostapd config at boot and every 5 minutes (one copy only)
+    if [ -x /data/proxy/wps-guard.sh ] && ! { [ -f /tmp/wps-guard.pid ] && kill -0 "$(cat /tmp/wps-guard.pid)" 2>/dev/null; }; then
+      ( /data/proxy/wps-guard.sh >/dev/null 2>&1 & echo $! > /tmp/wps-guard.pid )
+    fi
+    # our static dnsmasq replaces the stock 2.73 (dnsmasq-swap.sh checks DNS and rolls back; one copy of the loop only)
+    if [ -x /data/proxy/dnsmasq-swap.sh ] && ! { [ -f /tmp/dnsmasq-swap.pid ] && kill -0 "$(cat /tmp/dnsmasq-swap.pid)" 2>/dev/null; }; then
+      ( /data/proxy/dnsmasq-swap.sh loop >/dev/null 2>&1 & echo $! > /tmp/dnsmasq-swap.pid )
+    fi
+    # `wpad` and `orbic` live at 192.168.1.254 with port 80 sent to the proxy daemon (wpad-guard.sh keeps the address and the DNAT; one copy only)
+    if [ -x /data/proxy/wpad-guard.sh ] && ! { [ -f /tmp/wpad-guard.pid ] && kill -0 "$(cat /tmp/wpad-guard.pid)" 2>/dev/null; }; then
+      ( /data/proxy/wpad-guard.sh >/dev/null 2>&1 & echo $! > /tmp/wpad-guard.pid )
+    fi
+    echo done
+    ;;
+  stop)
+    echo -n "Stopping http_proxy: "
+    start-stop-daemon -K -p "$PIDF" 2>/dev/null || true
+    rm -f "$PIDF"
+    echo done
+    ;;
+  restart)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+  *)
+    echo "usage: $0 {start|stop|restart}" >&2
+    exit 1
+    ;;
+esac
+exit 0

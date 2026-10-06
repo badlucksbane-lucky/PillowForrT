@@ -1,10 +1,10 @@
 # Installing Stone of Heimdall
 
-**Where this stands.** Building it, updating a unit that already runs it, setting the login and
-first sign-in are written down and match the scripts. **The very first install on a stock,
-unrooted hotspot is not documented or supported yet**: see [First install](#first-install-not-yet-supported)
-at the end for what it must leave on the device. If your unit does not already run this software,
-you can read this guide but not finish it.
+**Where this stands.** Building it, updating a unit that already runs it, setting the login and first sign-in are written down and match the scripts.
+**The first install on a factory-fresh unit now has an installer, `install/stone-install`, and it is EXPERIMENTAL and UNTESTED from a factory-fresh unit**:
+see [First install](#first-install-experimental-untested-on-a-factory-fresh-unit) at the end. Its pieces were tested separately (in a fake filesystem, on
+a real unit's busybox, and read-only against a running unit), but the whole path has not yet been run from a stock unit. It can undo itself, but
+treat it as a first draft on hardware you are willing to risk.
 
 ## Before you start
 - An Orbic RC400L hotspot you are willing to risk. Rooting may void the warranty or breach the
@@ -145,24 +145,39 @@ Do not take the README's word for it. From a device on the network, run a third-
 and a WebRTC/IPv6 leak test, with the unit's VPN or Tor exit on and off for that device, and see
 whether what they report matches what the web page says it is doing.
 
-## First install (not yet supported)
-There is no supported way to go from a stock, unrooted unit to the state above. `fork/rootshell/` and
-`fork/orbic-at/` are GPL-3.0 code from a third-party project, each file carrying its own license
-header that names its source, with the license text alongside:
+## First install (experimental, untested on a factory-fresh unit)
+**Status: written and rehearsed in pieces, never yet run from a factory-fresh unit.** Read the risks below before you use it.
 
-- `fork/rootshell/` is a small privileged-shell binary. Running on the unit, it gives a root shell
-  with the Android network groups the proxy needs.
-- `fork/orbic-at/orbic.rs` is the Orbic-specific code that talks to the device's `AT+SYSCMD`
-  channel, including how a root shell is first obtained. **It is not wired up and does not compile as
-  it stands**: the modules it imports were deliberately left out. It is here to read and to start from.
+`install/stone-install` puts Stone of Heimdall on an Orbic RC400L over its **USB cable**, with questions you answer in the terminal. It needs:
+- a Linux or macOS computer with `python3`, `adb`, and the system `libusb-1.0` (no pip packages), and the cable between it and the unit;
+- the three programs for the unit, built for 32-bit ARM and statically linked, in one folder you give with `--payload`:
+  `tinyfwd` (build it with `./build.sh`), `dnsmasq` (version 2.91 or newer: the stock one is 2.73) and `dropbearmulti` (the dropbear multi-call binary
+  with the `dropbear` and `dropbearkey` applets). Build recipes for the last two are not published yet; use the upstream sources. The scripts the installer
+  also needs (`wpad-guard.sh`, `dhcp-hook.sh`, `dnsmasq-swap.sh`, `wps-guard.sh`, `http_proxy.init`) come from this repository.
 
-A finished first install has to leave this on the unit, because the scripts above assume it:
-- a root shell with network privileges for the daemon;
-- `/data/proxy/` holding the `tinyfwd` binary (mode 755) and `wpad-guard.sh`;
-- an init script, `/etc/init.d/http_proxy`, that starts and stops `tinyfwd` and passes it the flags you want (`-ui-token-file`, `-beat-token-file`; see the script token above);
-- dropbear, key-only on `192.168.1.254:22`, with its key directory at `/data/dropbear/ssh`;
-- `wget` (BusyBox) for the deploy script's health check;
-- the other programs the features use (dnsmasq, dropbear, and Tor if you want it), each fetched from
-  its own source.
+```
+install/stone-install check   --payload DIR     # read-only: what the unit looks like; changes nothing
+install/stone-install install --payload DIR     # asks for Wi-Fi name and password, web login, SSH key; shows a summary; you type "install"
+install/stone-install rollback                  # undoes the last install from the journal on the unit (works with no network), then the unit reboots
+```
+`install --dry-run` shows the plan and the exact commands without touching the unit; `--answers FILE` takes the answers as JSON for unattended runs
+(see `install/stone-install --help`).
 
-Writing and testing that path on a bare unit is the most useful contribution this project needs.
+**What it does.** Over USB, with adb, it stages the files into the unit's RAM disk (the only place adb may write), verifies their hashes there, and starts one
+root script with a single short AT line. The script journals every change before it makes it, then: puts the programs in `/data/proxy`, makes the SSH host key
+and installs your public key, sets the web login (the password arrives on standard input and is never in a command line or a log), sets the Wi-Fi name and password
+through `tinyfwd -set-wifi` (the same backup, hostapd check and rollback as the web page), installs the init script and boot link, starts everything, and checks that
+the program answers and SSH is listening. If any step fails it undoes everything it did. Passwords travel in files on the RAM disk that are wiped afterwards.
+
+**What to know first**
+- **Untested path:** the pieces were tested (a fake filesystem under two shells, the unit's own busybox in a scratch folder, read-only checks and a
+  settings restore on a running unit), but not the real first install on a factory-fresh unit, nor the USB switch a fresh unit needs (it appears as `05c6:f626` and must
+  be switched into command mode; `install/orbic-at.py mode-switch` does it from the documented request, untried).
+- **Rooting:** the unit's AT channel runs commands as root. That is how the installer works and it needs physical access to your own unit. It may void the warranty or
+  breach your carrier's terms. Never read the flash partition `mtdblock1`.
+- **Hard limit on the AT channel:** lines must stay under 64 bytes and contain no `;` or `,`. A 96-byte line wedged the unit's AT port until a reboot. The installer
+  enforces this; if you write your own commands, keep to it.
+- **Space:** the root filesystem has only about 6 MB free and `/data` about 128 MB; the staged files take about 18 MB of RAM while they are on the unit.
+- **A factory reset does not remove what the installer put on the root filesystem** (the init script and its boot link): a true stock state needs `rollback`.
+
+`fork/` holds GPL-3.0 code from a third-party project, each file with its own license header; `stone-install` does not use it.
