@@ -255,6 +255,65 @@ The detectors inside the DNS stub (DNS canary, NXDOMAIN flood, ARP / DNS correla
 check) and the beacon detector ride the stub and the outbound sampler and have no flag of their own:
 they stop when those do (`-dns-listen ""`, or the outbound services mode set to off).
 
+## 9. Feeding other tools
+The **Export** card turns the box into a sensor for tools you already run. Nothing in it is on
+until you switch it on, and every destination must be an IP address on your own network: a name
+or a public address is refused, so nothing is resolved and nothing leaves the house by this route.
+Scripts use the API token (above) as `X-UI-Token`.
+
+### Grafana
+`/metrics` needs no login. Scrape `http://192.168.1.254/metrics` with Prometheus and import
+`contrib/grafana/stone-of-heimdall.json`; `contrib/grafana/README.md` has the scrape config.
+
+### The event stream (Suricata EVE JSON)
+```
+curl -sN -H "X-UI-Token: $TOKEN" "https://orbic:3129/api/events/stream?since=0&follow=1"
+```
+One JSON object per line, in the shape of Suricata's `eve.json`: `timestamp`, `event_type` (always
+`alert`), `alert.signature` ("Stone of Heimdall: arp spoof"), `alert.signature_id` (stable per kind,
+`gid` 9000), `alert.severity` (1 alert, 2 to look at, 3 info), and a `stone` object with the event's
+id, kind, severity, page text, generic sentence and chain hashes. `since` is the last id you have (the
+card shows the newest); `follow=1` keeps the connection open and writes each new event as it happens.
+A client that falls far behind is dropped and reconnects with `since`. Point Filebeat, Vector,
+Promtail, Wazuh's Suricata decoder or `jq` at it. Through the onion door the `text` field is left out.
+
+### Syslog
+Give the collector's `ip:port` in the card and tick "send". Lines are RFC 5424 over UDP, facility
+local0, severity alert → 1, to look at → 4, info → 6, MSGID the event kind, and
+`[stone@0 id kind sev hash prev]` as structured data: a collector that keeps every line can verify
+the hash chain on its own copy. "Generic sentences only" sends the `public` text instead of the page
+text. "Send a test line" sends one informational message.
+
+### The packet tap (Suricata, Snort, Zeek, Wireshark)
+Switch it on in the card (it asks you to confirm), then on a companion computer:
+```
+curl -sN -H "X-UI-Token: $TOKEN" "https://orbic:3129/api/tap?filter=all&seconds=600" | suricata -r /dev/stdin
+curl -sN -H "X-UI-Token: $TOKEN" "https://orbic:3129/api/tap?filter=dns" | wireshark -k -i -
+```
+`filter` is `all`, `arp`, `dns` (UDP 53), `dhcp`, `tls` (TCP 443) or `icmp`; `seconds` runs up to
+3600 (default 300); `snaplen` up to 2048 bytes (default 1600). The output is a classic pcap file,
+Ethernet link type, written packet by packet. One tap runs at a time, never through the onion door,
+and the tap's own HTTPS flow is excluded in the kernel filter so it does not capture itself.
+What it sees is what the detectors see: broadcasts, multicast, anything aimed at the router, and
+everything headed for the internet, but not traffic the radio relays Wi-Fi-to-Wi-Fi. Switch it off
+when you are done: while it is on, anyone signed in or holding the token can read the LAN.
+
+### Home Assistant (MQTT)
+Give the broker's `ip:port` (plain MQTT 3.1.1; Mosquitto's add-on default is `<HA address>:1883`),
+a user name and password if the broker wants them, and tick "connect". With MQTT discovery on in
+Home Assistant (it is by default) a device called **Stone of Heimdall** appears with: uplink, uplink
+latency, Wi-Fi clients, temperature, events needing attention, last event, data used this cycle,
+DNS queries and blocks, encrypted DNS, VPN, Tor; and one `device_tracker` per device the presence
+watch knows (home / not home, named by its label on the Devices card, else its host name, else its
+MAC). Each event is also published on `<prefix>/<node id>/event` as the same EVE record the stream
+serves, for automations with an MQTT trigger.
+
+"Let Home Assistant pause a device" adds a switch per device: off pauses its internet for the
+minutes you set (LAN, DHCP and this page stay), on resumes it. That is a remote write from whoever
+can publish to your broker, so it is off by default and it is the only thing the broker can change.
+The broker password is kept in `/data/proxy/export.json` (mode 0600), never shown back, and not part
+of a backup snapshot; "Remove the password" clears it.
+
 ## If something goes wrong
 - The program does not answer: the deploy script already rolled back. To check by hand,
   `ssh orbic 'wget -q -O - http://127.0.0.1:3128/status.json'`.

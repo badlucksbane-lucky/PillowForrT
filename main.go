@@ -87,6 +87,7 @@ var (
 	linkFile        = flag.String("link-file", "/data/proxy/linkhist.json", "uplink latency and loss history (hourly, about 35 days)")
 	speedFile       = flag.String("speed-file", "/data/proxy/speed.json", "uplink speed test settings and history")
 	canaryFile      = flag.String("canary-file", "/data/proxy/canary.json", "canary settings (on/off, ignored devices)")
+	exportFile      = flag.String("export-file", "/data/proxy/export.json", "export settings: syslog target, packet tap on/off, Home Assistant broker (0600; may hold a broker password)")
 	presenceFile    = flag.String("presence-file", "/data/proxy/presence.json", "when each device was last seen, what it calls itself, and which are watched")
 	devNotesFile    = flag.String("dev-notes", "/data/proxy/devnotes.json", "labels and notes for devices (display only)")
 	qcmapCfgFile    = flag.String("qcmap-cfg", "/usrdata/data/qcmap/mobileap_cfg.xml", "stock config holding the DHCP pool")
@@ -406,6 +407,10 @@ func main() {
 	devMgr = defaultDevNotes()
 	go graphLoop()
 	events = newEventStore()
+	exports = newExportStore(*exportFile)
+	events.sink = exportSink
+	hass = newHassPublisher()
+	go hass.run()
 	go eventLoop()
 	actions = defaultActionManager()
 	go actions.Loop()

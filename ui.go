@@ -1029,6 +1029,18 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleBackup(w, r, path)
 		return
 	}
+	if path == "export" || strings.HasPrefix(path, "export/") {
+		handleExportAPI(w, r, path)
+		return
+	}
+	if path == "events/stream" {
+		serveEventStream(w, r)
+		return
+	}
+	if path == "tap" {
+		handleTap(w, r)
+		return
+	}
 	if path == "tor/onion" || strings.HasPrefix(path, "tor/onion/") {
 		handleOnionAPI(w, r, path)
 		return

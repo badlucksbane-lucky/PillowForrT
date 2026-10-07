@@ -15,6 +15,7 @@
 - [What it guards](#what-it-guards)
 - [What it watches for](#what-it-watches-for)
 - [The rest of the page](#the-rest-of-the-page)
+- [Feeding other tools](#feeding-other-tools)
 - [How it is put together](#how-it-is-put-together)
 - [Build and test](#build-and-test)
 - [Repository map](#repository-map)
@@ -79,6 +80,15 @@ One single-page web UI with collapsible cards. Besides the filter, exits and det
 - **Node**: `/status.json` reports what the box sees from the carrier's edge, a `/beat` heartbeat lets a companion computer be noticed when it goes silent, and `/metrics` serves aggregate-only numbers in the Prometheus text format, safe to scrape without a login.
 - A built-in **PAC file and forward proxy** on `:3128` (the daemon's original job), LAN-only, with a destination guard so a client cannot use it to reach the hotspot's own loopback services.
 
+## Feeding other tools
+The box is a sensor other stacks can consume. Everything below is off until you switch it on in the **Export** card, and every destination must be an IP address on your own network (never a name, never a public host). ["Feeding other tools"](docs/INSTALL.md#9-feeding-other-tools) in `docs/INSTALL.md` has the setup for each.
+
+- **Grafana**: `/metrics` already serves the Prometheus text format without a login; [`contrib/grafana/`](contrib/grafana/) holds a dashboard to import.
+- **Event stream**: `/api/events/stream` is the event log as newline-delimited JSON in the shape of Suricata's EVE log, one `alert` record per event with the kind, severity and chain hash under `stone`, so Wazuh, Graylog, Loki, Vector, Elastic and anything with an EVE parser ingests it unchanged. `?since=<id>` resumes, `?follow=1` keeps the connection open. Behind the login or the script token; through the onion door only the generic sentence is sent.
+- **Syslog**: the same events as RFC 5424 messages over UDP to a collector on the LAN, with the chain fields as structured data so the collector's copy stays verifiable.
+- **Packet tap**: `/api/tap` streams what the bridge sees as a pcap file, so Suricata, Snort, Zeek or Wireshark on a companion computer read the LAN live without running on 77 MB of RAM. It is the one feature that exports raw frames with addresses in them, so it is off by default, LAN only, one at a time, an hour at most, and its own connection is excluded in the kernel filter. It sees what the detectors see: not traffic the radio relays Wi-Fi-to-Wi-Fi.
+- **Home Assistant**: with a broker on the LAN the box announces itself through MQTT discovery (uplink, latency, Wi-Fi clients, temperature, events, data used, DNS counters, encrypted DNS, VPN, Tor), a presence tracker per device, each event on an MQTT topic for automations, and optionally a switch per device that pauses its internet. Plain MQTT to the LAN only; the broker password is kept at mode 0600 and is never shown back or snapshotted.
+
 ## How it is put together
 - **`tinyfwd`**, one static Go binary, cross-built for ARMv7 with everything vendored: the DNS stub (its own minimal wire parser, no DNS library), the HTTPS page, the proxy, the WireGuard tunnel (wireguard-go as a library, no kernel module), all the detectors, and the supervisors for dnsmasq and Tor. It runs on one Cortex-A7 core with about 77 MB of usable memory, which is why block lists are hash sets, graphs are rings, the stub caps in-flight queries at 64 and nothing keeps a query history on flash.
 - **Kernel rules** are rendered into chains the project owns, all prefixed `HS_` (`HS_FW`, `HS_EXIT`, `HS_KILL`, `HS_TOR`, `HS_MACBLOCK`, `HS_LANV6_*` and so on), loaded atomically with `iptables-restore --noflush`, and re-asserted on a loop because the stock firmware rebuilds its own chains on some network events.
@@ -89,19 +99,20 @@ One single-page web UI with collapsible cards. Besides the filter, exits and det
 ## Build and test
 ```
 ./build.sh                       # cross-builds ./tinyfwd for the hotspot and prints its SHA-256
-GOFLAGS=-mod=vendor go test ./...  # the unit tests, offline (288 of them at the time of writing)
+GOFLAGS=-mod=vendor go test ./...  # the unit tests, offline (324 of them at the time of writing)
 ```
 Needs Go 1.24 or newer and nothing from the network. The deploy script checks the printed hash on the unit, and `-buildvcs=false` in `build.sh` is what keeps that hash reproducible. The rule evaluation, planners and thresholds are pure functions so the tests cover them without hardware; the installer has its own tests under `install/test/`.
 
 ## Repository map
 | Path | What is there |
 |---|---|
-| `*.go` | The daemon, one file per feature, each opening with a comment that says what it does and where its claims stop. Start with `main.go`, then `dnsproxy.go`, `egress.go`, `events.go`; `tlssni.go` and `tlscert.go` are the two halves of the TLS handshake, `lanannounce.go` the device inventory, `dnsxcheck.go` the second opinion on DNS, `rebind.go` the rebinding refusal, `ttlwatch.go` the hidden-router watch, `admintrip.go` the stock admin tripwire |
+| `*.go` | The daemon, one file per feature, each opening with a comment that says what it does and where its claims stop. Start with `main.go`, then `dnsproxy.go`, `egress.go`, `events.go`; `tlssni.go` and `tlscert.go` are the two halves of the TLS handshake, `lanannounce.go` the device inventory, `dnsxcheck.go` the second opinion on DNS, `rebind.go` the rebinding refusal, `ttlwatch.go` the hidden-router watch, `admintrip.go` the stock admin tripwire; `export.go`, `tap.go`, `hass.go` and `mqtt.go` feed other tools |
 | `ui.html`, `login.html` | The single-page UI and the sign-in page, embedded in the binary |
 | `docs/` | [`INSTALL.md`](docs/INSTALL.md), [`THREAT-MODEL.md`](docs/THREAT-MODEL.md), [`SECURITY.md`](docs/SECURITY.md) |
 | `scripts/` | Run from a trusted computer on the LAN over SSH: deploy the binary with rollback, push the guard, set the login, copy files, call the API. `wpad-guard.sh` and `dhcp-hook.sh` run on the unit |
 | `install/` | `stone-install`, the experimental first-install tool over USB; `device/bootstrap.sh` runs on the unit and journals every change so it can roll back; `payload/` holds the init script and the dnsmasq and WPS guards |
 | `fork/` | Two files from EFF's [rayhunter](https://github.com/EFForg/rayhunter) (GPL-3.0, unlike the rest): the root shell used by the installer, and its AT-channel installer kept for reading and as a starting point |
+| `contrib/grafana/` | A Grafana dashboard for `/metrics` |
 | `assets/`, `site/` | Logo and brand files ([`assets/README.md`](assets/README.md)); the GitHub Pages landing page |
 | `vendor/` | Vendored Go dependencies, so the build is offline |
 
