@@ -38,7 +38,10 @@ button{min-height:36px}
 .hero .n{font-size:26px}
 .hero .grid{gap:14px}
 .stat-bar{height:3px;border-radius:2px;margin-top:6px;opacity:.3}
-.sec{font:11px/1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin:28px 0 2px 4px}
+.sec{font:11px/1 system-ui,sans-serif;text-transform:uppercase;letter-spacing:.1em;color:var(--mut);margin:28px 0 2px 4px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px}
+.sec::before{content:"";flex:none;width:6px;height:6px;border:solid var(--mut);border-width:0 2px 2px 0;transform:rotate(45deg);transition:transform .15s}
+.sec.closed::before{transform:rotate(-45deg)}
+.sec:focus-visible{outline:2px solid var(--s1);outline-offset:3px;border-radius:4px}
 </style></head><body><main>
 <div class="brand"><img class="mark" src="/favicon.svg" alt=""><div><h1>Stone of Heimdall <span class="mut" id="ver"></span></h1><div class="tag mut">a watchman for your hotspot</div></div></div>
 <div class="row" style="margin-bottom:6px"><span class="mut">Signed in as <b id="who"></b></span><form method="post" action="/logout" style="margin:0"><button>Sign out</button></form></div>
@@ -892,7 +895,16 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
   setClosed(c,h,k,!!st[k]);
   const tog=()=>{setClosed(c,h,k,!c.classList.contains('closed'));save()};
   h.addEventListener('click',tog);h.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tog()}})});
- window.ccAll=closed=>{cards.forEach(c=>{const h=c.querySelector(':scope>h2.cc');if(h)setClosed(c,h,(h.firstChild.textContent||'').trim(),closed)});save()};
+ window.ccAll=closed=>{cards.forEach(c=>{const h=c.querySelector(':scope>h2.cc');if(h)setClosed(c,h,(h.firstChild.textContent||'').trim(),closed)});save();secs.forEach(s=>setSecClosed(s,s.textContent.trim(),closed));saveSec()};
+ let sst={};try{sst=JSON.parse(localStorage.getItem('secc')||'{}')}catch(e){}
+ const saveSec=()=>{try{localStorage.setItem('secc',JSON.stringify(sst))}catch(e){}};
+ const secs=[...document.querySelectorAll('.sec')];
+ const secCards=s=>{const out=[];let n=s.nextElementSibling;while(n&&!n.classList.contains('sec')){if(n.classList.contains('card'))out.push(n);n=n.nextElementSibling}return out};
+ function setSecClosed(s,k,closed){s.classList.toggle('closed',closed);s.setAttribute('aria-expanded',closed?'false':'true');secCards(s).forEach(c=>c.style.display=closed?'none':'');if(closed)sst[k]=1;else delete sst[k]}
+ secs.forEach(s=>{const k=s.textContent.trim();if(!k)return;s.setAttribute('role','button');s.tabIndex=0;
+  setSecClosed(s,k,!!sst[k]);
+  const tog=()=>{setSecClosed(s,k,!s.classList.contains('closed'));saveSec()};
+  s.addEventListener('click',tog);s.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tog()}})});
  // result lines: green when the last request worked, red when it failed
  new MutationObserver(ms=>{for(const m of ms){const e=m.target.nodeType===3?m.target.parentElement:m.target;if(e&&e.classList&&e.classList.contains('msg'))e.classList.toggle('ok',LAST_OK&&!!e.textContent)}}).observe(document.body,{childList:true,characterData:true,subtree:true});
  // a card whose data never arrived says so instead of "loading" for ever
