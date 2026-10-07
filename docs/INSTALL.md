@@ -314,6 +314,34 @@ can publish to your broker, so it is off by default and it is the only thing the
 The broker password is kept in `/data/proxy/export.json` (mode 0600), never shown back, and not part
 of a backup snapshot; "Remove the password" clears it.
 
+### Towers for WiGLE
+The **Towers** card reads which cell the modem is camped on and exports a WiGLE CSV. It is
+telemetry out, not a detector: it raises no event and makes no judgement about the network.
+
+1. **Find the modem's AT port.** Click **Probe ports**. The candidates on this unit are
+   `/dev/smd8`, `/dev/smd11` and `/dev/smd7`; the one that "answers OK" is the port. If none
+   answers, a stock daemon may be holding the port open; `lsof /dev/smd8` over SSH shows who.
+   Enter the port, choose how often to read (default every 60 s), tick "read", Save.
+2. **Give it a location.** The hotspot has no GPS. On a companion computer with gpsd,
+   `scripts/gps-feed.sh` posts each fix; `scripts/gps-feed.sh 40.7128 -74.0060` posts one fixed
+   position for a parked box; anything that can `POST /api/towers/fix {"lat":..,"lon":..,"acc":..}`
+   with the API token works (a phone with Tasker or a shortcut, a laptop script). A fix is held in
+   RAM only and used for 90 seconds; observations taken without a fresh one are kept and shown but
+   left out of the CSV, which needs a location.
+3. **Download the WiGLE CSV** from the card (`/api/towers/wigle.csv`) and upload it at wigle.net,
+   or keep it. The format is WigleWifi-1.6: one row per observation, the cell as `mcc_mnc_area_cell`
+   in the MAC column, the operator as SSID, the technology (GSM, WCDMA, LTE, NR) as AuthMode and Type,
+   EARFCN as Channel, RSRP (or RSSI) as the signal.
+
+What is read, every period: `+COPS` (PLMN and operator name), `+CEREG`/`+CREG` with location
+reporting on (tracking area and cell id), `+CSQ`, and Qualcomm's `$QCRSRP` when the modem answers
+it. A repeat of the same cell from the same spot within 10 minutes replaces the previous row, so a
+parked box does not fill the log; a cell change or a move of 25 m adds one. The log is capped at
+5000 rows in `/data/proxy/cells.json` (mode 0600) and "Delete all" clears it. The cell and the
+location are the one thing on this box that says where you are: they are never in `/status.json`,
+`/metrics`, an event, a notification, the syslog or MQTT event exports, or the onion door. The Home
+Assistant state (LAN only, if you turned it on) carries the current cell and signal.
+
 ## If something goes wrong
 - The program does not answer: the deploy script already rolled back. To check by hand,
   `ssh orbic 'wget -q -O - http://127.0.0.1:3128/status.json'`.

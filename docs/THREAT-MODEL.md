@@ -16,7 +16,7 @@ A person who carries a cellular hotspot and wants fewer third parties able to pr
 | Carrier-pushed firmware changes | The update and device-management engines are kept suspended | Suspending is not removing; a future firmware could behave differently |
 
 ## What it does NOT defend against
-- **Your carrier knowing where you are.** The hotspot attaches to towers. Location, connection times and volumes are visible to the carrier whatever this software does.
+- **Your carrier knowing where you are.** The hotspot attaches to towers. Location, connection times and volumes are visible to the carrier whatever this software does. The tower telemetry (off by default) records which cell the box is on and, if a companion sends one, where it is; that stays on the box, in a file only the WiGLE download reads, until you choose to upload it.
 - **Anonymity.** Mullvad sees what the carrier would otherwise see. Tor is slow and does not protect a device that logs into an account.
 - **Content.** It does not look inside encrypted traffic and does not try to.
 - **Someone with physical access to the unit, or already on your Wi-Fi.** Anyone on the LAN who can reach the web page can try the login; use a strong password and keep the self-signed certificate fingerprint you checked at first sign-in. The event log is a hash chain, so an edit or a deletion in it shows on the page, but someone with a root shell can rewrite the whole chain; only a head hash copied off the box beforehand tells you that happened.

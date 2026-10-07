@@ -1033,6 +1033,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleExportAPI(w, r, path)
 		return
 	}
+	if path == "towers" || strings.HasPrefix(path, "towers/") {
+		handleCellAPI(w, r, path)
+		return
+	}
 	if path == "events/stream" {
 		serveEventStream(w, r)
 		return
