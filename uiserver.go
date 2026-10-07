@@ -187,7 +187,7 @@ func onionPathOK(p string) bool {
 // onionLANOnly: changes that are refused through the onion door even when remote writes are switched on: the door's own settings (a remote session must never authorize more keys or loosen its
 // own limits), SSH keys, the login itself and restoring a backup.
 func onionLANOnly(p string) bool {
-	return strings.HasPrefix(p, "/api/tor/onion") || strings.HasPrefix(p, "/api/ssh") || strings.HasPrefix(p, "/api/account/") || strings.HasPrefix(p, "/api/backup/restore")
+	return strings.HasPrefix(p, "/api/tor/onion") || strings.HasPrefix(p, "/api/ssh") || strings.HasPrefix(p, "/api/account/") || strings.HasPrefix(p, "/api/backup/restore") || strings.HasPrefix(p, "/api/export") || p == "/api/tap"
 }
 
 // onionHandler is the web page for a visitor who came through the onion service: same login, same pages, but read-only (any change is refused) unless remote writes are on, and the

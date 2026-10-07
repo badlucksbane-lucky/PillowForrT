@@ -313,6 +313,7 @@ type eventStore struct {
 	lastErr string
 	post    func(u, title, body string, prio int) error
 	now     func() time.Time
+	sink    func(evt) // called for each new event once it is stored (the export feed: stream, syslog, MQTT)
 }
 
 func newEventStore() *eventStore {
@@ -396,7 +397,13 @@ func (s *eventStore) Add(es []evt) {
 	}
 	s.saveEvents()
 	u := s.cfg.URL
+	added := append([]evt{}, s.events[len(s.events)-min(len(es), len(s.events)):]...)
 	s.mu.Unlock()
+	if s.sink != nil {
+		for _, e := range added {
+			s.sink(e)
+		}
+	}
 	for _, e := range push {
 		prio := 3
 		if e.Sev == sevAlert {

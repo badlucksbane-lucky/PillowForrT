@@ -83,6 +83,13 @@ func (p *presenceStore) dev(mac string) *presDev {
 	return d
 }
 
+// Who is the name the page shows for a device (label, host name, else the MAC), for callers outside the store.
+func (p *presenceStore) Who(mac string) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.who(mac)
+}
+
 func (p *presenceStore) who(mac string) string {
 	d := p.devs[mac]
 	if n := p.nameOf(mac); n != "" {
