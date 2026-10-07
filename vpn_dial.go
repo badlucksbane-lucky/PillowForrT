@@ -35,7 +35,7 @@ var errKillSwitch = errors.New("the VPN exit is down and the kill switch is on")
 // DialFor dials from tinyfwd the way this client's exit says: through the tunnel, or directly.
 func (v *VPN) DialFor(ctx context.Context, client, network, addr string) (net.Conn, error) {
 	if v == nil || v.ExitFor(client) != "mullvad" {
-		return dialUpstream(ctx, network, addr)
+		return proxyDialDirect(ctx, network, addr)
 	}
 	if !v.tun.isUp() {
 		v.mu.Lock()
@@ -44,14 +44,14 @@ func (v *VPN) DialFor(ctx context.Context, client, network, addr string) (net.Co
 		if ks {
 			return nil, errKillSwitch
 		}
-		return dialUpstream(ctx, network, addr)
+		return proxyDialDirect(ctx, network, addr)
 	}
-	return dialMarked(ctx, network, addr)
+	return proxyDialMarked(ctx, network, addr)
 }
 
 var vpnTransport = &http.Transport{
 	Proxy:                 nil,
-	DialContext:           dialMarked,
+	DialContext:           proxyDialMarked,
 	MaxIdleConns:          20,
 	MaxIdleConnsPerHost:   4,
 	IdleConnTimeout:       60 * time.Second,

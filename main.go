@@ -159,7 +159,7 @@ var hopHeaders = []string{
 // never chain through an http_proxy that happens to be in our environment.
 var transport = &http.Transport{
 	Proxy:                 nil,
-	DialContext:           dialUpstream,
+	DialContext:           proxyDialDirect,
 	MaxIdleConns:          64,
 	IdleConnTimeout:       90 * time.Second,
 	TLSHandshakeTimeout:   10 * time.Second,
