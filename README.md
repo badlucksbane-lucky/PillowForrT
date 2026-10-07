@@ -7,8 +7,6 @@
 
 **It watches before it guards.** A fresh install only reports what your devices tried to reach (the "would be refused" list), and you decide what to allow before anything is enforced. Every detector is passive: nothing is ever sent, nothing is decrypted, and the text of an event never names a device or an address.
 
-"Orbic" is the trademark of its owner and appears here only to say which hardware this runs on. This project is not affiliated with or endorsed by Orbic or any carrier.
-
 <p align="center"><img src="assets/screenshot-ui.jpg" width="420" alt="The Stone of Heimdall web UI: collapsible cards for the DNS filter, Tor, events, ARP watch, devices, Wi-Fi and more, with today's query, block and encryption counts at the top"></p>
 
 ## Contents
