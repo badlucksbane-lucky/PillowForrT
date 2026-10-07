@@ -90,7 +90,7 @@ func TestSnapshotCarriesDeviceNotes(t *testing.T) {
 func TestSettingsPathsRouted(t *testing.T) { // a path handled in handleSettings but missing from the routing table answers "not found": guard against that
 	for _, p := range []string{"wifi", "wifi/apply", "wifi/macfilter", "dhcp", "dhcp/pool", "dhcp/pool/set", "fw", "fw/pause", "cell", "diag", "diag/run", "diag/report", "cert", "cert/renew", "cert/download",
 		"ssh", "ssh/add", "ssh/delete", "sms", "devices", "devices/note", "devices/wake", "devices/watch", "graphs", "canary", "canary/set", "canary/ignore", "actions", "actions/set", "actions/run", "actions/delete", "events", "notify/set", "system", "system/reboot", "system/stockadmin", "system/lanv6", "egress", "egress/set", "egress/allow", "egress/remove", "egress/service",
-		"dnscanary", "dnscanary/set", "macchurn", "torbypass", "beacon", "beacon/ignore", "dganxdomain", "tlssni", "dnsmitm", "dhcpfp"} {
+		"dnscanary", "dnscanary/set", "macchurn", "torbypass", "beacon", "beacon/ignore", "dganxdomain", "tlssni", "dnsmitm", "dhcpfp", "ttl", "ttl/ignore", "admintrip", "rebind", "rebind/set", "rebind/allow"} {
 		if !isSettingsPath(p) {
 			t.Errorf("%s is not routed to the settings handler", p)
 		}

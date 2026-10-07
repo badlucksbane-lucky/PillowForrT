@@ -69,6 +69,9 @@ button{min-height:36px}
 <div class="card"><h2>Resolver cross-check <span id="dxbadge"></span></h2><div id="dx" class="mut">loading</div></div>
 <div class="card"><h2>LAN announcements <span id="labadge"></span></h2><div id="la" class="mut">loading</div></div>
 <div class="card"><h2>ARP / DNS correlation <span id="dmbadge"></span></h2><div id="dm" class="mut">loading</div></div>
+<div class="card"><h2>Hidden router <span id="ttbadge"></span></h2><div id="tt" class="mut">loading</div><div id="ttmsg" class="msg"></div></div>
+<div class="card"><h2>Stock admin tripwire <span id="atbadge"></span></h2><div id="at" class="mut">loading</div></div>
+<div class="card"><h2>Rebinding refusal <span id="rbbadge"></span></h2><div id="rb" class="mut">loading</div><div id="rbmsg" class="msg"></div></div>
 <div class="sec">Privacy</div>
 <div class="card"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
 <div class="card"><h2>Onion door <span id="odbadge"></span></h2><div id="od" class="mut">loading</div><div id="odmsg" class="msg"></div></div>
@@ -481,6 +484,43 @@ function dmrender(force){const el=$('dm');if(!Dm||guard(el,force))return;
  const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+' &rarr; '+esc(x.lan_ip)+'</td><td>'+(x.corroborated?'<b class="err">alongside an ARP impersonation</b>':'<span class="mut">on its own</span>')+'</td></tr>').join('');
  el.innerHTML='<div class="mut" style="margin:6px 0">A public DNS name that resolves to an address on this network is never something this router does on purpose. On its own it is worth a look; happening within 10 minutes of the ARP watch seeing someone impersonate an address is a much stronger sign of an active man-in-the-middle.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
 async function dmload(){try{Dm=await (await api('/api/dnsmitm')).json();dmrender()}catch(e){}}
+let Tt=null;
+function ttrender(force){const el=$('tt');if(!Tt||guard(el,force))return;
+ if(Tt.available===false){el.textContent='The hidden-router watch is off on this build.';return}
+ const f=Tt.findings||[],devs=Tt.devices||[];
+ const behind=devs.filter(d=>d.behind>0).length;
+ $('ttbadge').innerHTML=behind?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+behind+' to look at</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const what={ttl_forwarding:'forwarding for something behind it',ttl_two_stacks:'two operating systems on one address'};
+ const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b> <span class="mut">'+esc(x.mac)+'</span></td><td>'+(what[x.kind]||esc(x.kind))+'<div class="mut">'+esc(x.note)+'</div></td><td>'+((Tt.ignore||[]).includes(x.mac)?'':'<button onclick="ttignore(\''+esc(x.mac)+'\')">Mark expected</button>')+'</td></tr>').join('');
+ const dv=devs.map(d=>'<tr><td><b>'+esc(d.ip)+'</b><div class="mut">'+esc(d.mac)+'</div></td><td>'+d.direct+' direct'+(d.behind?', <b class="err">'+d.behind+' from behind it</b>':'')+'<div class="mut">'+esc(Object.entries(d.classes||{}).map(([k,v])=>'TTL '+k+' &times;'+v).join(', '))+'</div></td><td class="mut">'+esc(when(d.last))+'</td></tr>').join('');
+ const ig=(Tt.ignore||[]).map(m=>esc(m)+' <button onclick="ttunignore(\''+m+'\')">watch again</button>').join(' &middot; ');
+ el.innerHTML='<div class="mut" style="margin:6px 0">Every operating system starts its packets with a fixed TTL and every router takes one off, so a connection arriving one short has crossed a router behind the device: a phone re-sharing this hotspot, a travel router, a hidden second machine. A laptop running containers or a virtual machine looks the same, which is why it is only "to look at". Counts are for the last 10 minutes, from the first packet of each connection.'+(Tt.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'')+(dv?'<table style="margin-top:8px">'+dv+'</table>':'<div class="mut">no connections seen yet</div>')+(ig?'<div class="mut" style="margin-top:6px">expected: '+ig+'</div>':'')}
+async function ttload(){try{Tt=await (await api('/api/ttl')).json();ttrender()}catch(e){}}
+async function ttdo(b){const r=await apost('ttl/ignore',b);$('ttmsg').textContent=r.j.error||'';ttload()}
+function ttignore(mac){if(confirm('Mark this device as expected to forward for others? It will no longer raise hidden-router events. (A router or a container host you run on purpose.)'))ttdo({mac,ignore:true})}
+function ttunignore(mac){ttdo({mac,ignore:false})}
+let At=null;
+function atrender(force){const el=$('at');if(!At||guard(el,force))return;
+ if(At.available===false){el.textContent='The stock admin tripwire is off on this build.';return}
+ const k=At.knocks||[];
+ $('atbadge').innerHTML=At.sources?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+At.sources+' source'+(At.sources===1?'':'s')+' this hour</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const rows=k.slice(0,30).map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td class="mut">port '+x.port+'</td></tr>').join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">'+(At.armed?'<b style="color:var(--ac)">armed</b>: the stock admin is switched off, so a knock on its ports '+esc(At.ports)+' has no honest reason':'<span class="mut">not armed</span>: the stock admin is still on, so its ports carry real traffic and a knock means nothing')+'. Read off the wire before the firewall rejects it; nothing listens and nothing is sent.'+(At.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing has knocked</div>')}
+async function atload(){try{At=await (await api('/api/admintrip')).json();atrender()}catch(e){}}
+let Rb=null;
+function rbrender(force){const el=$('rb');if(!Rb||guard(el,force))return;
+ if(Rb.available===false){el.textContent='Rebinding refusal needs the DNS filter.';return}
+ $('rbbadge').innerHTML=Rb.refused?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+Rb.refused+' refused</span>':'';
+ const al=(Rb.allow||[]).map(p=>'<span><code>'+esc(p)+'</code> <button onclick="rballow(\''+esc(p)+'\',true)">remove</button></span>').join(' &middot; ');
+ el.innerHTML='<div class="row"><span>'+(Rb.enabled?'<b style="color:var(--ac)">on</b>':'<span class="mut">off</span>')+'</span><button class="'+(Rb.enabled?'':'on')+'" onclick="rbset('+(!Rb.enabled)+')">'+(Rb.enabled?'Switch off':'Switch on')+'</button></div>'+
+  '<div class="mut" style="margin:6px 0">A public name that resolves to a private address (this network, loopback, link-local, the Tor bridge range) is refused instead of answered: that answer is how a web page rebinds itself to a device on your LAN and talks to it as if it were its own server. Nothing on this router ever resolves a public name to a private address on purpose; the ARP / DNS correlation card still records every one it sees. '+Rb.refused+' refused since the last start.</div>'+
+  '<div class="row"><input id="rbin" placeholder="*.example.com (a name allowed to do this)"><button onclick="rballow($(\'rbin\').value,false)">Allow</button></div>'+(al?'<div style="margin-top:6px">allowed: '+al+'</div>':'')}
+async function rbload(){try{Rb=await (await api('/api/rebind')).json();rbrender()}catch(e){}}
+async function rbdo(p,b){const r=await apost(p,b);$('rbmsg').textContent=r.j.error||'';rbload()}
+function rbset(on){rbdo('rebind/set',{enabled:on})}
+function rballow(pattern,remove){if(!pattern)return;if(!remove&&!confirm('Allow '+pattern+' to resolve to a private address? Only do this for a service you know does it by design (Plex does).'))return;rbdo('rebind/allow',{pattern,remove})}
 let Ac=null;
 function acrender(force){const el=$('ac');if(!Ac||guard(el,force))return;
  const dn=d=>d.length===7?'every day':d.length===5&&!d.includes(0)&&!d.includes(6)?'weekdays':d.map(x=>DAYS[x]).join(' ');
@@ -503,9 +543,10 @@ function evrender(force){const el=$('ev');if(!Ev||guard(el,force))return;
  $('evbadge').innerHTML=Ev.unseen?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+Ev.unseen+' to look at</span>':'';
  const ic={alert:'<span class="err"><b>&#10007;</b></span>',attention:'<span class="err">&#9888;</span>',info:'<span class="mut">&middot;</span>'};
  const rows=(Ev.events||[]).slice(0,30).map(e=>'<tr><td style="width:1.5em">'+(ic[e.sev]||'')+'</td><td class="mut" style="white-space:nowrap">'+esc(new Date(e.t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))+'</td><td'+(e.seen||e.sev==='info'?' class="mut"':'')+'>'+esc(e.text)+'</td></tr>').join('')||'<tr><td class="mut">nothing has happened</td></tr>';
- const n=Ev.notify||{};
+ const n=Ev.notify||{},ch=Ev.chain||{};
+ const chain=ch.length?'<div class="mut" style="margin:4px 0">Log chain '+(ch.ok?'<b style="color:var(--ac)">intact</b>':'<b class="err">broken at event '+ch.broken_at+'</b>')+(ch.since?' since '+esc(new Date(ch.since*1000).toLocaleDateString()):'')+', '+ch.length+' linked'+(ch.head?' &middot; head <code title="copy this somewhere else to compare later">'+esc(ch.head.slice(0,16))+'&hellip;</code>':'')+'</div>':'';
  el.innerHTML='<div class="row"><button onclick="evact(\'events/seen\')">Mark all seen</button><button onclick="evact(\'events/clear\')">Clear</button><span class="mut">New devices, outages, DNS failures, overheating, failed logins, Wi-Fi drops and more.</span></div>'+
-  '<table style="margin:8px 0">'+rows+'</table>'+
+  '<table style="margin:8px 0">'+rows+'</table>'+chain+
   '<div style="margin-top:10px"><b>Push to your phone (ntfy)</b> '+(n.enabled?'<b style="color:var(--ac)">on</b> &rarr; '+esc(n.where||''):'<span class="mut">off</span>')+'</div>'+
   '<div class="mut" style="margin:4px 0">Only generic sentences leave the house (no names, MACs or keys). Self-hosted ntfy keeps it all local.</div>'+
   '<div class="row"><input id="nt_url" type="password" autocomplete="off" placeholder="'+(n.url_set?'an address is saved (leave blank to keep it)':'https://ntfy.sh/your-secret-topic')+'"><select id="nt_min"><option value="alert"'+(n.min==='alert'?' selected':'')+'>only alerts</option><option value="attention"'+((n.min||'attention')==='attention'?' selected':'')+'>alerts and things to look at</option><option value="info"'+(n.min==='info'?' selected':'')+'>everything</option></select><label><input type="checkbox" id="nt_on" '+(n.enabled?'checked':'')+'> send</label></div>'+
@@ -775,7 +816,7 @@ async function psave(){const hrs=parseFloat($('p_l').value);if(!(hrs>0)){$('pmsg
  if(!confirm('Restart DHCP and DNS (a few seconds) to use '+$('p_a').value+' to '+$('p_b').value+', leases '+hrs+' h? A backup of the stock config is saved first, and the old pool comes back if dnsmasq does not.'))return;
  const r=await apost('dhcp/pool/set',{start:$('p_a').value.trim(),end:$('p_b').value.trim(),lease_secs:Math.round(hrs*3600)});$('pmsg').textContent=r.j.error||r.j.status||'';setTimeout(()=>{Pl=null;pload();dload()},5000)}
 let tickN=0;
-async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Tc)tcload();if(tickN%3===0||!Dx)dxload();if(tickN%3===0||!La)laload();if(tickN%3===0||!Df)dfload();if(tickN%3===0||!Dm)dmload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
+async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Tc)tcload();if(tickN%3===0||!Dx)dxload();if(tickN%3===0||!La)laload();if(tickN%3===0||!Df)dfload();if(tickN%3===0||!Dm)dmload();if(tickN%3===0||!Tt)ttload();if(tickN%3===0||!At)atload();if(tickN%6===0||!Rb)rbload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
 
 (function(){
  let st={};try{st=JSON.parse(localStorage.getItem('cc')||'{}')}catch(e){}

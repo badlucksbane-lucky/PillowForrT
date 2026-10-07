@@ -46,6 +46,14 @@ func runBPF(prog []unix.SockFilter, pkt []byte) uint32 {
 				return 0
 			}
 			a = uint32(binary.BigEndian.Uint16(pkt[off:]))
+		case 0x50: // ldb [x+k] (indirect)
+			off := int(x) + int(i.K)
+			if off+1 > len(pkt) {
+				return 0
+			}
+			a = uint32(pkt[off])
+		case 0x54: // and k
+			a &= i.K
 		case 0x15: // jeq k
 			if a == i.K {
 				pc += int(i.Jt)

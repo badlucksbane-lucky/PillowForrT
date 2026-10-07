@@ -78,6 +78,10 @@ var (
 	tlsCertWatchOn  = flag.Bool("tls-cert-watch", true, "watch the bridge for a server's certificate or TLS version changing in the way an interception looks (certificate change)")
 	tlsCertFile     = flag.String("tls-cert-file", "/data/proxy/tlscert.json", "where the certificate-change watch keeps its per-name baseline; empty keeps it in memory only")
 	ja3File         = flag.String("ja3-file", "/data/proxy/ja3-blocklist.txt", "known-malicious JA3 hashes, one '<md5 hash>,<name>' pair per line; empty or missing turns tls_ja3_match off")
+	ttlWatchOn      = flag.Bool("ttl-watch", true, "watch the bridge for a device forwarding for others behind it, read from the IP TTL of each connection's first packet (hidden router)")
+	ttlFile         = flag.String("ttl-file", "/data/proxy/ttlwatch.json", "devices marked expected by the hidden-router watch; empty keeps them in memory only")
+	adminTripOn     = flag.Bool("admin-tripwire", true, "raise an event when something knocks on the switched-off stock admin's ports 81 and 444 (stock admin tripwire)")
+	rebindFile      = flag.String("rebind-file", "/data/proxy/rebind.json", "DNS rebinding refusal settings (on/off, the names allowed to resolve to a private address)")
 	dhcpFPWatchOn   = flag.Bool("dhcp-fp-watch", true, "watch the bridge for DHCP fingerprint drift (option 55 shape changing on a MAC that had settled)")
 	rogueWatchOn    = flag.Bool("rogue-dhcp", true, "watch the bridge for DHCP replies from any server other than this Orbic")
 	linkFile        = flag.String("link-file", "/data/proxy/linkhist.json", "uplink latency and loss history (hourly, about 35 days)")
@@ -426,6 +430,7 @@ func main() {
 		dnsCanaryMgr = newDNSCanaryWatch()
 		dgaMgr = newDGAWatch()
 		dnsMITMMgr = newDNSMITMWatch()
+		rebindMgr = newRebindGuard(*rebindFile)
 	}
 	macChurnMgr = newMACChurnWatch()
 	torBypassMgr = newTorBypassWatch(*torExitFile)
@@ -441,6 +446,10 @@ func main() {
 	if *dhcpFPWatchOn {
 		dhcpFPMgr = newDHCPFPWatch()
 		dhcpFPMgr.Start()
+	}
+	if *ttlWatchOn {
+		ttlMgr = newTTLWatch(*ttlFile)
+		ttlMgr.Start()
 	}
 	if *rogueWatchOn {
 		rogueMgr = newRogueWatch()
@@ -459,6 +468,10 @@ func main() {
 	stockMgr = defaultStockAdmin()
 	stockAdminOff = stockMgr.Off
 	go stockMgr.Run()
+	if *adminTripOn {
+		adminTripMgr = newAdminTrip()
+		adminTripMgr.Start()
+	}
 	egressM = newEgressMgr(*egressFile)
 	go egressM.Run()
 	lanV6Mgr = defaultLanV6()

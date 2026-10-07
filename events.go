@@ -10,7 +10,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,6 +52,59 @@ type evt struct {
 	Text   string `json:"text"`   // for the page: may name a device
 	Public string `json:"public"` // generic: what may leave the house
 	Seen   bool   `json:"seen"`
+	Prev   string `json:"prev,omitempty"` // the hash of the event before this one (the chain, see eventChain)
+	Hash   string `json:"hash,omitempty"` // sha256 over prev, id, time, kind, severity and both texts; never over Seen, which the page changes
+}
+
+// The event log is a hash chain: every event stored carries the hash of the one before it, and the file keeps the hash of the last event it dropped off the front, so a
+// gap, an edit, a reordering or a truncation anywhere in the kept log breaks the chain and the page and the diagnostics say so and where. Honest limit: there is no secret
+// in it, so someone with a root shell on the box can rewrite the whole file, hashes and all; it defends against partial edits, corruption and silent loss, and it gives a
+// head hash that a companion computer can copy off the box (it is in /api/events) and compare later, which is the only real tamper evidence a single box can offer.
+func eventHash(prev string, e evt) string {
+	h := sha256.Sum256([]byte(prev + "|" + strconv.Itoa(e.ID) + "|" + strconv.FormatInt(e.T, 10) + "|" + e.Kind + "|" + e.Sev + "|" + e.Text + "|" + e.Public))
+	return hex.EncodeToString(h[:])
+}
+
+type eventChain struct {
+	OK       bool   `json:"ok"`
+	Length   int    `json:"length"`              // hashed events in the kept log
+	Since    int64  `json:"since,omitempty"`     // when the chain started (the oldest hashed event, or the clear that began it)
+	Head     string `json:"head,omitempty"`      // the newest event's hash: copy it somewhere else to compare later
+	BrokenAt int    `json:"broken_at,omitempty"` // the id of the first event whose link does not hold
+}
+
+// verifyChain walks the kept events: each hashed one must carry the previous hash (base for the oldest) and its own correct hash. Events from before the chain existed
+// (no hash) are tolerated only at the front.
+func verifyChain(base string, es []evt) eventChain {
+	c := eventChain{OK: true}
+	prev := base
+	for _, e := range es {
+		if e.Hash == "" {
+			if c.Length == 0 {
+				continue // an event from before the chain existed, in front of it
+			}
+			c.OK, c.BrokenAt = false, e.ID
+			return c
+		}
+		if e.Prev != prev || eventHash(e.Prev, e) != e.Hash {
+			c.OK, c.BrokenAt = false, e.ID
+			return c
+		}
+		if c.Length == 0 {
+			c.Since = e.T
+		}
+		c.Length++
+		prev = e.Hash
+		c.Head = e.Hash
+	}
+	return c
+}
+
+type eventsFileV2 struct {
+	Format string `json:"format"` // "orbic-events-2"
+	Base   string `json:"base"`   // the hash of the last event dropped off the front; "" when none has been
+	Since  int64  `json:"since"`  // when this chain began
+	Events []evt  `json:"events"`
 }
 
 type devObs struct{ MAC, IP, Band, Host string }
@@ -249,6 +304,8 @@ type eventStore struct {
 	cfgPath string
 	known   string
 	events  []evt
+	base    string // the hash of the last event dropped off the front of the kept log (the chain's anchor)
+	since   int64  // when the current chain began
 	next    int
 	cfg     notifyCfg
 	sent    []time.Time          // when notifications went out (rate limit)
@@ -261,7 +318,12 @@ type eventStore struct {
 func newEventStore() *eventStore {
 	s := &eventStore{path: *eventsFile, cfgPath: *notifyFile, known: *knownFile, lastOf: map[string]time.Time{}, now: time.Now, post: postNtfy}
 	if b, err := os.ReadFile(s.path); err == nil {
-		json.Unmarshal(b, &s.events)
+		var f eventsFileV2
+		if json.Unmarshal(b, &f) == nil && f.Format == "orbic-events-2" {
+			s.events, s.base, s.since = f.Events, f.Base, f.Since
+		} else {
+			json.Unmarshal(b, &s.events) // the older file: a bare array, nothing hashed yet; the chain starts with the next event
+		}
 	}
 	for _, e := range s.events {
 		if e.ID >= s.next {
@@ -277,7 +339,31 @@ func newEventStore() *eventStore {
 	return s
 }
 
-func (s *eventStore) saveEvents() { b, _ := json.Marshal(s.events); writeFileAtomic(s.path, b, 0o600) }
+func (s *eventStore) saveEvents() {
+	b, _ := json.Marshal(eventsFileV2{Format: "orbic-events-2", Base: s.base, Since: s.since, Events: s.events})
+	writeFileAtomic(s.path, b, 0o600)
+}
+
+// head is the hash the next event must carry: the newest hashed event's, else the base; called with the lock held.
+func (s *eventStore) head() string {
+	for i := len(s.events) - 1; i >= 0; i-- {
+		if s.events[i].Hash != "" {
+			return s.events[i].Hash
+		}
+	}
+	return s.base
+}
+
+// Chain verifies the kept log.
+func (s *eventStore) Chain() eventChain {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c := verifyChain(s.base, s.events)
+	if s.since != 0 {
+		c.Since = s.since
+	}
+	return c
+}
 
 // Add records events and pushes the ones that qualify.
 func (s *eventStore) Add(es []evt) {
@@ -292,12 +378,20 @@ func (s *eventStore) Add(es []evt) {
 		if e.T == 0 {
 			e.T = s.now().Unix()
 		}
+		e.Prev = s.head()
+		e.Hash = eventHash(e.Prev, e)
+		if s.since == 0 {
+			s.since = e.T
+		}
 		s.events = append(s.events, e)
 		if s.cfg.Enabled && s.cfg.URL != "" && sevRank(e.Sev) >= sevRank(s.cfg.Min) && s.allow(e) {
 			push = append(push, e)
 		}
 	}
 	if len(s.events) > 100 {
+		if h := s.events[len(s.events)-101].Hash; h != "" {
+			s.base = h // the dropped event's hash anchors what is kept
+		}
 		s.events = s.events[len(s.events)-100:]
 	}
 	s.saveEvents()
@@ -376,10 +470,16 @@ func (s *eventStore) MarkSeenKinds(kinds []string) int {
 	return n
 }
 
+// Clear empties the log and begins a new chain whose first link says so, so a cleared log is never mistaken for a wiped one.
 func (s *eventStore) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.events = nil
+	now := s.now().Unix()
+	s.events, s.base, s.since = nil, "", now
+	e := evt{ID: s.next, T: now, Kind: "events_cleared", Sev: sevInfo, Text: "The events log was cleared from the page; the hash chain starts again here", Public: "The events log was cleared"}
+	s.next++
+	e.Hash = eventHash("", e)
+	s.events = []evt{e}
 	s.saveEvents()
 }
 
@@ -395,6 +495,7 @@ type eventsView struct {
 	Events []evt      `json:"events"`
 	Unseen int        `json:"unseen"`
 	Notify notifyView `json:"notify"`
+	Chain  eventChain `json:"chain"`
 }
 
 func (s *eventStore) View() eventsView {
@@ -408,6 +509,10 @@ func (s *eventStore) View() eventsView {
 		}
 	}
 	v.Notify = notifyView{Enabled: s.cfg.Enabled, URLSet: s.cfg.URL != "", Min: s.cfg.Min, LastErr: s.lastErr}
+	v.Chain = verifyChain(s.base, s.events)
+	if s.since != 0 {
+		v.Chain.Since = s.since
+	}
 	if u, err := url.Parse(s.cfg.URL); err == nil && s.cfg.URL != "" {
 		v.Notify.Where = u.Host
 	}
