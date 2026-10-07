@@ -421,8 +421,12 @@ function tsrender(force){const el=$('ts');if(!Ts||guard(el,force))return;
  const f=Ts.findings||[];
  $('tsbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
  const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.dst)+'</td><td class="mut">'+(x.name?'sent the address itself as the TLS server name':'no server name (SNI) at all')+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">Almost every browser and app sends the hostname it wants in the clear, in the TLS ClientHello, even though everything after it is encrypted. A connection with no server name, or one whose server name is literally the destination address, is unusual (a few IoT devices and hand-configured tools do this on purpose). Needs no decryption; TLS 1.3 still hides the certificate itself, so this cannot also check for a self-signed cert.'+(Ts.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ const rows=f.map(x=>{let what;
+  if(x.ja3_name){what='<b class="err">TLS fingerprint matches known '+esc(x.ja3_name)+' client</b>'+(x.name?' <span class="mut">(server name: '+esc(x.name)+')</span>':'')+' <span class="mut">JA3 '+esc(x.ja3)+'</span>'}
+  else if(x.name===x.dst){what='sent the address itself as the TLS server name'}
+  else{what='no server name (SNI) at all'}
+  return '<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.dst)+'</td><td class="mut">'+what+'</td></tr>'}).join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">Almost every browser and app sends the hostname it wants in the clear, in the TLS ClientHello, even though everything after it is encrypted. A connection with no server name, or one whose server name is literally the destination address, is unusual (a few IoT devices and hand-configured tools do this on purpose). The ClientHello is also fingerprinted (JA3) and checked against an operator-supplied blocklist; a match is flagged here even when the server name looks ordinary, since it is a stronger signal than SNI alone. Needs no decryption; TLS 1.3 still hides the certificate itself, so this cannot also check for a self-signed cert.'+(Ts.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
 async function tsload(){try{Ts=await (await api('/api/tlssni')).json();tsrender()}catch(e){}}
 let Df=null;
 function dfrender(force){const el=$('df');if(!Df||guard(el,force))return;
