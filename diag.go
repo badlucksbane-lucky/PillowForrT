@@ -75,6 +75,7 @@ type diagInputs struct {
 	Link       *linkView
 	Tor        *torView
 	ARP        *arpView
+	Steer      *steerView
 	Chain      *eventChain // the event log's hash chain, when the store is up
 }
 
@@ -434,10 +435,22 @@ func evaluate(in diagInputs) []diagCheck {
 			add(ck("sec.arp", "Security", "ARP spoofing", "fail", fmt.Sprintf("%d address claim(s) in the last day look like impersonation (latest: %s claimed by %s)", a.Alerts, first.IP, first.MAC), "See the ARP watch card; find the device with that MAC."))
 		case !a.CaptureOK:
 			add(ck("sec.arp", "Security", "ARP spoofing", "warn", "the ARP watcher is not running", "It retries every minute."))
+		case a.Sweeps > 0:
+			add(ck("sec.arp", "Security", "ARP spoofing", "warn", fmt.Sprintf("%d host scan(s) of the LAN in the last day (one device asking for 20 or more addresses within a minute)%s", a.Sweeps, plural(len(a.Findings)-a.Sweeps, ", and %d address(es) quickly changed owner")), "A new phone or a discovery app does this once; a scanner or a worm keeps doing it. See the ARP watch card for the device."))
 		case len(a.Findings) > 0:
 			add(ck("sec.arp", "Security", "ARP spoofing", "warn", fmt.Sprintf("%d address(es) quickly changed owner in the last day", len(a.Findings)), "Often a device rejoining under a new random MAC; see the ARP watch card."))
 		default:
 			add(ck("sec.arp", "Security", "ARP spoofing", "ok", fmt.Sprintf("no impersonation seen (%d address claims watched)", a.Claims), ""))
+		}
+	}
+	if st := in.Steer; st != nil {
+		switch {
+		case st.Alerts > 0:
+			add(ck("sec.steer", "Security", "Other routers", "fail", fmt.Sprintf("%d router advertisement(s) or redirect(s) from %d device(s) other than the Orbic in the last day (latest: %s)", st.Alerts, st.Sources, st.Messages[0].MAC), "See the Steering watch card; find that device, or allow it there if it is a router you run yourself."))
+		case !st.CaptureOK:
+			add(ck("sec.steer", "Security", "Other routers", "warn", "the steering watcher is not running", "It retries every minute."))
+		default:
+			add(ck("sec.steer", "Security", "Other routers", "ok", fmt.Sprintf("only the Orbic has announced a route (%d of its own seen)", st.Honest), ""))
 		}
 	}
 	if r := in.Rogue; r != nil {
@@ -694,6 +707,10 @@ func gatherDiag() diagInputs {
 		v := arpMgr.View()
 		in.ARP = &v
 	}
+	if steerMgr != nil {
+		v := steerMgr.View()
+		in.Steer = &v
+	}
 	if _, err := os.Stat("/data/dnsmasq.pid"); err == nil {
 		in.Dnsmasq = readDnsmasq()
 	}
@@ -702,6 +719,14 @@ func gatherDiag() diagInputs {
 	}
 	wg.Wait()
 	return in
+}
+
+// plural formats n into format when n is above zero and gives "" otherwise, for an optional clause in a sentence.
+func plural(n int, format string) string {
+	if n <= 0 {
+		return ""
+	}
+	return fmt.Sprintf(format, n)
 }
 
 var (

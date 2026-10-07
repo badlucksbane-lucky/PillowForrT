@@ -168,3 +168,98 @@ func TestARPFindingsAgeOutAndBindingsAreBounded(t *testing.T) {
 		t.Errorf("a fast flood must stay bounded too: %d", n)
 	}
 }
+
+func TestParseARPRequest(t *testing.T) {
+	mac, sender, target, ok := parseARPRequest(arpFrame(1, otherMAC, "192.168.1.5", "192.168.1.77"))
+	if !ok || mac != otherMAC.String() || sender != "192.168.1.5" || target != "192.168.1.77" {
+		t.Errorf("%s %s %s %v", mac, sender, target, ok)
+	}
+	if _, sender, target, ok := parseARPRequest(arpFrame(1, otherMAC, "0.0.0.0", "192.168.1.77")); !ok || sender != "" || target != "192.168.1.77" {
+		t.Error("a probe from a device with no address yet still asks, and its sender is blank")
+	}
+	if _, _, _, ok := parseARPRequest(arpFrame(2, otherMAC, "192.168.1.5", "192.168.1.77")); ok {
+		t.Error("a reply asks for nothing")
+	}
+	if _, _, _, ok := parseARPRequest(arpFrame(1, otherMAC, "192.168.1.5", "0.0.0.0")); ok {
+		t.Error("a request for 0.0.0.0 is malformed")
+	}
+	if _, _, _, ok := parseARPRequest(arpFrame(1, otherMAC, "192.168.1.5", "192.168.1.77")[:40]); ok {
+		t.Error("truncated")
+	}
+}
+
+func TestARPSweep(t *testing.T) {
+	w, got, now := testARP()
+	ask := func(mac string, from, to int) {
+		for i := from; i < to; i++ {
+			w.observeRequest(mac, "192.168.1.5", net.IPv4(192, 168, 1, byte(i)).String())
+		}
+	}
+	// an honest device resolves a handful of peers over the day
+	ask(otherMAC.String(), 10, 15)
+	if len(*got) != 0 {
+		t.Fatalf("five asks are not a scan: %v", *got)
+	}
+	// the same address asked for again and again is one address, not twenty
+	for i := 0; i < 40; i++ {
+		w.observeRequest(otherMAC.String(), "192.168.1.5", "192.168.1.1")
+	}
+	if len(*got) != 0 {
+		t.Fatalf("repeats of one address are not a scan: %v", *got)
+	}
+	// a sweep: 20 different addresses inside a minute
+	ask(otherMAC.String(), 20, 40)
+	if len(*got) != 1 || (*got)[0].Kind != "arp_sweep" || (*got)[0].Sev != sevAttention {
+		t.Fatalf("%v", *got)
+	}
+	if p := (*got)[0].Public; strings.Contains(p, "192.168") || strings.Contains(p, "02:00") {
+		t.Errorf("public text must be generic: %q", p)
+	}
+	if !strings.Contains((*got)[0].Text, "different addresses within a minute") || !strings.Contains((*got)[0].Text, otherMAC.String()) {
+		t.Errorf("text: %s", (*got)[0].Text)
+	}
+	v := w.View()
+	if v.Sweeps != 1 || v.Alerts != 0 || len(v.Findings) != 1 || v.Findings[0].MAC != otherMAC.String() || v.Findings[0].IP != "192.168.1.5" || v.Findings[0].Count < 20 {
+		t.Errorf("a sweep is to look at, not an alert: %+v", v)
+	}
+	// the scan going on is not a new event every address
+	ask(otherMAC.String(), 40, 200)
+	if len(*got) != 1 {
+		t.Error("one event per asker per 10 minutes")
+	}
+	*now = now.Add(11 * time.Minute)
+	ask(otherMAC.String(), 40, 60)
+	if len(*got) != 2 {
+		t.Error("it speaks again after the cool-down, given a fresh run of asks")
+	}
+}
+
+func TestARPSweepIgnoresSlowAsksOffLANAndTheRouterItself(t *testing.T) {
+	w, got, now := testARP()
+	// 30 addresses, but one every 5 seconds: never 20 inside any one minute
+	for i := 0; i < 30; i++ {
+		*now = now.Add(5 * time.Second)
+		w.observeRequest(otherMAC.String(), "192.168.1.5", net.IPv4(192, 168, 1, byte(10+i)).String())
+	}
+	if len(*got) != 0 {
+		t.Errorf("a slow walk of the LAN is not a sweep: %v", *got)
+	}
+	// a device with a wrong netmask asking for the internet
+	for i := 0; i < 50; i++ {
+		w.observeRequest("ee:00:00:00:00:05", "192.168.1.6", net.IPv4(8, 8, byte(i), 8).String())
+	}
+	// the Orbic itself resolving everyone
+	for i := 0; i < 50; i++ {
+		w.observeRequest(bridgeMAC.String(), "192.168.1.1", net.IPv4(192, 168, 1, byte(10+i)).String())
+	}
+	if len(*got) != 0 || w.View().Sweeps != 0 {
+		t.Errorf("off-LAN targets and the router's own requests never count: %v", *got)
+	}
+	// a flood of invented askers stays bounded
+	for i := 0; i < 2000; i++ {
+		w.observeRequest(net.HardwareAddr{0x02, 0, 0, byte(i >> 8), byte(i), 1}.String(), "", "192.168.1.9")
+	}
+	if n := len(w.sweep); n > 300 {
+		t.Errorf("askers must stay bounded: %d", n)
+	}
+}

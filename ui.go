@@ -645,6 +645,26 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 			return
 		}
 		writeJSON(w, 200, adminTripMgr.View())
+	case path == "steer" && r.Method == http.MethodGet:
+		if steerMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, steerMgr.View())
+	case path == "steer/allow" && r.Method == http.MethodPost:
+		var b struct {
+			MAC   string
+			Allow bool
+		}
+		if steerMgr == nil || json.NewDecoder(r.Body).Decode(&b) != nil {
+			writeJSON(w, 400, map[string]string{"error": "bad request"})
+			return
+		}
+		if err := steerMgr.Allow(b.MAC, b.Allow); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, steerMgr.View())
 	case path == "rebind" && r.Method == http.MethodGet:
 		if rebindMgr == nil {
 			writeJSON(w, 200, map[string]any{"available": false})
@@ -1016,7 +1036,7 @@ var settingsPaths = map[string]bool{
 	"wifi": true, "dhcp": true, "cell": true, "diag": true, "diag/run": true, "diag/report": true, "cert": true, "cert/renew": true, "cert/download": true,
 	"ssh": true, "ssh/add": true, "ssh/delete": true, "sms": true, "devices": true, "devices/note": true, "graphs": true, "linkhist": true, "canary": true, "rogue-dhcp": true, "rogue-dhcp/allow": true, "arp": true, "tor": true, "tor/set": true, "tor/device": true, "tor/test": true, "speed": true, "speed/set": true, "speed/run": true, "canary/set": true, "canary/ignore": true, "actions": true, "actions/set": true, "actions/delete": true, "actions/run": true, "events": true, "events/seen": true, "events/clear": true, "notify/set": true, "notify/clear": true, "notify/test": true, "devices/wake": true, "devices/watch": true,
 	"system": true, "system/reboot": true, "system/stockadmin": true, "system/lanv6": true, "egress": true, "egress/set": true, "egress/allow": true, "egress/remove": true, "egress/service": true,
-	"dnscanary": true, "dnscanary/set": true, "macchurn": true, "torbypass": true, "beacon": true, "beacon/ignore": true, "dganxdomain": true, "tlssni": true, "tlscert": true, "lanannounce": true, "dnsxcheck": true, "dnsmitm": true, "dhcpfp": true, "ttl": true, "ttl/ignore": true, "admintrip": true, "rebind": true, "rebind/set": true, "rebind/allow": true,
+	"dnscanary": true, "dnscanary/set": true, "macchurn": true, "torbypass": true, "beacon": true, "beacon/ignore": true, "dganxdomain": true, "tlssni": true, "tlscert": true, "lanannounce": true, "dnsxcheck": true, "dnsmitm": true, "dhcpfp": true, "ttl": true, "ttl/ignore": true, "admintrip": true, "steer": true, "steer/allow": true, "rebind": true, "rebind/set": true, "rebind/allow": true,
 }
 
 func isSettingsPath(path string) bool {
