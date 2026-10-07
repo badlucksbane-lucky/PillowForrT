@@ -87,6 +87,7 @@ The box is a sensor other stacks can consume. Everything below is off until you 
 - **Event stream**: `/api/events/stream` is the event log as newline-delimited JSON in the shape of Suricata's EVE log, one `alert` record per event with the kind, severity and chain hash under `stone`, so Wazuh, Graylog, Loki, Vector, Elastic and anything with an EVE parser ingests it unchanged. `?since=<id>` resumes, `?follow=1` keeps the connection open. Behind the login or the script token; through the onion door only the generic sentence is sent.
 - **Syslog**: the same events as RFC 5424 messages over UDP to a collector on the LAN, with the chain fields as structured data so the collector's copy stays verifiable.
 - **Packet tap**: `/api/tap` streams what the bridge sees as a pcap file, so Suricata, Snort, Zeek or Wireshark on a companion computer read the LAN live without running on 77 MB of RAM. It is the one feature that exports raw frames with addresses in them, so it is off by default, LAN only, one at a time, an hour at most, and its own connection is excluded in the kernel filter. It sees what the detectors see: not traffic the radio relays Wi-Fi-to-Wi-Fi.
+- **WiGLE**: the serving cell (PLMN, tracking area, cell id, technology, signal) read from the modem over its AT port, stamped with the location a companion sends (the hotspot has no GPS: `scripts/gps-feed.sh` reads gpsd, a phone or a fixed position works too), and downloaded as a WiGLE CSV. Telemetry out only: no IMSI-catcher logic and no 2G-downgrade alarm, nothing here raises an event, and the cell and the location never appear in `/status.json`, `/metrics`, a notification or the event exports. Off until you give the port; a probe button finds it.
 - **Home Assistant**: with a broker on the LAN the box announces itself through MQTT discovery (uplink, latency, Wi-Fi clients, temperature, events, data used, DNS counters, encrypted DNS, VPN, Tor), a presence tracker per device, each event on an MQTT topic for automations, and optionally a switch per device that pauses its internet. Plain MQTT to the LAN only; the broker password is kept at mode 0600 and is never shown back or snapshotted.
 
 ## How it is put together
@@ -99,14 +100,14 @@ The box is a sensor other stacks can consume. Everything below is off until you 
 ## Build and test
 ```
 ./build.sh                       # cross-builds ./tinyfwd for the hotspot and prints its SHA-256
-GOFLAGS=-mod=vendor go test ./...  # the unit tests, offline (324 of them at the time of writing)
+GOFLAGS=-mod=vendor go test ./...  # the unit tests, offline (334 of them at the time of writing)
 ```
 Needs Go 1.24 or newer and nothing from the network. The deploy script checks the printed hash on the unit, and `-buildvcs=false` in `build.sh` is what keeps that hash reproducible. The rule evaluation, planners and thresholds are pure functions so the tests cover them without hardware; the installer has its own tests under `install/test/`.
 
 ## Repository map
 | Path | What is there |
 |---|---|
-| `*.go` | The daemon, one file per feature, each opening with a comment that says what it does and where its claims stop. Start with `main.go`, then `dnsproxy.go`, `egress.go`, `events.go`; `tlssni.go` and `tlscert.go` are the two halves of the TLS handshake, `lanannounce.go` the device inventory, `dnsxcheck.go` the second opinion on DNS, `rebind.go` the rebinding refusal, `ttlwatch.go` the hidden-router watch, `admintrip.go` the stock admin tripwire; `export.go`, `tap.go`, `hass.go` and `mqtt.go` feed other tools |
+| `*.go` | The daemon, one file per feature, each opening with a comment that says what it does and where its claims stop. Start with `main.go`, then `dnsproxy.go`, `egress.go`, `events.go`; `tlssni.go` and `tlscert.go` are the two halves of the TLS handshake, `lanannounce.go` the device inventory, `dnsxcheck.go` the second opinion on DNS, `rebind.go` the rebinding refusal, `ttlwatch.go` the hidden-router watch, `admintrip.go` the stock admin tripwire; `export.go`, `tap.go`, `hass.go` and `mqtt.go` feed other tools, `cell.go` the tower telemetry |
 | `ui.html`, `login.html` | The single-page UI and the sign-in page, embedded in the binary |
 | `docs/` | [`INSTALL.md`](docs/INSTALL.md), [`THREAT-MODEL.md`](docs/THREAT-MODEL.md), [`SECURITY.md`](docs/SECURITY.md) |
 | `scripts/` | Run from a trusted computer on the LAN over SSH: deploy the binary with rollback, push the guard, set the login, copy files, call the API. `wpad-guard.sh` and `dhcp-hook.sh` run on the unit |

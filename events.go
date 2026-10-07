@@ -5,7 +5,7 @@ package main
 // crossing a threshold, and restarts. Events are kept (newest 100, /data/proxy/events.json) and shown on the page. Optionally each event of sufficient severity is also pushed to an
 // ntfy topic you choose: that is OUTWARD-FACING, so it is off until you give a URL, and what is sent is a generic sentence only (never a name, MAC, address, message or key). The
 // plain /status.json carries only counts of unseen events, for an outside watcher, who can then ask the page for detail.
-// Tower changes are not detected: the modem gives us no tower data (see the cellular page).
+// Tower changes are not detected on purpose: the tower telemetry in cell.go is export only (WiGLE), not a detector.
 
 import (
 	"bytes"

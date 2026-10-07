@@ -84,6 +84,8 @@ func hassEntities(prefix, node string) []hassEntity {
 		mk("sensor", "dns_blocked", "DNS blocked", map[string]any{"value_template": "{{ value_json.dns_blocked }}", "state_class": "total_increasing", "icon": "mdi:dns-outline"}),
 		mk("binary_sensor", "dns_encrypted", "Encrypted DNS", map[string]any{"value_template": "{{ value_json.dns_encrypted }}", "payload_on": "on", "payload_off": "off", "icon": "mdi:lock"}),
 		mk("binary_sensor", "vpn", "VPN", map[string]any{"device_class": "connectivity", "value_template": "{{ value_json.vpn }}", "payload_on": "on", "payload_off": "off"}),
+		mk("sensor", "cell", "Serving cell", map[string]any{"value_template": "{{ value_json.cell }}", "icon": "mdi:radio-tower"}),
+		mk("sensor", "cell_signal", "Cell signal", map[string]any{"unit_of_measurement": "dBm", "device_class": "signal_strength", "value_template": "{{ value_json.cell_dbm }}", "state_class": "measurement"}),
 		mk("binary_sensor", "tor", "Tor", map[string]any{"device_class": "connectivity", "value_template": "{{ value_json.tor }}", "payload_on": "on", "payload_off": "off"}),
 	}
 }
@@ -114,6 +116,8 @@ type hassState struct {
 	DNSEncrypted string  `json:"dns_encrypted"`
 	VPN          string  `json:"vpn"`
 	Tor          string  `json:"tor"`
+	Cell         string  `json:"cell"`     // "LTE 310-410 tac 12345 cell 67890123", or "" when the tower watch is off
+	CellSignal   int     `json:"cell_dbm"` // RSRP when known, else RSSI
 }
 
 func onOff(b bool) string {
@@ -147,6 +151,15 @@ func hassStateFrom(in metricsIn, lastEvent string) hassState {
 	}
 	s.VPN = onOff(in.VPN != nil && in.VPN.Up)
 	s.Tor = onOff(in.Tor != nil && in.Tor.Ready)
+	if towers != nil {
+		if c := towers.View().Current; c != nil {
+			s.Cell = fmt.Sprintf("%s %d-%s tac %d cell %d", c.Tech, c.MCC, c.MNC, c.TAC, c.CI)
+			s.CellSignal = c.RSSI
+			if c.RSRP != 0 {
+				s.CellSignal = int(c.RSRP)
+			}
+		}
+	}
 	return s
 }
 
