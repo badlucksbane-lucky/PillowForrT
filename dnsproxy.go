@@ -517,6 +517,9 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 		if dgaMgr != nil && dq.Class == qclassI && rcodeOf(resp) == 3 {
 			dgaMgr.Observe(client, dq.Name, t0)
 		}
+		if dnsMITMMgr != nil && dq.Class == qclassI {
+			dnsMITMMgr.Observe(client, dq.Name, resp, t0)
+		}
 		finish("cached")
 		return resp
 	}
@@ -553,6 +556,9 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	}
 	if dgaMgr != nil && dq.Class == qclassI && rcodeOf(resp) == 3 {
 		dgaMgr.Observe(client, dq.Name, t0)
+	}
+	if dnsMITMMgr != nil && dq.Class == qclassI {
+		dnsMITMMgr.Observe(client, dq.Name, resp, t0)
 	}
 	finish(via)
 	return resp

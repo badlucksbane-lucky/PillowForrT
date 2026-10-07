@@ -264,6 +264,23 @@ type arpView struct {
 	Alerts    int          `json:"alerts"`   // arp_gateway and arp_conflict in the last 24 hours
 }
 
+// RecentImpersonation reports whether an arp_gateway or arp_conflict finding (never arp_flip, which is only "to look at") landed within the last `within` of now. Used by
+// dnsmitm.go to raise a suspect DNS redirect to a confirmed one when both signs show up close together.
+func (w *arpWatch) RecentImpersonation(within time.Duration, now time.Time) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for i := len(w.finds) - 1; i >= 0; i-- {
+		f := w.finds[i]
+		if now.Unix()-f.T > int64(within.Seconds()) {
+			break
+		}
+		if f.Kind == "arp_gateway" || f.Kind == "arp_conflict" {
+			return true
+		}
+	}
+	return false
+}
+
 func (w *arpWatch) View() arpView {
 	w.mu.Lock()
 	defer w.mu.Unlock()

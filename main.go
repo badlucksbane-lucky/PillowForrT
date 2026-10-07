@@ -412,6 +412,7 @@ func main() {
 	if dnsProxy != nil {
 		dnsCanaryMgr = newDNSCanaryWatch()
 		dgaMgr = newDGAWatch()
+		dnsMITMMgr = newDNSMITMWatch()
 	}
 	macChurnMgr = newMACChurnWatch()
 	torBypassMgr = newTorBypassWatch(*torExitFile)

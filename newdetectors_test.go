@@ -19,6 +19,7 @@ func TestNewDetectorViewsAreNeverNull(t *testing.T) {
 		"dga":       newDGAWatch().View(),
 		"tlssni":    newTLSSNIWatch().View(),
 		"dhcpfp":    newDHCPFPWatch().View(),
+		"dnsmitm":   newDNSMITMWatch().View(),
 	}
 	for name, v := range cases {
 		b, err := json.Marshal(v)
