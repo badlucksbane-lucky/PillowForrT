@@ -38,7 +38,7 @@ Tested on one unit; see ["Check it yourself"](docs/INSTALL.md#check-it-yourself)
 - **A web page over HTTPS** behind one bcrypt login with a session cookie and CSRF token; optional API-key token for scripts, off by default. Key-only SSH. No telemetry. Nothing leaves the house unless you configure it.
 
 ## What it watches for
-Eleven detectors run on the box, most of them reading the LAN bridge through an `AF_PACKET` socket with a kernel filter that passes only the frames they need. Each finding becomes an event at one of two levels: **alert** (something is impersonating or steering the network) or **to look at** (unusual, with a benign explanation possible). Each detector's source file opens with its honest limits; the main one is shared: traffic the radio relays Wi-Fi-to-Wi-Fi never reaches the bridge, though broadcasts and anything aimed at the router do.
+Eleven detectors run on the box, most of them reading the LAN bridge through an `AF_PACKET` socket with a kernel filter that passes only the frames they need. Each finding becomes an event at one of two levels: **alert** (something is impersonating or steering the network) or **to look at** (unusual, with a benign explanation possible). ["The detectors"](docs/INSTALL.md#8-the-detectors) in `docs/INSTALL.md` covers running them: checking capture, quieting a known-good source, push notifications, and turning one off. Each detector's source file opens with its honest limits; the main one is shared: traffic the radio relays Wi-Fi-to-Wi-Fi never reaches the bridge, though broadcasts and anything aimed at the router do.
 
 | Card | What it sees | Findings |
 |---|---|---|

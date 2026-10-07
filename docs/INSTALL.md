@@ -131,6 +131,92 @@ A fresh install **only reports** what your devices tried to reach. On the **Syst
 same card, tick the services your devices really need, and only then switch to enforcing. Turning on
 enforcement first will break things you did not know you used.
 
+## 8. The detectors
+Eleven passive detectors watch the LAN and raise events; the README's ["What it watches for"](../README.md#what-it-watches-for)
+says what each one looks for. This section is about running them: checking they work, reading what
+they say, quieting a known-good source, and turning one off. Nothing here is required: every detector
+is on from the first start (except the Tor relay check, below) and needs no setup.
+
+### Check they are capturing
+Most detectors read the bridge through a raw packet socket, which needs the daemon's capabilities
+from the init script. Each card (**ARP watch**, **Rogue DHCP**, **Canary**, **Bare-IP TLS**,
+**DHCP fingerprint drift**) shows whether its capture is running; the **Canary** card also shows whether
+the decoy address is on the bridge, and the **Rogue DHCP** card counts the honest replies it has seen
+from the unit itself, so a zero there after a device has joined means it is not seeing the wire.
+A card that says capture is off means the raw socket could not be opened; the init script
+`/etc/init.d/http_proxy` starts the daemon with the capabilities that needs, so check the daemon was
+started from there and read `/data/proxy/tinyfwd.log`.
+
+Two cheap tests from a device on the LAN: `ping 192.168.1.253` should produce a **Canary** event
+within seconds, and a shell loop that looks up 20 or more made-up names inside five minutes should
+produce an **NXDOMAIN flood** event (a handful of typos never will; 20 distinct failing names from one
+device is the threshold).
+
+### Read them
+Every finding is an event, on the **Events** card and on the detector's own card, at one of two
+levels. **Alert** means something is impersonating or steering the network (`arp_gateway`,
+`arp_conflict`, `dns_mitm_confirmed`, `rogue_dhcp`). **To look at** means unusual, with a benign
+explanation possible (everything else: `arp_flip`, `canary`, `canary_scan`, `tls_bare_ip`,
+`dhcp_fingerprint_drift`, `dns_canary`, `dns_plain_fallback`, `dns_exfil`, `dns_nxdomain_flood`,
+`dns_mitm_suspect`, `tor_bypass_exit`, `tor_bypass_onion`, `beacon_pattern`, and the MAC churn pair).
+Each detector's source file opens with its false positives; the ones to expect on an ordinary LAN:
+- `arp_flip` and MAC churn from phones that rejoin with a fresh random MAC;
+- `dhcp_fingerprint_drift` after a device's OS update;
+- `beacon_pattern` from mail clients, chat apps, smart-home devices and backup software, which all poll on
+  a schedule. This is the noisiest detector by design and never rises above "to look at";
+- `tls_bare_ip` from a few IoT devices that talk to a hard-coded address.
+
+The text of an event never names a device or an address; the card does, to someone signed in. Events are
+rate-limited per source (typically one per 10 minutes, one per MAC per day for fingerprint drift), so a
+quiet card does not mean the thing stopped.
+
+### Quiet a known-good source
+Each card that has a benign case lets you mark it, from the page, without turning the detector off:
+- **Canary**: ignore a MAC (a scanner you run yourself);
+- **DNS canary**: ignore a MAC (a DNS research tool);
+- **Beacon patterns**: mark a device-to-destination pair as expected;
+- **Rogue DHCP**: allow a second server by its MAC (a router or lab DHCP server you run on purpose).
+  It is matched by MAC, never by IP, so a forged gateway address is still caught.
+Those marks are kept in the detector's own file under `/data/proxy/` and survive restarts. The other
+detectors have no allow-list; their rate limits are the only quieting, and they are not meant to be
+turned off per device.
+
+### Push notifications
+By default nothing leaves the unit. On the **Events** card, give an ntfy address
+(`https://ntfy.sh/your-secret-topic`, or plain `http://` only to a server on the LAN) and pick the lowest
+level to push; the default is "to look at" and above. What is sent is the generic sentence only, never
+a name, MAC or address. Pushes are held to one per kind per 10 minutes and 20 an hour, so a flood on the
+page is a few pushes on your phone.
+
+### The Tor relay check
+`tor_bypass_exit` (a device running its own Tor client, outside the unit's Tor controls) needs a list of
+relay addresses, and the unit will not fetch one on its own. It ships with the list empty and the
+check off. To turn it on, put one IP or CIDR per line (`#` comments allowed) in
+`/data/proxy/tor-exits.txt`:
+```
+scripts/orbic-push.sh tor-exits.txt /data/proxy/tor-exits.txt 644
+```
+Keep it current yourself; relays change by the hour, and a stale list means silence, not "nothing is
+wrong". The `.onion` half of the same card (`tor_bypass_onion`) needs no list.
+
+### Turn one off
+**Canary** and **DNS canary** have a switch on their cards. The rest are on while the daemon runs, with
+these exceptions set on the daemon's command line in `/etc/init.d/http_proxy` (the deploy script does
+not touch that file; change it over ssh and restart the service):
+
+| Flag | Default | Turns off |
+|---|---|---|
+| `-arp-watch=false` | on | ARP watch, and with it MAC churn and the ARP half of the ARP / DNS correlation |
+| `-rogue-dhcp=false` | on | Rogue DHCP |
+| `-tls-sni-watch=false` | on | Bare-IP TLS |
+| `-dhcp-fp-watch=false` | on | DHCP fingerprint drift |
+| `-canary ""` | `192.168.1.253` | The canary entirely, including the decoy address on the bridge |
+| `-tor-exit-file ""` | `/data/proxy/tor-exits.txt` | The Tor relay check (an empty or missing file does the same) |
+
+The detectors inside the DNS stub (DNS canary, NXDOMAIN flood, ARP / DNS correlation, the `.onion`
+check) and the beacon detector ride the stub and the outbound sampler and have no flag of their own:
+they stop when those do (`-dns-listen ""`, or the outbound services mode set to off).
+
 ## If something goes wrong
 - The program does not answer: the deploy script already rolled back. To check by hand,
   `ssh orbic 'wget -q -O - http://127.0.0.1:3128/status.json'`.
