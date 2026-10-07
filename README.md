@@ -3,7 +3,7 @@
 # Stone of Heimdall
 ### watchman for your hotspot
 
-**A privacy and intrusion-watching firmware layer for the Orbic RC400L cellular hotspot.** One static Go binary (`tinyfwd`) replaces the stock admin page and takes over DNS, the firewall, Wi-Fi settings and the exits, then sits on the LAN bridge and watches the wire. It filters DNS and forces it to leave encrypted, sends chosen devices through a VPN or Tor, closes the IPv6 and WebRTC address leaks, blocks outbound services you have not approved, and raises an event when something on your network behaves like a scanner, a spoofer, a rogue router or malware phoning home.
+**A privacy and intrusion-watching firmware layer for the Orbic RC400L cellular hotspot.** One static Go binary (`tinyfwd`) replaces the stock admin page and takes over DNS, the firewall, Wi-Fi settings and the exits, then sits on the LAN bridge and watches the wire. It filters DNS and forces it to leave encrypted, sends chosen devices through a VPN or Tor, closes the IPv6 and WebRTC address leaks, blocks outbound services you have not approved, and raises an event when something on your network behaves like a scanner, a spoofer, a rogue router, malware phoning home, or an interception box sitting in the path to the internet.
 
 **It watches before it guards.** A fresh install only reports what your devices tried to reach (the "would be refused" list), and you decide what to allow before anything is enforced. Every detector is passive: nothing is ever sent, nothing is decrypted, and the text of an event never names a device or an address.
 
@@ -38,7 +38,7 @@ Tested on one unit; see ["Check it yourself"](docs/INSTALL.md#check-it-yourself)
 - **A web page over HTTPS** behind one bcrypt login with a session cookie and CSRF token; optional API-key token for scripts, off by default. Key-only SSH. No telemetry. Nothing leaves the house unless you configure it.
 
 ## What it watches for
-Fourteen detectors run on the box, most of them reading the LAN bridge through an `AF_PACKET` socket with a kernel filter that passes only the frames they need. Each finding becomes an event at one of two levels: **alert** (something is impersonating or steering the network) or **to look at** (unusual, with a benign explanation possible). ["The detectors"](docs/INSTALL.md#8-the-detectors) in `docs/INSTALL.md` covers running them: checking capture, quieting a known-good source, push notifications, and turning one off. Each detector's source file opens with its honest limits; the main one is shared: traffic the radio relays Wi-Fi-to-Wi-Fi never reaches the bridge, though broadcasts and anything aimed at the router do.
+Fourteen detectors run on the box, most of them reading the LAN bridge through an `AF_PACKET` socket with a kernel filter that passes only the frames they need. Each finding becomes an event at one of two levels: **alert** (something is impersonating or steering the network) or **to look at** (unusual, with a benign explanation possible); the LAN announcements card adds a third, **info**, for a device announcing a new service, which is inventory rather than a finding. Three detectors keep a baseline on flash (which certificate and TLS version a name presented, what each device announced, which addresses two resolvers gave) and raise only on a change from it, so the first days after an install are the quiet period in which they learn the house. ["The detectors"](docs/INSTALL.md#8-the-detectors) in `docs/INSTALL.md` covers running them: checking capture, quieting a known-good source, push notifications, and turning one off. Each detector's source file opens with its honest limits; the main one is shared: traffic the radio relays Wi-Fi-to-Wi-Fi never reaches the bridge, though broadcasts, multicast and anything aimed at the router do, and anything headed for the internet passes through it.
 
 | Card | What it sees | Findings |
 |---|---|---|
@@ -57,7 +57,7 @@ Fourteen detectors run on the box, most of them reading the LAN bridge through a
 | **Tor / proxy bypass** | Outbound connections and `.onion` queries | A device not assigned to the house's Tor path reaching a known Tor relay (ships with the relay list empty and off until you populate it); a device asking for a `.onion` while house-wide `.onion` is off |
 | **Beacon patterns** | New connections per (device, destination) pair over two hours, from the same sampler the allow-list uses | Connections spaced regularly, 30 seconds to an hour apart. Deliberately the noisiest detector: IMAP idle, chat heartbeats and smart-home polling look exactly like this, so it is never more than "to look at" |
 
-Rate limits keep the page readable (typically one event per source per 10 minutes), the canary, DNS canary and beacon detectors let a device or destination be marked expected and a known second DHCP server can be allowed by MAC, and the firmware's own **events** detector adds the ordinary signals: a device never seen before, the uplink down and back, encrypted DNS failing, a service dying, the box running hot, bursts of failed ssh logins, a radio dropping out, the certificate renewed, the data plan crossing a threshold, restarts. Events can be pushed to an [ntfy](https://ntfy.sh) topic you choose; that is the one outward-facing feature, so it is off until you give a URL, and what is sent is a generic sentence only.
+Rate limits keep the page readable (typically one event per source per 10 minutes, one per name per hour for the baseline detectors), the canary, DNS canary and beacon detectors let a device or destination be marked expected and a known second DHCP server can be allowed by MAC, and the firmware's own **events** detector adds the ordinary signals: a device never seen before, the uplink down and back, encrypted DNS failing, a service dying, the box running hot, bursts of failed ssh logins, a radio dropping out, the certificate renewed, the data plan crossing a threshold, restarts. Events can be pushed to an [ntfy](https://ntfy.sh) topic you choose; that is the one outward-facing feature, so it is off until you give a URL, and what is sent is a generic sentence only.
 
 ## The rest of the page
 One single-page web UI with collapsible cards. Besides the filter, exits and detectors above:
@@ -86,14 +86,14 @@ One single-page web UI with collapsible cards. Besides the filter, exits and det
 ## Build and test
 ```
 ./build.sh                       # cross-builds ./tinyfwd for the hotspot and prints its SHA-256
-GOFLAGS=-mod=vendor go test ./...  # the unit tests, offline (252 of them at the time of writing)
+GOFLAGS=-mod=vendor go test ./...  # the unit tests, offline (275 of them at the time of writing)
 ```
 Needs Go 1.24 or newer and nothing from the network. The deploy script checks the printed hash on the unit, and `-buildvcs=false` in `build.sh` is what keeps that hash reproducible. The rule evaluation, planners and thresholds are pure functions so the tests cover them without hardware; the installer has its own tests under `install/test/`.
 
 ## Repository map
 | Path | What is there |
 |---|---|
-| `*.go` | The daemon, one file per feature, each opening with a comment that says what it does and where its claims stop. Start with `main.go`, then `dnsproxy.go`, `egress.go`, `events.go` |
+| `*.go` | The daemon, one file per feature, each opening with a comment that says what it does and where its claims stop. Start with `main.go`, then `dnsproxy.go`, `egress.go`, `events.go`; `tlssni.go` and `tlscert.go` are the two halves of the TLS handshake, `lanannounce.go` the device inventory, `dnsxcheck.go` the second opinion on DNS |
 | `ui.html`, `login.html` | The single-page UI and the sign-in page, embedded in the binary |
 | `docs/` | [`INSTALL.md`](docs/INSTALL.md), [`THREAT-MODEL.md`](docs/THREAT-MODEL.md), [`SECURITY.md`](docs/SECURITY.md) |
 | `scripts/` | Run from a trusted computer on the LAN over SSH: deploy the binary with rollback, push the guard, set the login, copy files, call the API. `wpad-guard.sh` and `dhcp-hook.sh` run on the unit |
@@ -104,7 +104,7 @@ Needs Go 1.24 or newer and nothing from the network. The deploy script checks th
 
 ## What it does not do
 - It is not anonymity. Your carrier still knows where your hotspot is and sees connection metadata. The VPN provider sees what the carrier otherwise would.
-- It cannot see inside encrypted traffic and does not try to. The detectors read what is already in the clear (ARP, DHCP, the TLS ClientHello, DNS inside the stub, connection metadata) and nothing else.
+- It cannot see inside encrypted traffic and does not try to. The detectors read what is already in the clear (ARP, DHCP, mDNS and SSDP announcements, both plaintext halves of the TLS handshake, DNS inside the stub, connection metadata) and nothing else. TLS 1.3 hides the server's certificate, so the certificate-change watch sees only TLS 1.2 certificates and the negotiated version of everything.
 - Detectors are signals, not proof. Each one states its false positives, and the noisier ones never rise above "to look at".
 - It has been tested on **one unit** of one model on one carrier. Rooting the hotspot may void its warranty or breach the carrier's terms, and reading some flash partitions can freeze the device until a power cycle. You are responsible for your own hardware.
 
