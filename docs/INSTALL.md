@@ -139,7 +139,7 @@ is on from the first start (except the Tor relay check, below) and needs no setu
 
 ### Check they are capturing
 Most detectors read the bridge through a raw packet socket, which needs the daemon's capabilities
-from the init script. Each card (**ARP watch**, **Rogue DHCP**, **Canary**, **Bare-IP TLS**,
+from the init script. Each card (**ARP watch**, **Rogue DHCP**, **Canary**, **Bare-IP TLS**, **Certificate change**,
 **DHCP fingerprint drift**) shows whether its capture is running; the **Canary** card also shows whether
 the decoy address is on the bridge, and the **Rogue DHCP** card counts the honest replies it has seen
 from the unit itself, so a zero there after a device has joined means it is not seeing the wire.
@@ -222,6 +222,7 @@ not touch that file; change it over ssh and restart the service):
 | `-arp-watch=false` | on | ARP watch, and with it MAC churn and the ARP half of the ARP / DNS correlation |
 | `-rogue-dhcp=false` | on | Rogue DHCP |
 | `-tls-sni-watch=false` | on | Bare-IP TLS, and with it the JA3 fingerprint check |
+| `-tls-cert-watch=false` | on | Certificate change (and `-tls-cert-file ""` keeps its per-name baseline in memory only instead of `/data/proxy/tlscert.json`) |
 | `-dhcp-fp-watch=false` | on | DHCP fingerprint drift |
 | `-canary ""` | `192.168.1.253` | The canary entirely, including the decoy address on the bridge |
 | `-tor-exit-file ""` | `/data/proxy/tor-exits.txt` | The Tor relay check (an empty or missing file does the same) |

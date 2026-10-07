@@ -72,6 +72,8 @@ var (
 	rogueFile      = flag.String("rogue-file", "/data/proxy/rogue.json", "DHCP servers the owner allowed (their MAC addresses)")
 	torExitFile    = flag.String("tor-exit-file", "/data/proxy/tor-exits.txt", "known Tor relay/bridge addresses, one IP or CIDR per line; empty or missing turns tor_bypass_exit off")
 	tlsSNIWatchOn  = flag.Bool("tls-sni-watch", true, "watch the bridge for TLS connections with no SNI or an IP-literal SNI (bare-IP TLS), and for a JA3 fingerprint match")
+	tlsCertWatchOn = flag.Bool("tls-cert-watch", true, "watch the bridge for a server's certificate or TLS version changing in the way an interception looks (certificate change)")
+	tlsCertFile    = flag.String("tls-cert-file", "/data/proxy/tlscert.json", "where the certificate-change watch keeps its per-name baseline; empty keeps it in memory only")
 	ja3File        = flag.String("ja3-file", "/data/proxy/ja3-blocklist.txt", "known-malicious JA3 hashes, one '<md5 hash>,<name>' pair per line; empty or missing turns tls_ja3_match off")
 	dhcpFPWatchOn  = flag.Bool("dhcp-fp-watch", true, "watch the bridge for DHCP fingerprint drift (option 55 shape changing on a MAC that had settled)")
 	rogueWatchOn   = flag.Bool("rogue-dhcp", true, "watch the bridge for DHCP replies from any server other than this Orbic")
@@ -421,6 +423,10 @@ func main() {
 	if *tlsSNIWatchOn {
 		tlsSNIMgr = newTLSSNIWatch(*ja3File)
 		tlsSNIMgr.Start()
+	}
+	if *tlsCertWatchOn {
+		tlsCertMgr = newTLSCertWatch(*tlsCertFile)
+		tlsCertMgr.Start()
 	}
 	if *dhcpFPWatchOn {
 		dhcpFPMgr = newDHCPFPWatch()
