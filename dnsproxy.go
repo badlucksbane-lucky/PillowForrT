@@ -298,37 +298,44 @@ func (u *Upstream) inFallback() bool {
 	return u.fb
 }
 
-func (u *Upstream) doh(q []byte) ([]byte, error) {
-	body := append([]byte(nil), q...)
-	setID(body, 0) // RFC 8484: id 0 makes the request cache-friendly; the caller restores the client's id
+func (u *Upstream) doh(q []byte) ([]byte, string, error) {
 	var last error
 	for _, url := range u.cfg.DoHURLs {
-		ctx, cancel := context.WithTimeout(context.Background(), u.cfg.DoHTimeout)
-		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/dns-message")
-		req.Header.Set("Accept", "application/dns-message")
-		t0 := time.Now()
-		resp, err := u.client.Do(req)
+		b, err := u.dohOne(url, q)
 		if err == nil {
-			b, rerr := io.ReadAll(io.LimitReader(resp.Body, 65536))
-			resp.Body.Close()
-			switch {
-			case rerr != nil:
-				err = rerr
-			case resp.StatusCode != 200:
-				err = fmt.Errorf("%s answered HTTP %d", url, resp.StatusCode)
-			case len(b) < 12 || b[2]&0x80 == 0:
-				err = fmt.Errorf("%s sent a bad DNS message", url)
-			default:
-				cancel()
-				u.lastMS.Store(time.Since(t0).Milliseconds())
-				return b, nil
-			}
+			return b, url, nil
 		}
-		cancel()
 		last = err
 	}
-	return nil, last
+	return nil, "", last
+}
+
+// dohOne asks one DoH resolver. The resolver cross-check (dnsxcheck.go) uses it to ask the resolver that did not answer a query.
+func (u *Upstream) dohOne(url string, q []byte) ([]byte, error) {
+	body := append([]byte(nil), q...)
+	setID(body, 0) // RFC 8484: id 0 makes the request cache-friendly; the caller restores the client's id
+	ctx, cancel := context.WithTimeout(context.Background(), u.cfg.DoHTimeout)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/dns-message")
+	req.Header.Set("Accept", "application/dns-message")
+	t0 := time.Now()
+	resp, err := u.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	b, rerr := io.ReadAll(io.LimitReader(resp.Body, 65536))
+	resp.Body.Close()
+	switch {
+	case rerr != nil:
+		return nil, rerr
+	case resp.StatusCode != 200:
+		return nil, fmt.Errorf("%s answered HTTP %d", url, resp.StatusCode)
+	case len(b) < 12 || b[2]&0x80 == 0:
+		return nil, fmt.Errorf("%s sent a bad DNS message", url)
+	}
+	u.lastMS.Store(time.Since(t0).Milliseconds())
+	return b, nil
 }
 
 func (u *Upstream) plainServers() []string {
@@ -405,7 +412,7 @@ func (u *Upstream) probeLoop() {
 	probe := mkProbeQuery()
 	for {
 		time.Sleep(u.cfg.ProbeEvery)
-		if _, err := u.doh(probe); err == nil {
+		if _, _, err := u.doh(probe); err == nil {
 			u.mu.Lock()
 			u.fb, u.probing, u.lastOK = false, false, time.Now()
 			u.mu.Unlock()
@@ -425,28 +432,34 @@ func mkProbeQuery() []byte {
 
 // Resolve answers q (a client query with its own id). via is "doh" or "plain".
 func (u *Upstream) Resolve(q []byte) ([]byte, string, error) {
+	b, via, _, err := u.ResolveFrom(q)
+	return b, via, err
+}
+
+// ResolveFrom is Resolve, also naming the DoH resolver that answered (empty for a plain answer).
+func (u *Upstream) ResolveFrom(q []byte) ([]byte, string, string, error) {
 	if !u.inFallback() {
-		b, err := u.doh(q)
+		b, url, err := u.doh(q)
 		if err == nil {
 			u.DoHOK.Add(1)
 			u.mu.Lock()
 			u.lastOK = time.Now()
 			u.failSince, u.lastFail = time.Time{}, time.Time{} // a success ends any run of failures
 			u.mu.Unlock()
-			return b, "doh", nil
+			return b, "doh", url, nil
 		}
 		u.DoHFail.Add(1)
 		if u.holdOff(err) {
-			return nil, "", err // encrypted DNS is failing, but not for long enough to send anything in the clear: the client gets a SERVFAIL and retries
+			return nil, "", "", err // encrypted DNS is failing, but not for long enough to send anything in the clear: the client gets a SERVFAIL and retries
 		}
 		u.enterFallback(err)
 	}
 	b, err := u.plain(q)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	u.PlainOK.Add(1)
-	return b, "plain", nil
+	return b, "plain", "", nil
 }
 
 // ---------- the pipeline ----------
@@ -524,12 +537,12 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 		return resp
 	}
 	var resp []byte
-	var via string
+	var via, fromURL string
 	if viaVPN {
 		resp, err = p.VPN.ResolveDNS(q)
 		via = "vpn"
 	} else {
-		resp, via, err = p.Up.Resolve(q)
+		resp, via, fromURL, err = p.Up.ResolveFrom(q)
 	}
 	if err != nil {
 		p.Stats.Errors.Add(1)
@@ -543,6 +556,9 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	}
 	if via == "doh" {
 		p.Stats.DoH.Add(1)
+		if dnsXMgr != nil && dq.Class == qclassI && dq.Type == 1 {
+			dnsXMgr.Observe(client, dq.Name, fromURL, q, resp, t0)
+		}
 	} else if via == "vpn" {
 		p.Stats.VPN.Add(1)
 	} else {

@@ -64,7 +64,10 @@ button{min-height:36px}
 <div class="card"><h2>Beacon patterns <span id="bcbadge"></span></h2><div id="bc" class="mut">loading</div><div id="bcmsg" class="msg"></div></div>
 <div class="card"><h2>Tor / proxy bypass <span id="tbbadge"></span></h2><div id="tb2" class="mut">loading</div></div>
 <div class="card"><h2>Bare-IP TLS <span id="tsbadge"></span></h2><div id="ts" class="mut">loading</div></div>
+<div class="card"><h2>Certificate change <span id="tcbadge"></span></h2><div id="tc" class="mut">loading</div></div>
 <div class="card"><h2>DHCP fingerprint drift <span id="dfbadge"></span></h2><div id="df" class="mut">loading</div></div>
+<div class="card"><h2>Resolver cross-check <span id="dxbadge"></span></h2><div id="dx" class="mut">loading</div></div>
+<div class="card"><h2>LAN announcements <span id="labadge"></span></h2><div id="la" class="mut">loading</div></div>
 <div class="card"><h2>ARP / DNS correlation <span id="dmbadge"></span></h2><div id="dm" class="mut">loading</div></div>
 <div class="sec">Privacy</div>
 <div class="card"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
@@ -428,6 +431,39 @@ function tsrender(force){const el=$('ts');if(!Ts||guard(el,force))return;
   return '<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.dst)+'</td><td class="mut">'+what+'</td></tr>'}).join('');
  el.innerHTML='<div class="mut" style="margin:6px 0">Almost every browser and app sends the hostname it wants in the clear, in the TLS ClientHello, even though everything after it is encrypted. A connection with no server name, or one whose server name is literally the destination address, is unusual (a few IoT devices and hand-configured tools do this on purpose). The ClientHello is also fingerprinted (JA3) and checked against an operator-supplied blocklist; a match is flagged here even when the server name looks ordinary, since it is a stronger signal than SNI alone. Needs no decryption; TLS 1.3 still hides the certificate itself, so this cannot also check for a self-signed cert.'+(Ts.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
 async function tsload(){try{Ts=await (await api('/api/tlssni')).json();tsrender()}catch(e){}}
+let Tc=null;
+function tcrender(force){const el=$('tc');if(!Tc||guard(el,force))return;
+ const f=Tc.findings||[];
+ const alerts=f.filter(x=>x.kind==='tls_cert_selfsigned').length;
+ $('tcbadge').innerHTML=f.length?'<span class="'+(alerts?'err':'mut')+'" style="text-transform:none;letter-spacing:0">&bull; '+(alerts?alerts+' alert'+(alerts>1?'s':''):f.length+' to look at')+'</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const rows=f.map(x=>{let what;
+  if(x.kind==='tls_cert_selfsigned'){what='<b class="err">self-signed certificate</b> where '+esc(x.was||'a CA')+' signed before'}
+  else if(x.kind==='tls_cert_mismatch'){what='certificate does not cover the name <span class="mut">(issued by '+esc(x.now)+')</span>'}
+  else if(x.kind==='tls_cert_issuer'){what='issuer changed: '+esc(x.was)+' &rarr; '+esc(x.now)}
+  else if(x.kind==='tls_downgrade'){what='negotiated '+esc(x.now)+' where it always did '+esc(x.was)}
+  else{what=esc(x.kind)}
+  return '<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'<div class="mut">'+esc(x.dst)+'</div></td><td class="mut">'+what+(x.print?'<div class="mut" style="font-size:11px">sha256 '+esc(x.print.slice(0,16))+'&hellip;</div>':'')+'</td></tr>'}).join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">The server\'s side of a TLS handshake is partly in the clear too: every version says which TLS version was agreed, and TLS 1.2 sends the certificate itself in plaintext. For each hostname devices ask for, the box remembers the certificate\'s fingerprint and issuer and the best TLS version seen, and flags what an interception in the path looks like: a public-CA name turning self-signed (alert), a certificate that no longer covers its name, an issuer changing organisation, or a TLS 1.3 name talked down to 1.2. Renewals and first sightings are recorded silently. Nothing is decrypted; TLS 1.3 hides its certificate, so an interceptor that speaks 1.3 is invisible here.'+(Tc.capture_ok?'':' <span class="err">watcher not running</span>')+' <span class="mut">'+Tc.names+' name'+(Tc.names===1?'':'s')+' on file</span></div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+async function tcload(){try{Tc=await (await api('/api/tlscert')).json();tcrender()}catch(e){}}
+let Dx=null;
+function dxrender(force){const el=$('dx');if(!Dx||guard(el,force))return;
+ const f=Dx.findings||[];
+ $('dxbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'</td><td class="mut">'+(x.kind==='dns_xcheck_exists'?'one resolver says it exists, the other says it does not':'one resolver gave an unroutable address')+'<div>'+esc(x.first)+': '+esc((x.answer1||[]).join(' '))+'</div><div>'+esc(x.second)+': '+esc((x.answer2||[]).join(' '))+'</div></td></tr>').join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">One in fifty encrypted answers is put to the other configured resolver as well, and the two are compared. Two honest resolvers name different CDN addresses all the time, so a plain difference is only counted. What is flagged is a disagreement in shape: one says the name exists and the other says it does not, or one hands back a private or unroutable address where the other hands back a public one. It cannot say which resolver is wrong, only that they disagree.</div><div class="mut">'+Dx.sampled+' checked &middot; '+Dx.agree+' agreed &middot; '+Dx.differ+' differed (CDN-shaped) &middot; '+Dx.flagged+' flagged &middot; '+Dx.failed+' unanswered</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+async function dxload(){try{Dx=await (await api('/api/dnsxcheck')).json();dxrender()}catch(e){}}
+let La=null;
+function larender(force){const el=$('la');if(!La||guard(el,force))return;
+ const f=La.findings||[];const look=f.filter(x=>x.kind!=='lan_service_new').length;
+ $('labadge').innerHTML=look?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+look+' to look at</span>':'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const what={lan_service_new:'new service',lan_host_conflict:'answered for a name another address held',lan_ssdp_elsewhere:'UPnP description at another address'};
+ const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td class="mut">'+(what[x.kind]||esc(x.kind))+'<div>'+esc(x.name)+(x.was?' <span class="mut">(was '+esc(x.was)+')</span>':'')+'</div></td></tr>').join('');
+ const devs=(La.devices||[]).map(d=>'<tr><td><b>'+esc(d.ip)+'</b>'+(d.host?'<div class="mut">'+esc(d.host)+'</div>':'')+(d.server?'<div class="mut">'+esc(d.server)+'</div>':'')+'</td><td class="mut">'+(d.services||[]).map(s=>esc(s.type)+(s.instance?' <span class="mut">'+esc(s.instance)+'</span>':'')+(s.port?':'+s.port:'')).join('<br>')+(d.searches?'<div>searched for everything (ssdp:all) '+d.searches+'&times;</div>':'')+'</td><td class="mut">'+esc(when(d.last))+'</td></tr>').join('');
+ el.innerHTML='<div class="mut" style="margin:6px 0">What devices say they are, read from their own mDNS (Bonjour) and SSDP (UPnP) announcements. These are multicast, so they reach the bridge even from devices the radio relays directly. A device announcing a service it never announced before is noted; two addresses answering for the same .local name, or a UPnP announcement whose description lives at another address, are worth a look. Nothing is verified and nothing is asked: a device can announce whatever it likes.'+(La.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'')+(devs?'<table>'+devs+'</table>':'<div class="mut">no announcements seen yet</div>')}
+async function laload(){try{La=await (await api('/api/lanannounce')).json();larender()}catch(e){}}
 let Df=null;
 function dfrender(force){const el=$('df');if(!Df||guard(el,force))return;
  const f=Df.findings||[];
@@ -739,7 +775,7 @@ async function psave(){const hrs=parseFloat($('p_l').value);if(!(hrs>0)){$('pmsg
  if(!confirm('Restart DHCP and DNS (a few seconds) to use '+$('p_a').value+' to '+$('p_b').value+', leases '+hrs+' h? A backup of the stock config is saved first, and the old pool comes back if dnsmasq does not.'))return;
  const r=await apost('dhcp/pool/set',{start:$('p_a').value.trim(),end:$('p_b').value.trim(),lease_secs:Math.round(hrs*3600)});$('pmsg').textContent=r.j.error||r.j.status||'';setTimeout(()=>{Pl=null;pload();dload()},5000)}
 let tickN=0;
-async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Df)dfload();if(tickN%3===0||!Dm)dmload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
+async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Tc)tcload();if(tickN%3===0||!Dx)dxload();if(tickN%3===0||!La)laload();if(tickN%3===0||!Df)dfload();if(tickN%3===0||!Dm)dmload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
 
 (function(){
  let st={};try{st=JSON.parse(localStorage.getItem('cc')||'{}')}catch(e){}

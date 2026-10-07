@@ -585,6 +585,24 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 			return
 		}
 		writeJSON(w, 200, tlsSNIMgr.View())
+	case path == "lanannounce" && r.Method == http.MethodGet:
+		if lanAnnounceMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, lanAnnounceMgr.View())
+	case path == "dnsxcheck" && r.Method == http.MethodGet:
+		if dnsXMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, dnsXMgr.View())
+	case path == "tlscert" && r.Method == http.MethodGet:
+		if tlsCertMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, tlsCertMgr.View())
 	case path == "dnsmitm" && r.Method == http.MethodGet:
 		if dnsMITMMgr == nil {
 			writeJSON(w, 200, map[string]any{"available": false})
@@ -941,7 +959,7 @@ var settingsPaths = map[string]bool{
 	"wifi": true, "dhcp": true, "cell": true, "diag": true, "diag/run": true, "diag/report": true, "cert": true, "cert/renew": true, "cert/download": true,
 	"ssh": true, "ssh/add": true, "ssh/delete": true, "sms": true, "devices": true, "devices/note": true, "graphs": true, "linkhist": true, "canary": true, "rogue-dhcp": true, "rogue-dhcp/allow": true, "arp": true, "tor": true, "tor/set": true, "tor/device": true, "tor/test": true, "speed": true, "speed/set": true, "speed/run": true, "canary/set": true, "canary/ignore": true, "actions": true, "actions/set": true, "actions/delete": true, "actions/run": true, "events": true, "events/seen": true, "events/clear": true, "notify/set": true, "notify/clear": true, "notify/test": true, "devices/wake": true, "devices/watch": true,
 	"system": true, "system/reboot": true, "system/stockadmin": true, "system/lanv6": true, "egress": true, "egress/set": true, "egress/allow": true, "egress/remove": true, "egress/service": true,
-	"dnscanary": true, "dnscanary/set": true, "macchurn": true, "torbypass": true, "beacon": true, "beacon/ignore": true, "dganxdomain": true, "tlssni": true, "dnsmitm": true, "dhcpfp": true,
+	"dnscanary": true, "dnscanary/set": true, "macchurn": true, "torbypass": true, "beacon": true, "beacon/ignore": true, "dganxdomain": true, "tlssni": true, "tlscert": true, "lanannounce": true, "dnsxcheck": true, "dnsmitm": true, "dhcpfp": true,
 }
 
 func isSettingsPath(path string) bool {
