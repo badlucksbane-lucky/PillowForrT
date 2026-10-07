@@ -3,7 +3,7 @@ package main
 // Tower telemetry for WiGLE. The modem is asked, over its AT port, which cell it is camped on (PLMN, tracking area, cell id, technology, signal) every so often, each
 // answer is stored as an observation, a companion computer or phone posts the location it has (the hotspot has no GPS), and the observations with a location are
 // served as a WiGLE CSV (the WigleWifi-1.6 upload format, one cell row per observation) for you to upload or keep. That is all this does: it is telemetry out, not
-// a detector. No IMSI-catcher logic, no 2G-downgrade alarm, no event is raised from it; WiGLE's own map, or whatever you feed the CSV to, does the comparing.
+// a detector. Nothing is compared against anything and no event is raised from it; WiGLE's own map, or whatever you feed the CSV to, does the comparing.
 //
 // How the modem is read: AT commands on a serial port of the modem (-cell-at, default empty = off). On this Qualcomm MDM9607 unit the candidates are /dev/smd8,
 // /dev/smd11 and /dev/smd7; the page's "probe" tries each with a bare AT and reports which one answers OK, since the port may differ by firmware and may be held
