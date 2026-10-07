@@ -132,7 +132,7 @@ same card, tick the services your devices really need, and only then switch to e
 enforcement first will break things you did not know you used.
 
 ## 8. The detectors
-Sixteen passive detectors watch the LAN and raise events; the README's ["What it watches for"](../README.md#what-it-watches-for)
+Seventeen passive detectors watch the LAN and raise events; the README's ["What it watches for"](../README.md#what-it-watches-for)
 says what each one looks for. This section is about running them: checking they work, reading what
 they say, quieting a known-good source, and turning one off. Nothing here is required: every detector
 is on from the first start (except the Tor relay check, below) and needs no setup.
@@ -140,28 +140,32 @@ is on from the first start (except the Tor relay check, below) and needs no setu
 ### Check they are capturing
 Most detectors read the bridge through a raw packet socket, which needs the daemon's capabilities
 from the init script. Each card (**ARP watch**, **Rogue DHCP**, **Canary**, **Bare-IP TLS**, **Certificate change**, **LAN announcements**,
-**DHCP fingerprint drift**, **Hidden router**, **Stock admin tripwire**) shows whether its capture is running; the **Canary** card also shows whether
+**DHCP fingerprint drift**, **Hidden router**, **Stock admin tripwire**, **Steering watch**) shows whether its capture is running; the **Canary** card also shows whether
 the decoy address is on the bridge, and the **Rogue DHCP** card counts the honest replies it has seen
 from the unit itself, so a zero there after a device has joined means it is not seeing the wire.
 A card that says capture is off means the raw socket could not be opened; the init script
 `/etc/init.d/http_proxy` starts the daemon with the capabilities that needs, so check the daemon was
 started from there and read `/data/proxy/tinyfwd.log`.
 
-Two cheap tests from a device on the LAN: `ping 192.168.1.253` should produce a **Canary** event
-within seconds, and a shell loop that looks up 20 or more made-up names inside five minutes should
+Three cheap tests from a device on the LAN: `ping 192.168.1.253` should produce a **Canary** event
+within seconds; a shell loop that looks up 20 or more made-up names inside five minutes should
 produce an **NXDOMAIN flood** event (a handful of typos never will; 20 distinct failing names from one
-device is the threshold).
+device is the threshold); and `nmap -sn 192.168.1.0/24` (or any network-discovery app) should produce
+an **ARP watch** sweep event, since it asks for every address on the LAN within a few seconds.
 
 ### Read them
 Every finding is an event, on the **Events** card and on the detector's own card, at one of two
 levels. **Alert** means something is impersonating or steering the network (`arp_gateway`,
-`arp_conflict`, `dns_mitm_confirmed`, `rogue_dhcp`, `tls_ja3_match`). **To look at** means unusual, with a benign
-explanation possible (everything else: `arp_flip`, `canary`, `canary_scan`, `tls_bare_ip`,
+`arp_conflict`, `dns_mitm_confirmed`, `rogue_dhcp`, `ra_rogue`, `redirect_rogue`, `tls_ja3_match`). **To look at** means unusual, with a benign
+explanation possible (everything else: `arp_flip`, `arp_sweep`, `canary`, `canary_scan`, `tls_bare_ip`,
 `dhcp_fingerprint_drift`, `dns_canary`, `dns_plain_fallback`, `dns_exfil`, `dns_nxdomain_flood`,
 `dns_mitm_suspect`, `tor_bypass_exit`, `tor_bypass_onion`, `beacon_pattern`, `ttl_forwarding`, `ttl_two_stacks`,
 `stock_admin_probe`, and the MAC churn pair).
 Each detector's source file opens with its false positives; the ones to expect on an ordinary LAN:
 - `arp_flip` and MAC churn from phones that rejoin with a fresh random MAC;
+- `arp_sweep` from a phone or laptop that has just joined and is looking for printers, speakers and
+  Chromecasts, or from a network-discovery app you ran yourself. Once is normal; a device that keeps
+  sweeping is a scanner or a worm;
 - `dhcp_fingerprint_drift` after a device's OS update;
 - `beacon_pattern` from mail clients, chat apps, smart-home devices and backup software, which all poll on
   a schedule. This is the noisiest detector by design and never rises above "to look at";
@@ -181,6 +185,9 @@ Each card that has a benign case lets you mark it, from the page, without turnin
 - **Rogue DHCP**: allow a second server by its MAC (a router or lab DHCP server you run on purpose).
   It is matched by MAC, never by IP, so a forged gateway address is still caught;
 - **Hidden router**: mark a device expected (a travel router or a container host you run yourself).
+- **Steering watch**: allow a second router by its MAC (one you run yourself that advertises IPv6
+  routes on this LAN). Matched by MAC, never by address, like Rogue DHCP; devices that listen to it
+  will send their traffic, and possibly their name lookups, through it.
 Those marks are kept in the detector's own file under `/data/proxy/` and survive restarts. The other
 detectors have no allow-list; their rate limits are the only quieting, and they are not meant to be
 turned off per device.
@@ -248,6 +255,7 @@ not touch that file; change it over ssh and restart the service):
 | `-dhcp-fp-watch=false` | on | DHCP fingerprint drift |
 | `-ttl-watch=false` | on | Hidden router (and `-ttl-file ""` keeps its expected-device list in memory only instead of `/data/proxy/ttlwatch.json`) |
 | `-admin-tripwire=false` | on | Stock admin tripwire |
+| `-steer-watch=false` | on | Steering watch (and `-steer-file ""` keeps its allowed routers in memory only instead of `/data/proxy/steer.json`) |
 | `-canary ""` | `192.168.1.253` | The canary entirely, including the decoy address on the bridge |
 | `-tor-exit-file ""` | `/data/proxy/tor-exits.txt` | The Tor relay check (an empty or missing file does the same) |
 

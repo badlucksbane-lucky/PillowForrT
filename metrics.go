@@ -104,6 +104,7 @@ type metricsIn struct {
 	Link           *linkView
 	Tor            *torView
 	ARP            *arpView
+	Steer          *steerView
 }
 
 type dnsM struct {
@@ -230,6 +231,9 @@ func buildMetrics(in metricsIn) string {
 	if r := in.Rogue; r != nil {
 		m.metric("orbic_rogue_dhcp_servers", "gauge", "Other DHCP servers that answered on the network in the last day (should be 0).", float64(len(r.Servers)))
 	}
+	if st := in.Steer; st != nil {
+		m.metric("orbic_steer_alerts", "gauge", "IPv6 router advertisements and ICMP redirects from anything other than the Orbic in the last day (should be 0).", float64(st.Alerts))
+	}
 	if sp := in.Speed; sp != nil && sp.Last != nil && sp.Last.Err == "" {
 		m.metric("orbic_speedtest_download_bytes_per_second", "gauge", "Download rate of the last scheduled speed test (a small test, for trends).", sp.Last.Down)
 		m.metric("orbic_speedtest_upload_bytes_per_second", "gauge", "Upload rate of the last speed test.", sp.Last.Up)
@@ -237,7 +241,8 @@ func buildMetrics(in metricsIn) string {
 	}
 	if a := in.ARP; a != nil {
 		m.metric("orbic_arp_spoof_alerts", "gauge", "Gateway-impersonation and reserved-address conflicts seen in the last 24 hours (should be 0).", float64(a.Alerts))
-		m.metric("orbic_arp_address_changes", "gauge", "Addresses that quickly changed owner in the last 24 hours.", float64(len(a.Findings)-a.Alerts))
+		m.metric("orbic_arp_address_changes", "gauge", "Addresses that quickly changed owner in the last 24 hours.", float64(len(a.Findings)-a.Alerts-a.Sweeps))
+		m.metric("orbic_arp_sweeps", "gauge", "Host scans of the LAN seen in the last 24 hours (one device asking for 20 or more addresses within a minute).", float64(a.Sweeps))
 	}
 	if l := in.Link; l != nil && l.Probes > 0 {
 		m.metric("orbic_uplink_probe_loss_ratio_24h", "gauge", "Share of uplink probes (a TCP connect every 30 s) that failed in the last 24 hours.", l.LossPct/100)
@@ -385,6 +390,10 @@ func gatherMetrics() metricsIn {
 	if arpMgr != nil {
 		v := arpMgr.View()
 		in.ARP = &v
+	}
+	if steerMgr != nil {
+		v := steerMgr.View()
+		in.Steer = &v
 	}
 	if _, err := os.Stat("/data/dnsmasq.pid"); err == nil {
 		in.Dnsmasq = readDnsmasq()

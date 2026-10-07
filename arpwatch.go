@@ -7,8 +7,13 @@ package main
 //   - arp_conflict (alert): a MAC claims an address reserved for a different device.
 //   - arp_flip (attention): an address held by one MAC a moment ago (within 10 minutes) is now claimed by another; a quick change of owner is how poisoning looks, though a device
 //     that rejoined under a new random MAC can look the same, so it is only "to look at".
-// One event per address per 10 minutes; the public text never names a device or address. Nothing is ever sent. Honest limit: unicast ARP between two Wi-Fi clients is relayed inside
-// the radio and never reaches the bridge, so the broadcast announcements and anything aimed at the Orbic are what can be seen.
+//   - arp_sweep (attention): one MAC asking "who has?" for 20 or more different LAN addresses within a minute. That is a host scan, the first step of nmap, of a worm and of a
+//     network-discovery app alike, and it is the recon the canary only catches when it happens to touch the decoy address. A new phone enumerating the LAN for printers and
+//     Chromecasts does the same once, so it is only "to look at". Only addresses inside the LAN's /24 count: a device with a wrong netmask asks for the whole internet and that
+//     is a misconfiguration, not a scan. The Orbic's own requests never count.
+// One event per address (per asker, for a sweep) per 10 minutes; the public text never names a device or address. Nothing is ever sent. Honest limit: unicast ARP between two
+// Wi-Fi clients is relayed inside the radio and never reaches the bridge, so the broadcast announcements (which is what a sweep is made of) and anything aimed at the Orbic are
+// what can be seen.
 
 import (
 	"encoding/binary"
@@ -55,6 +60,41 @@ func parseARPClaim(b []byte) (arpClaim, bool) {
 	return arpClaim{IP: ip.String(), MAC: mac}, true
 }
 
+// parseARPRequest returns who asked and which address they asked for in an ARP request ("who has X?"). An address probe (sender 0.0.0.0) counts: a scanner with no address yet
+// still asks. ok is false for replies and for anything malformed.
+func parseARPRequest(b []byte) (mac, senderIP, target string, ok bool) {
+	if len(b) < 42 || binary.BigEndian.Uint16(b[12:14]) != 0x0806 || binary.BigEndian.Uint16(b[14:16]) != 1 || binary.BigEndian.Uint16(b[16:18]) != 0x0800 || b[18] != 6 || b[19] != 4 {
+		return "", "", "", false
+	}
+	if binary.BigEndian.Uint16(b[20:22]) != 1 {
+		return "", "", "", false
+	}
+	mac = macStr(b[22:28])
+	if mac == "00:00:00:00:00:00" || mac == "ff:ff:ff:ff:ff:ff" {
+		return "", "", "", false
+	}
+	t := net.IP(b[38:42])
+	if t.Equal(net.IPv4zero) {
+		return "", "", "", false
+	}
+	if s := net.IP(b[28:32]); !s.Equal(net.IPv4zero) {
+		senderIP = s.String()
+	}
+	return mac, senderIP, t.String(), true
+}
+
+const (
+	arpSweepWindow    = time.Minute
+	arpSweepThreshold = 20
+)
+
+// arpSweep is what one MAC has asked for lately.
+type arpSweep struct {
+	Targets map[string]time.Time // address asked for -> when, pruned to the window
+	IP      string               // the asker's own address, when it gave one
+	Last    time.Time
+}
+
 type arpBinding struct {
 	MAC  string
 	Last time.Time
@@ -66,6 +106,7 @@ type arpFinding struct {
 	IP    string `json:"ip"`
 	MAC   string `json:"mac"`
 	Other string `json:"other,omitempty"` // the MAC that held it before (flip) or owns it (conflict)
+	Count int    `json:"count,omitempty"` // sweep: how many different addresses were asked for
 	Name  string `json:"name,omitempty"`
 }
 
@@ -75,7 +116,9 @@ type arpWatch struct {
 	selfMAC  func() string
 	reserved func() map[string]reservation // by IP
 	nameOf   func(mac string) string
+	lan      *net.IPNet // the LAN; only addresses inside it count towards a sweep
 	bind     map[string]*arpBinding
+	sweep    map[string]*arpSweep // by asking MAC
 	lastEv   map[string]time.Time
 	finds    []arpFinding
 	claims   int
@@ -86,7 +129,8 @@ type arpWatch struct {
 }
 
 func newARPWatch() *arpWatch {
-	return &arpWatch{bind: map[string]*arpBinding{}, lastEv: map[string]time.Time{}, now: time.Now,
+	_, lan, _ := net.ParseCIDR(lanCIDR)
+	return &arpWatch{bind: map[string]*arpBinding{}, sweep: map[string]*arpSweep{}, lastEv: map[string]time.Time{}, now: time.Now, lan: lan,
 		own: func() map[string]bool {
 			m := map[string]bool{"192.168.1.1": true, "192.168.1.254": true}
 			if canaryMgr != nil {
@@ -172,19 +216,8 @@ func (w *arpWatch) observe(c arpClaim) {
 		return
 	}
 	f.T, f.IP, f.MAC, f.Name = now.Unix(), c.IP, c.MAC, w.nameOf(c.MAC)
-	key := f.Kind + "|" + c.IP
-	if t, ok := w.lastEv[key]; ok && now.Sub(t) < 10*time.Minute {
+	if !w.keep(f, f.Kind+"|"+c.IP, now) {
 		return
-	}
-	w.lastEv[key] = now
-	for k, t := range w.lastEv {
-		if now.Sub(t) > time.Hour {
-			delete(w.lastEv, k)
-		}
-	}
-	w.finds = append(w.finds, *f)
-	if len(w.finds) > 50 {
-		w.finds = w.finds[len(w.finds)-50:]
 	}
 	var e evt
 	switch f.Kind {
@@ -197,6 +230,78 @@ func (w *arpWatch) observe(c arpClaim) {
 	}
 	e.T = f.T
 	w.emit(e)
+}
+
+// keep records a finding unless the same one (by key) was raised within the last 10 minutes. Must hold w.mu.
+func (w *arpWatch) keep(f *arpFinding, key string, now time.Time) bool {
+	if t, ok := w.lastEv[key]; ok && now.Sub(t) < 10*time.Minute {
+		return false
+	}
+	w.lastEv[key] = now
+	for k, t := range w.lastEv {
+		if now.Sub(t) > time.Hour {
+			delete(w.lastEv, k)
+		}
+	}
+	w.finds = append(w.finds, *f)
+	if len(w.finds) > 50 {
+		w.finds = w.finds[len(w.finds)-50:]
+	}
+	return true
+}
+
+// observeRequest counts one "who has X?" towards a sweep by the asker: arpSweepThreshold different LAN addresses within arpSweepWindow is a host scan.
+func (w *arpWatch) observeRequest(mac, senderIP, target string) {
+	if mac == w.selfMAC() {
+		return
+	}
+	if t := net.ParseIP(target); t == nil || (w.lan != nil && !w.lan.Contains(t)) {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	now := w.now()
+	s := w.sweep[mac]
+	if s == nil {
+		if len(w.sweep) >= 256 { // a flood of invented senders must not grow memory
+			for k, o := range w.sweep {
+				if now.Sub(o.Last) > arpSweepWindow {
+					delete(w.sweep, k)
+				}
+			}
+			for k := range w.sweep {
+				if len(w.sweep) < 128 {
+					break
+				}
+				delete(w.sweep, k)
+			}
+		}
+		s = &arpSweep{Targets: map[string]time.Time{}}
+		w.sweep[mac] = s
+	}
+	s.Last = now
+	if senderIP != "" {
+		s.IP = senderIP
+	}
+	for k, t := range s.Targets {
+		if now.Sub(t) > arpSweepWindow {
+			delete(s.Targets, k)
+		}
+	}
+	if len(s.Targets) < 4*arpSweepThreshold { // enough to say "a scan"; the count shown is capped, the memory with it
+		s.Targets[target] = now
+	}
+	if len(s.Targets) < arpSweepThreshold {
+		return
+	}
+	f := &arpFinding{T: now.Unix(), Kind: "arp_sweep", IP: s.IP, MAC: mac, Count: len(s.Targets), Name: w.nameOf(mac)}
+	if !w.keep(f, "arp_sweep|"+mac, now) {
+		return
+	}
+	s.Targets = map[string]time.Time{} // the next event needs a fresh run of asks, not the tail of this one
+	w.emit(evt{T: f.T, Kind: f.Kind, Sev: sevAttention,
+		Text:   fmt.Sprintf("%s asked the network for %d different addresses within a minute: that is a host scan, the way nmap, a worm and a network-discovery app all start. A new phone looking for printers and Chromecasts does the same once, so this is one to look at, not proof.", w.label(mac), f.Count),
+		Public: "A device is scanning the network for other devices"})
 }
 
 func (w *arpWatch) Start() {
@@ -252,6 +357,9 @@ func (w *arpWatch) capture() error {
 		if c, ok := parseARPClaim(buf[:n]); ok {
 			w.observe(c)
 		}
+		if mac, sender, target, ok := parseARPRequest(buf[:n]); ok {
+			w.observeRequest(mac, sender, target)
+		}
 	}
 }
 
@@ -262,6 +370,7 @@ type arpView struct {
 	Addresses int          `json:"addresses"`
 	Findings  []arpFinding `json:"findings"` // newest first, last 24 hours
 	Alerts    int          `json:"alerts"`   // arp_gateway and arp_conflict in the last 24 hours
+	Sweeps    int          `json:"sweeps"`   // arp_sweep in the last 24 hours; the rest of Findings are flips
 }
 
 // RecentImpersonation reports whether an arp_gateway or arp_conflict finding (never arp_flip, which is only "to look at") landed within the last `within` of now. Used by
@@ -292,8 +401,11 @@ func (w *arpWatch) View() arpView {
 			continue
 		}
 		v.Findings = append(v.Findings, f)
-		if f.Kind != "arp_flip" {
+		switch f.Kind {
+		case "arp_gateway", "arp_conflict":
 			v.Alerts++
+		case "arp_sweep":
+			v.Sweeps++
 		}
 	}
 	sort.SliceStable(v.Findings, func(i, j int) bool { return v.Findings[i].T > v.Findings[j].T })
