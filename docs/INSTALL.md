@@ -139,7 +139,7 @@ is on from the first start (except the Tor relay check, below) and needs no setu
 
 ### Check they are capturing
 Most detectors read the bridge through a raw packet socket, which needs the daemon's capabilities
-from the init script. Each card (**ARP watch**, **Rogue DHCP**, **Canary**, **Bare-IP TLS**, **Certificate change**,
+from the init script. Each card (**ARP watch**, **Rogue DHCP**, **Canary**, **Bare-IP TLS**, **Certificate change**, **LAN announcements**,
 **DHCP fingerprint drift**) shows whether its capture is running; the **Canary** card also shows whether
 the decoy address is on the bridge, and the **Rogue DHCP** card counts the honest replies it has seen
 from the unit itself, so a zero there after a device has joined means it is not seeing the wire.
@@ -222,6 +222,8 @@ not touch that file; change it over ssh and restart the service):
 | `-arp-watch=false` | on | ARP watch, and with it MAC churn and the ARP half of the ARP / DNS correlation |
 | `-rogue-dhcp=false` | on | Rogue DHCP |
 | `-tls-sni-watch=false` | on | Bare-IP TLS, and with it the JA3 fingerprint check |
+| `-lan-announce-watch=false` | on | LAN announcements (and `-lan-announce-file ""` keeps the inventory in memory only instead of `/data/proxy/lanannounce.json`) |
+| `-dns-xcheck=false` | on | Resolver cross-check (it is also silent when only one DoH resolver is configured) |
 | `-tls-cert-watch=false` | on | Certificate change (and `-tls-cert-file ""` keeps its per-name baseline in memory only instead of `/data/proxy/tlscert.json`) |
 | `-dhcp-fp-watch=false` | on | DHCP fingerprint drift |
 | `-canary ""` | `192.168.1.253` | The canary entirely, including the decoy address on the bridge |
