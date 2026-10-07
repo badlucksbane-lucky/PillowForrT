@@ -20,6 +20,9 @@ func TestNewDetectorViewsAreNeverNull(t *testing.T) {
 		"tlssni":    newTLSSNIWatch(dir + "/ja3.txt").View(),
 		"dhcpfp":    newDHCPFPWatch().View(),
 		"dnsmitm":   newDNSMITMWatch().View(),
+		"ttl":       newTTLWatch(dir + "/ttl.json").View(),
+		"admintrip": newAdminTrip().View(),
+		"rebind":    newRebindGuard(dir + "/rebind.json").View(),
 	}
 	for name, v := range cases {
 		b, err := json.Marshal(v)

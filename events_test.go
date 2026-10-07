@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -234,8 +237,78 @@ func TestEventStoreSeenCountsClearCap(t *testing.T) {
 		t.Error("an info event must not raise the attention count")
 	}
 	s.Clear()
-	if len(s.View().Events) != 0 {
-		t.Error("clear")
+	if v := s.View(); len(v.Events) != 1 || v.Events[0].Kind != "events_cleared" || !v.Chain.OK || v.Chain.Length != 1 {
+		t.Errorf("clear must leave one marker event starting a fresh chain: %+v", v.Chain)
+	}
+}
+
+func TestEventChainLinksAndDetectsTampering(t *testing.T) {
+	s, _, _ := newES(t)
+	for i := 0; i < 130; i++ {
+		s.Add([]evt{{Kind: "k", Sev: sevAttention, Text: fmt.Sprint("t", i)}})
+	}
+	v := s.View()
+	if !v.Chain.OK || v.Chain.Length != 100 || v.Chain.Head == "" || v.Chain.Since == 0 {
+		t.Fatalf("%+v", v.Chain)
+	}
+	if v.Events[0].Hash != v.Chain.Head || v.Events[0].Prev != v.Events[1].Hash {
+		t.Error("newest event must carry the head and link to the one before")
+	}
+	if s.base == "" || v.Events[99].Prev != s.base {
+		t.Error("the oldest kept event must link to the hash of the last one dropped")
+	}
+	s.MarkSeen()
+	if c := s.Chain(); !c.OK {
+		t.Error("marking seen must not break the chain")
+	}
+
+	// reload from the file: still intact
+	r := &eventStore{path: s.path, cfgPath: s.cfgPath, lastOf: map[string]time.Time{}, now: s.now, post: s.post}
+	b, _ := os.ReadFile(s.path)
+	var f eventsFileV2
+	if json.Unmarshal(b, &f) != nil || f.Format != "orbic-events-2" {
+		t.Fatal("new file format not written")
+	}
+	r.events, r.base, r.since = f.Events, f.Base, f.Since
+	if c := r.Chain(); !c.OK || c.Length != 100 {
+		t.Fatalf("reloaded: %+v", c)
+	}
+
+	// edit one event's text in the middle: the chain breaks there and nowhere earlier
+	r.events = append([]evt(nil), f.Events...)
+	r.events[40].Text = "something else"
+	if c := r.Chain(); c.OK || c.BrokenAt != r.events[40].ID {
+		t.Errorf("edit: %+v", c)
+	}
+	// delete one from the middle
+	r.events, r.base, r.since = append([]evt(nil), f.Events...), f.Base, f.Since
+	r.events = append(r.events[:50], r.events[51:]...)
+	if c := r.Chain(); c.OK || c.BrokenAt != f.Events[51].ID {
+		t.Errorf("delete: %+v", c)
+	}
+	// truncate the front without carrying the base
+	r.events, r.base = append([]evt(nil), f.Events[10:]...), f.Base
+	if c := r.Chain(); c.OK || c.BrokenAt != f.Events[10].ID {
+		t.Errorf("truncate: %+v", c)
+	}
+	// the old file format (a bare array, no hashes) loads, and the chain begins with the next event
+	legacy := []evt{{ID: 1, T: 1, Kind: "old", Sev: sevInfo}, {ID: 2, T: 2, Kind: "old", Sev: sevInfo}}
+	lb, _ := json.Marshal(legacy)
+	os.WriteFile(s.path, lb, 0o600)
+	l := &eventStore{path: s.path, cfgPath: s.cfgPath, lastOf: map[string]time.Time{}, now: s.now, post: s.post}
+	var arr []evt
+	json.Unmarshal(lb, &arr)
+	l.events = arr
+	l.next = 3
+	if c := l.Chain(); !c.OK || c.Length != 0 {
+		t.Errorf("legacy before any hashed event: %+v", c)
+	}
+	l.Add([]evt{{Kind: "new", Sev: sevInfo}})
+	if c := l.Chain(); !c.OK || c.Length != 1 || c.Since == 0 {
+		t.Errorf("legacy then one hashed: %+v", c)
+	}
+	if l.events[2].Prev != "" {
+		t.Error("the first hashed event after a legacy log links to nothing")
 	}
 }
 

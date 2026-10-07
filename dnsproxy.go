@@ -29,7 +29,7 @@ type dnsEvent struct {
 	Name   string    `json:"name"`
 	Client string    `json:"client,omitempty"`
 	Type   uint16    `json:"type"`
-	Result string    `json:"result"` // blocked | cached | doh | plain | error
+	Result string    `json:"result"` // blocked | rebind | cached | doh | plain | vpn | tor | error
 	List   string    `json:"list,omitempty"`
 	MS     float64   `json:"ms"`
 }
@@ -533,6 +533,12 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 		if dnsMITMMgr != nil && dq.Class == qclassI {
 			dnsMITMMgr.Observe(client, dq.Name, resp, t0)
 		}
+		if dq.Class == qclassI {
+			if _, refuse := rebindMgr.Refuse(dq.Name, resp); refuse {
+				finish("rebind")
+				return buildRcode(q, dq, 5) // REFUSED: a private address for a public name never reaches the device (rebind.go)
+			}
+		}
 		finish("cached")
 		return resp
 	}
@@ -575,6 +581,12 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	}
 	if dnsMITMMgr != nil && dq.Class == qclassI {
 		dnsMITMMgr.Observe(client, dq.Name, resp, t0)
+	}
+	if dq.Class == qclassI {
+		if _, refuse := rebindMgr.Refuse(dq.Name, resp); refuse {
+			finish("rebind")
+			return buildRcode(q, dq, 5) // REFUSED, as above
+		}
 	}
 	finish(via)
 	return resp

@@ -132,7 +132,7 @@ same card, tick the services your devices really need, and only then switch to e
 enforcement first will break things you did not know you used.
 
 ## 8. The detectors
-Eleven passive detectors watch the LAN and raise events; the README's ["What it watches for"](../README.md#what-it-watches-for)
+Sixteen passive detectors watch the LAN and raise events; the README's ["What it watches for"](../README.md#what-it-watches-for)
 says what each one looks for. This section is about running them: checking they work, reading what
 they say, quieting a known-good source, and turning one off. Nothing here is required: every detector
 is on from the first start (except the Tor relay check, below) and needs no setup.
@@ -140,7 +140,7 @@ is on from the first start (except the Tor relay check, below) and needs no setu
 ### Check they are capturing
 Most detectors read the bridge through a raw packet socket, which needs the daemon's capabilities
 from the init script. Each card (**ARP watch**, **Rogue DHCP**, **Canary**, **Bare-IP TLS**, **Certificate change**, **LAN announcements**,
-**DHCP fingerprint drift**) shows whether its capture is running; the **Canary** card also shows whether
+**DHCP fingerprint drift**, **Hidden router**, **Stock admin tripwire**) shows whether its capture is running; the **Canary** card also shows whether
 the decoy address is on the bridge, and the **Rogue DHCP** card counts the honest replies it has seen
 from the unit itself, so a zero there after a device has joined means it is not seeing the wire.
 A card that says capture is off means the raw socket could not be opened; the init script
@@ -158,13 +158,16 @@ levels. **Alert** means something is impersonating or steering the network (`arp
 `arp_conflict`, `dns_mitm_confirmed`, `rogue_dhcp`, `tls_ja3_match`). **To look at** means unusual, with a benign
 explanation possible (everything else: `arp_flip`, `canary`, `canary_scan`, `tls_bare_ip`,
 `dhcp_fingerprint_drift`, `dns_canary`, `dns_plain_fallback`, `dns_exfil`, `dns_nxdomain_flood`,
-`dns_mitm_suspect`, `tor_bypass_exit`, `tor_bypass_onion`, `beacon_pattern`, and the MAC churn pair).
+`dns_mitm_suspect`, `tor_bypass_exit`, `tor_bypass_onion`, `beacon_pattern`, `ttl_forwarding`, `ttl_two_stacks`,
+`stock_admin_probe`, and the MAC churn pair).
 Each detector's source file opens with its false positives; the ones to expect on an ordinary LAN:
 - `arp_flip` and MAC churn from phones that rejoin with a fresh random MAC;
 - `dhcp_fingerprint_drift` after a device's OS update;
 - `beacon_pattern` from mail clients, chat apps, smart-home devices and backup software, which all poll on
   a schedule. This is the noisiest detector by design and never rises above "to look at";
-- `tls_bare_ip` from a few IoT devices that talk to a hard-coded address.
+- `tls_bare_ip` from a few IoT devices that talk to a hard-coded address;
+- `ttl_forwarding` from a laptop running containers or a virtual machine behind its own NAT: its own
+  traffic arrives one hop short, exactly like a hidden router's. Mark the device expected on the card.
 
 The text of an event never names a device or an address; the card does, to someone signed in. Events are
 rate-limited per source (typically one per 10 minutes, one per MAC per day for fingerprint drift), so a
@@ -176,7 +179,8 @@ Each card that has a benign case lets you mark it, from the page, without turnin
 - **DNS canary**: ignore a MAC (a DNS research tool);
 - **Beacon patterns**: mark a device-to-destination pair as expected;
 - **Rogue DHCP**: allow a second server by its MAC (a router or lab DHCP server you run on purpose).
-  It is matched by MAC, never by IP, so a forged gateway address is still caught.
+  It is matched by MAC, never by IP, so a forged gateway address is still caught;
+- **Hidden router**: mark a device expected (a travel router or a container host you run yourself).
 Those marks are kept in the detector's own file under `/data/proxy/` and survive restarts. The other
 detectors have no allow-list; their rate limits are the only quieting, and they are not meant to be
 turned off per device.
@@ -212,6 +216,22 @@ scripts/orbic-push.sh tor-exits.txt /data/proxy/tor-exits.txt 644
 Keep it current yourself; relays change by the hour, and a stale list means silence, not "nothing is
 wrong". The `.onion` half of the same card (`tor_bypass_onion`) needs no list.
 
+### Rebinding refusal
+Not a detector but the enforcement half of the ARP / DNS correlation card: the stub answers REFUSED
+instead of relaying a public name that resolves to a private address (this LAN, loopback, link-local,
+100.64/10, the Tor bridge range 198.18/15, and their IPv6 equivalents). It is on from the first start,
+because a rebinding answer is harmful on arrival and the correlation card still records every one. The
+**Rebinding refusal** card has the switch and an allow-list of name patterns for the few services that
+do this by design; `*.plex.direct` is there from the start. A "rebind" result in the DNS **Recent** table
+is a refused answer. Settings live in `/data/proxy/rebind.json`.
+
+### The event log's hash chain
+Each event stored in `/data/proxy/events.json` carries the hash of the one before it, and the **Events**
+card and the diagnostics say whether the chain holds or where it breaks. Clearing the log from the page
+starts a new chain with a marker event, so a cleared log is never mistaken for a wiped one. Copy the
+head hash shown on the card somewhere else now and then: someone with a root shell can rewrite the
+whole file, hashes included, and the copy is what tells you that happened.
+
 ### Turn one off
 **Canary** and **DNS canary** have a switch on their cards. The rest are on while the daemon runs, with
 these exceptions set on the daemon's command line in `/etc/init.d/http_proxy` (the deploy script does
@@ -226,6 +246,8 @@ not touch that file; change it over ssh and restart the service):
 | `-dns-xcheck=false` | on | Resolver cross-check (it is also silent when only one DoH resolver is configured) |
 | `-tls-cert-watch=false` | on | Certificate change (and `-tls-cert-file ""` keeps its per-name baseline in memory only instead of `/data/proxy/tlscert.json`) |
 | `-dhcp-fp-watch=false` | on | DHCP fingerprint drift |
+| `-ttl-watch=false` | on | Hidden router (and `-ttl-file ""` keeps its expected-device list in memory only instead of `/data/proxy/ttlwatch.json`) |
+| `-admin-tripwire=false` | on | Stock admin tripwire |
 | `-canary ""` | `192.168.1.253` | The canary entirely, including the decoy address on the bridge |
 | `-tor-exit-file ""` | `/data/proxy/tor-exits.txt` | The Tor relay check (an empty or missing file does the same) |
 

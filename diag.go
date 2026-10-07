@@ -75,6 +75,7 @@ type diagInputs struct {
 	Link       *linkView
 	Tor        *torView
 	ARP        *arpView
+	Chain      *eventChain // the event log's hash chain, when the store is up
 }
 
 func ck(id, group, name, status, detail, hint string) diagCheck {
@@ -385,6 +386,13 @@ func evaluate(in diagInputs) []diagCheck {
 			add(ck("sec.canary", "Security", "Canary address", "ok", "the decoy address is in place and nothing has touched it", ""))
 		}
 	}
+	if in.Chain != nil && in.Chain.Length > 0 {
+		if in.Chain.OK {
+			add(ck("sec.eventlog", "Security", "Event log", "ok", fmt.Sprintf("the hash chain holds across %d linked events", in.Chain.Length), ""))
+		} else {
+			add(ck("sec.eventlog", "Security", "Event log", "warn", fmt.Sprintf("the hash chain is broken at event %d: the log on flash was edited, truncated or corrupted", in.Chain.BrokenAt), "A root shell could have done this, or a bad write; clearing the log from the page starts a fresh chain."))
+		}
+	}
 	if t := in.Tor; t != nil && (t.Enabled || len(t.Devices) > 0) {
 		switch {
 		case !t.Installed:
@@ -661,6 +669,10 @@ func gatherDiag() diagInputs {
 	if canaryMgr != nil {
 		v := canaryMgr.View()
 		in.Canary = &v
+	}
+	if events != nil {
+		c := events.Chain()
+		in.Chain = &c
 	}
 	if rogueMgr != nil {
 		v := rogueMgr.View()
