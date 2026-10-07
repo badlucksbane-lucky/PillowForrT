@@ -591,6 +591,24 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 			return
 		}
 		writeJSON(w, 200, lanAnnounceMgr.View())
+	case path == "lanpoison" && r.Method == http.MethodGet:
+		if lanPoisonMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, lanPoisonMgr.View())
+	case path == "wifidisco" && r.Method == http.MethodGet:
+		if wifiDiscoMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, wifiDiscoMgr.View())
+	case path == "egressblock" && r.Method == http.MethodGet:
+		if egressBlockMgr == nil {
+			writeJSON(w, 200, map[string]any{"available": false})
+			return
+		}
+		writeJSON(w, 200, egressBlockMgr.View())
 	case path == "dnsxcheck" && r.Method == http.MethodGet:
 		if dnsXMgr == nil {
 			writeJSON(w, 200, map[string]any{"available": false})

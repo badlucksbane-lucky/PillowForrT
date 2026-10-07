@@ -107,6 +107,9 @@ var (
 	wlanXMLFlag     = flag.String("wlan-xml", "/usrdata/data/usr/wlan/wlan_conf_6174.xml", "the stock Wi-Fi settings file the Wi-Fi page edits")
 	sysDir          = flag.String("sys", "/sys", "sysfs root (a flag so tests can use a fixture)")
 	procDir         = flag.String("proc", "/proc", "procfs root (a flag so tests can use a fixture)")
+	lanPoisonOn     = flag.Bool("lan-poison-watch", true, "watch the bridge for a Responder-style tool answering LLMNR/NetBIOS name queries for many different names (name-poisoning responder)")
+	wifiDiscoOn     = flag.Bool("wifi-disco-watch", true, "watch for several Wi-Fi stations dropping at once (deauth flood / jammer)")
+	egressBlockFile = flag.String("egress-block-file", "/data/proxy/egress-blocklist.txt", "known C2/sinkhole destination addresses for the egress sampler, one IP or CIDR per line; empty or missing turns egress_ip_blocklist off")
 )
 
 // builtinPAC is served when -pac is not given. Everything goes through the proxy
@@ -402,6 +405,10 @@ func main() {
 		go vpn.Run()
 	}
 	wifi = newWifiManager(defaultWifiEnv())
+	if *wifiDiscoOn {
+		wifiDiscoMgr = newWifiDiscoWatch(wifi.env.stations)
+		wifiDiscoMgr.Start()
+	}
 	dhcpMgr = defaultDHCPManager()
 	poolMgr = defaultPoolManager(dhcpMgr)
 	macMgr = defaultMacFilter()
@@ -446,6 +453,11 @@ func main() {
 	macChurnMgr = newMACChurnWatch()
 	torBypassMgr = newTorBypassWatch(*torExitFile)
 	beaconMgr = newBeaconWatch("/data/proxy/beacon.json")
+	egressBlockMgr = newEgressBlockWatch(*egressBlockFile)
+	if *lanPoisonOn {
+		lanPoisonMgr = newLANPoisonWatch()
+		lanPoisonMgr.Start()
+	}
 	if *tlsSNIWatchOn {
 		tlsSNIMgr = newTLSSNIWatch(*ja3File)
 		tlsSNIMgr.Start()
