@@ -1,7 +1,6 @@
 <p align="center"><img src="assets/logo-parchment.svg" width="560" alt="Stone of Heimdall: a watchman for your hotspot"></p>
 
 # Stone of Heimdall
-### watchman for your hotspot
 
 **A privacy and intrusion-watching firmware layer for the Orbic RC400L cellular hotspot.** One static Go binary (`tinyfwd`) replaces the stock admin page and takes over DNS, the firewall, Wi-Fi settings and the exits, then sits on the LAN bridge and watches the wire. It filters DNS and forces it to leave encrypted, sends chosen devices through a VPN or Tor, closes the IPv6 and WebRTC address leaks, blocks outbound services you have not approved, and raises an event when something on your network behaves like a scanner, a spoofer, a rogue router, malware phoning home, or an interception box sitting in the path to the internet.
 
