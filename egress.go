@@ -10,6 +10,7 @@ package main
 // the tunnel) is OUTPUT, not forwarded, and is not covered here. DNS and DoT stay refused by the guard whatever this says. File: /data/proxy/egress.json.
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -278,6 +279,168 @@ func (m *egressMgr) Reconcile() {
 	}
 }
 
+// egressBlockList is the destination-IP blocklist for the sampler: published C2 and sinkhole addresses, operator-supplied and empty by default, loaded from
+// disk the same way torExitList (torbypass.go) loads its relay list -- one IP or CIDR per line, '#' comments, nothing ever fetched by this box on its own. The
+// DNS filter's lists (filter.go) only ever see a lookup; malware that phones home by a bare IP and never asks DNS at all is invisible there, and this is the
+// one place in the sampler that already sees every (device, destination) pair for every forwarded flow, listed or not. With no list loaded this never fires.
+type egressBlockList struct {
+	mu   sync.Mutex
+	path string
+	nets []*net.IPNet
+	ips  map[string]bool
+}
+
+func newEgressBlockList(path string) *egressBlockList {
+	l := &egressBlockList{path: path, ips: map[string]bool{}}
+	l.Reload()
+	return l
+}
+
+// Reload re-reads the blocklist from disk. Safe to call on a timer (actions.go) after a feed refreshes the file.
+func (l *egressBlockList) Reload() {
+	f, err := os.Open(l.path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	var nets []*net.IPNet
+	ips := map[string]bool{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		ln := strings.TrimSpace(sc.Text())
+		if ln == "" || strings.HasPrefix(ln, "#") {
+			continue
+		}
+		if strings.Contains(ln, "/") {
+			if _, n, err := net.ParseCIDR(ln); err == nil {
+				nets = append(nets, n)
+			}
+			continue
+		}
+		if ip := net.ParseIP(ln); ip != nil {
+			ips[ip.String()] = true
+		}
+	}
+	l.mu.Lock()
+	l.nets, l.ips = nets, ips
+	l.mu.Unlock()
+}
+
+func (l *egressBlockList) Available() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.ips) > 0 || len(l.nets) > 0
+}
+
+func (l *egressBlockList) Contains(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.ips[ip] {
+		return true
+	}
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
+	}
+	for _, n := range l.nets {
+		if n.Contains(parsed) {
+			return true
+		}
+	}
+	return false
+}
+
+type egressBlockFinding struct {
+	T   int64  `json:"t"`
+	MAC string `json:"mac,omitempty"`
+	IP  string `json:"ip"`
+	Dst string `json:"dst"`
+}
+
+// egressBlockWatch raises an event the first time, per device per 10 minutes, that a LAN device's traffic reaches a listed destination -- called from the
+// same sampler loop that already reads conntrack for the service allow-list (egressMgr.Sample), so nothing extra is read off the box.
+type egressBlockWatch struct {
+	mu     sync.Mutex
+	list   *egressBlockList
+	nameOf func(mac string) string
+	lastEv map[string]time.Time
+	finds  []egressBlockFinding
+	emit   func(evt)
+}
+
+func newEgressBlockWatch(path string) *egressBlockWatch {
+	return &egressBlockWatch{list: newEgressBlockList(path), lastEv: map[string]time.Time{},
+		nameOf: func(mac string) string {
+			if dhcpMgr != nil {
+				for _, r := range dhcpMgr.List() {
+					if r.MAC == mac {
+						return r.Name
+					}
+				}
+			}
+			return ""
+		},
+		emit: func(e evt) {
+			if events != nil {
+				events.Add([]evt{e})
+			}
+		}}
+}
+
+func (w *egressBlockWatch) label(mac, ip string) string {
+	if n := w.nameOf(mac); n != "" {
+		return fmt.Sprintf("%s (%s)", n, ip)
+	}
+	if mac != "" {
+		return fmt.Sprintf("%s (%s)", ip, mac)
+	}
+	return ip
+}
+
+func (w *egressBlockWatch) ObserveFlow(mac, src, dst string, now time.Time) {
+	if !w.list.Available() || !w.list.Contains(dst) {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	key := src + "|" + dst
+	if t, had := w.lastEv[key]; had && now.Sub(t) < 10*time.Minute {
+		return
+	}
+	w.lastEv[key] = now
+	for k, t := range w.lastEv {
+		if now.Sub(t) > time.Hour {
+			delete(w.lastEv, k)
+		}
+	}
+	f := egressBlockFinding{T: now.Unix(), MAC: mac, IP: src, Dst: dst}
+	w.finds = append(w.finds, f)
+	if len(w.finds) > 100 {
+		w.finds = w.finds[len(w.finds)-100:]
+	}
+	who := w.label(mac, src)
+	w.emit(evt{T: f.T, Kind: "egress_ip_blocklist", Sev: sevAlert,
+		Text:   fmt.Sprintf("%s connected to %s, a listed command-and-control or sinkhole address: this is traffic that never asked DNS for anything, so the DNS filter could not have caught it.", who, dst),
+		Public: "A device connected to an address on the threat-intelligence blocklist"})
+}
+
+type egressBlockView struct {
+	Available bool                 `json:"available"`
+	Findings  []egressBlockFinding `json:"findings"`
+}
+
+func (w *egressBlockWatch) View() egressBlockView {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	v := egressBlockView{Available: w.list.Available(), Findings: []egressBlockFinding{}}
+	for i := len(w.finds) - 1; i >= 0; i-- {
+		v.Findings = append(v.Findings, w.finds[i])
+	}
+	return v
+}
+
+var egressBlockMgr *egressBlockWatch
+
 type ctFlow struct {
 	Proto, Src, Dst string
 	Port            int
@@ -353,6 +516,9 @@ func (m *egressMgr) Sample() {
 		}
 		if beaconMgr != nil {
 			beaconMgr.Observe(mac, fl.Src, fl.Dst, time.Unix(now, 0))
+		}
+		if egressBlockMgr != nil {
+			egressBlockMgr.ObserveFlow(mac, fl.Src, fl.Dst, time.Unix(now, 0))
 		}
 		if portListed(effectiveRules(m.cfg, mac), fl.Proto, fl.Port) {
 			continue
