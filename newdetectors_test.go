@@ -17,7 +17,7 @@ func TestNewDetectorViewsAreNeverNull(t *testing.T) {
 		"torbypass": newTorBypassWatch(dir + "/exits.txt").View(),
 		"beacon":    newBeaconWatch(dir + "/beacon.json").View(),
 		"dga":       newDGAWatch().View(),
-		"tlssni":    newTLSSNIWatch().View(),
+		"tlssni":    newTLSSNIWatch(dir + "/ja3.txt").View(),
 		"dhcpfp":    newDHCPFPWatch().View(),
 		"dnsmitm":   newDNSMITMWatch().View(),
 	}

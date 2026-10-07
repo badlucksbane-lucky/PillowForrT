@@ -155,7 +155,7 @@ device is the threshold).
 ### Read them
 Every finding is an event, on the **Events** card and on the detector's own card, at one of two
 levels. **Alert** means something is impersonating or steering the network (`arp_gateway`,
-`arp_conflict`, `dns_mitm_confirmed`, `rogue_dhcp`). **To look at** means unusual, with a benign
+`arp_conflict`, `dns_mitm_confirmed`, `rogue_dhcp`, `tls_ja3_match`). **To look at** means unusual, with a benign
 explanation possible (everything else: `arp_flip`, `canary`, `canary_scan`, `tls_bare_ip`,
 `dhcp_fingerprint_drift`, `dns_canary`, `dns_plain_fallback`, `dns_exfil`, `dns_nxdomain_flood`,
 `dns_mitm_suspect`, `tor_bypass_exit`, `tor_bypass_onion`, `beacon_pattern`, and the MAC churn pair).
@@ -188,6 +188,19 @@ level to push; the default is "to look at" and above. What is sent is the generi
 a name, MAC or address. Pushes are held to one per kind per 10 minutes and 20 an hour, so a flood on the
 page is a few pushes on your phone.
 
+### The JA3 fingerprint check
+`tls_ja3_match` compares the JA3 fingerprint of every outbound ClientHello (the same one the Bare-IP TLS
+card already parses) against a hash list, and needs no setup to run -- but like the Tor relay check, the
+unit will not fetch that list on its own. It ships empty and so, until you populate it, this check never
+fires. To turn it on, put one `<md5 hash>,<name>` pair per line in `/data/proxy/ja3-blocklist.txt` from a
+threat-intel JA3 feed you trust (e.g. Abuse.ch's SSL Blacklist):
+```
+scripts/orbic-push.sh ja3-blocklist.txt /data/proxy/ja3-blocklist.txt 644
+```
+Keep it current yourself; a stale list means silence, not "nothing is wrong". A match is reported as
+`tls_ja3_match`, at the **alert** level, since a fingerprint match is a stronger signal than the plain
+bare-IP/no-SNI heuristic the same card also raises.
+
 ### The Tor relay check
 `tor_bypass_exit` (a device running its own Tor client, outside the unit's Tor controls) needs a list of
 relay addresses, and the unit will not fetch one on its own. It ships with the list empty and the
@@ -208,7 +221,7 @@ not touch that file; change it over ssh and restart the service):
 |---|---|---|
 | `-arp-watch=false` | on | ARP watch, and with it MAC churn and the ARP half of the ARP / DNS correlation |
 | `-rogue-dhcp=false` | on | Rogue DHCP |
-| `-tls-sni-watch=false` | on | Bare-IP TLS |
+| `-tls-sni-watch=false` | on | Bare-IP TLS, and with it the JA3 fingerprint check |
 | `-dhcp-fp-watch=false` | on | DHCP fingerprint drift |
 | `-canary ""` | `192.168.1.253` | The canary entirely, including the decoy address on the bridge |
 | `-tor-exit-file ""` | `/data/proxy/tor-exits.txt` | The Tor relay check (an empty or missing file does the same) |

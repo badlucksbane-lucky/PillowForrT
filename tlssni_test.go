@@ -1,6 +1,84 @@
 package main
 
-import "testing"
+import (
+	"crypto/md5"
+	"encoding/hex"
+	"os"
+	"testing"
+)
+
+// buildClientHelloJA3 assembles a ClientHello carrying cipher suites, a supported_groups extension, an
+// ec_point_formats extension and a GREASE cipher/extension/group in each list, to exercise JA3 extraction and
+// GREASE-stripping end to end.
+func buildClientHelloJA3() []byte {
+	ciphers := []byte{0x13, 0x01, 0x0a, 0x0a, 0x00, 0x2f} // 4865, GREASE, 47
+	groups := []byte{0x00, 0x04, 0x00, 0x1d, 0x0a, 0x0a}  // list_len=4: 29, GREASE
+	groupsExt := append([]byte{0x00, 0x0a, 0x00, byte(len(groups))}, groups...)
+	formats := []byte{0x01, 0x00} // formats_len=1: 0
+	formatsExt := append([]byte{0x00, 0x0b, 0x00, byte(len(formats))}, formats...)
+	greaseExt := []byte{0x0a, 0x0a, 0x00, 0x00}
+	exts := append(append(append([]byte{}, groupsExt...), formatsExt...), greaseExt...)
+
+	body := make([]byte, 0, 128)
+	body = append(body, 0x03, 0x03)
+	body = append(body, make([]byte, 32)...)
+	body = append(body, 0x00)
+	body = append(body, byte(len(ciphers)>>8), byte(len(ciphers)))
+	body = append(body, ciphers...)
+	body = append(body, 0x01, 0x00)
+	body = append(body, byte(len(exts)>>8), byte(len(exts)))
+	body = append(body, exts...)
+
+	hs := append([]byte{0x01, byte(len(body) >> 16), byte(len(body) >> 8), byte(len(body))}, body...)
+	rec := append([]byte{0x16, 0x03, 0x01, byte(len(hs) >> 8), byte(len(hs))}, hs...)
+	return rec
+}
+
+func TestJA3(t *testing.T) {
+	ch, ok := parseClientHello(buildClientHelloJA3())
+	if !ok {
+		t.Fatal("well-formed ClientHello should parse")
+	}
+	s, hash := ja3(ch)
+	want := "771,4865-47,10-11,29,0"
+	if s != want {
+		t.Fatalf("ja3 string = %q, want %q (GREASE should be stripped from ciphers and curves, kept absent from the point-format field per spec)", s, want)
+	}
+	sum := md5.Sum([]byte(want))
+	if hash != hex.EncodeToString(sum[:]) {
+		t.Fatalf("ja3 hash does not match md5 of its own string")
+	}
+}
+
+// TestJA3List guards the things observe() relies on: a missing file leaves the list empty (so tls_ja3_match never
+// fires until an operator populates it), and once populated, a lookup by hash fires while an unknown hash doesn't.
+func TestJA3List(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/ja3-blocklist.txt"
+
+	l := newJA3List(path)
+	if name, ok := l.Lookup("deadbeefdeadbeefdeadbeefdeadbeef"); ok {
+		t.Fatalf("missing file should leave the list empty, got %q", name)
+	}
+
+	ch, ok := parseClientHello(buildClientHelloJA3())
+	if !ok {
+		t.Fatal("well-formed ClientHello should parse")
+	}
+	_, hash := ja3(ch)
+	content := "# comment\n\n" + hash + " , test-malware\nnot-a-valid-line\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	l.Reload()
+
+	if name, flagged := l.Lookup(hash); !flagged || name != "test-malware" {
+		t.Fatalf("Lookup(%s) = %q, %v; want test-malware, true", hash, name, flagged)
+	}
+	if _, flagged := l.Lookup("deadbeefdeadbeefdeadbeefdeadbeef"); flagged {
+		t.Fatal("an unlisted hash must not match")
+	}
+}
 
 // buildClientHello assembles a minimal, well-formed TLS record containing a ClientHello, optionally with an SNI extension for hostName (empty = no SNI extension at all).
 func buildClientHello(hostName string) []byte {

@@ -11,11 +11,16 @@ package main
 // evidence; (3) QUIC/HTTP3 (UDP 443) carries its own encrypted ClientHello and is invisible here entirely.
 
 import (
+	"bufio"
+	"crypto/md5"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -127,18 +132,198 @@ func parseClientHelloSNI(payload []byte) (name string, hasSNI bool, ok bool) {
 	return "", false, true
 }
 
+// clientHello is everything the JA3 fingerprint and the bare-IP check both need, pulled from one ClientHello in a single pass.
+type clientHello struct {
+	Version   int
+	Ciphers   []int
+	ExtTypes  []int
+	Curves    []int
+	PtFormats []int
+	SNI       string
+	HasSNI    bool
+}
+
+// grease marks the reserved "ignore me" values TLS clients insert into cipher/extension/group lists to test server
+// tolerance (RFC 8701, values of the form 0x?a?a). JA3 excludes them, or every Chrome connection would fingerprint
+// differently depending on which GREASE value it happened to roll.
+func grease(v int) bool { return v&0x0f0f == 0x0a0a }
+
+// parseClientHello reads a TLS record expected to be one complete ClientHello in a single TCP segment, the same
+// honest limits as the old parseClientHelloSNI: a record split across segments or malformed is reported as !ok,
+// never guessed at.
+func parseClientHello(payload []byte) (ch clientHello, ok bool) {
+	if len(payload) < 5 || payload[0] != 0x16 {
+		return ch, false
+	}
+	recLen := be16(payload[3:5])
+	if len(payload) < 5+recLen {
+		return ch, false
+	}
+	hs := payload[5 : 5+recLen]
+	if len(hs) < 4 || hs[0] != 0x01 {
+		return ch, false
+	}
+	hsLen := be24(hs[1:4])
+	body := hs[4:]
+	if len(body) < hsLen {
+		return ch, false
+	}
+	body = body[:hsLen]
+	if len(body) < 2 {
+		return ch, false
+	}
+	ch.Version = be16(body[0:2])
+	pos := 2 + 32 // client_version, random
+	if len(body) < pos+1 {
+		return ch, false
+	}
+	pos += 1 + int(body[pos]) // session_id
+	if len(body) < pos+2 {
+		return ch, false
+	}
+	csLen := be16(body[pos : pos+2])
+	pos += 2
+	if len(body) < pos+csLen {
+		return ch, false
+	}
+	for i := 0; i+2 <= csLen; i += 2 {
+		ch.Ciphers = append(ch.Ciphers, be16(body[pos+i:pos+i+2]))
+	}
+	pos += csLen
+	if len(body) < pos+1 {
+		return ch, false
+	}
+	pos += 1 + int(body[pos]) // compression_methods
+	if len(body) < pos+2 {
+		return ch, true // a pre-TLS1.2-extensions hello: everything else stays empty, parsed cleanly
+	}
+	extEnd := pos + 2 + be16(body[pos:pos+2])
+	pos += 2
+	if extEnd > len(body) {
+		extEnd = len(body)
+	}
+	for pos+4 <= extEnd {
+		etype, elen := be16(body[pos:pos+2]), be16(body[pos+2:pos+4])
+		pos += 4
+		if pos+elen > len(body) {
+			break
+		}
+		ext := body[pos : pos+elen]
+		ch.ExtTypes = append(ch.ExtTypes, etype)
+		switch etype {
+		case 0: // server_name
+			if elen >= 5 {
+				nameLen := be16(ext[3:5])
+				if 5+nameLen <= len(ext) {
+					ch.SNI, ch.HasSNI = string(ext[5:5+nameLen]), true
+				}
+			}
+		case 10: // supported_groups (elliptic curves)
+			if elen >= 2 {
+				n := be16(ext[0:2])
+				for i := 0; i+2 <= n && 2+i+2 <= len(ext); i += 2 {
+					ch.Curves = append(ch.Curves, be16(ext[2+i:2+i+2]))
+				}
+			}
+		case 11: // ec_point_formats
+			if elen >= 1 {
+				n := int(ext[0])
+				for i := 0; i < n && 1+i < len(ext); i++ {
+					ch.PtFormats = append(ch.PtFormats, int(ext[1+i]))
+				}
+			}
+		}
+		pos += elen
+	}
+	return ch, true
+}
+
+// ja3 renders the standard JA3 string (SSLVersion,Ciphers,Extensions,EllipticCurves,EllipticCurvePointFormats,
+// dash-joined within a field, GREASE values dropped) and its MD5 hash, the fingerprint https://github.com/salesforce/ja3
+// defined and that most threat-intel JA3 blocklists key on.
+func ja3(ch clientHello) (string, string) {
+	join := func(vals []int, skipGrease bool) string {
+		parts := make([]string, 0, len(vals))
+		for _, v := range vals {
+			if skipGrease && grease(v) {
+				continue
+			}
+			parts = append(parts, strconv.Itoa(v))
+		}
+		return strings.Join(parts, "-")
+	}
+	s := fmt.Sprintf("%d,%s,%s,%s,%s", ch.Version, join(ch.Ciphers, true), join(ch.ExtTypes, true), join(ch.Curves, true), join(ch.PtFormats, false))
+	sum := md5.Sum([]byte(s))
+	return s, hex.EncodeToString(sum[:])
+}
+
+// ja3List is the JA3-hash-to-name blocklist, loaded from disk the same way torExitList (torbypass.go) loads its
+// relay list: this box fetches nothing on its own, so the file starts out missing and the list starts out empty,
+// which means tls_ja3_match never fires -- silence, not a false "nothing is wrong" and not a guessed-at claim like
+// "this is Cobalt Strike" from a hash nobody actually verified. Populate it from a threat-intel JA3 feed you trust
+// (e.g. Abuse.ch's SSL Blacklist), one `<md5 hash>,<name>` pair per line, `#` comments allowed.
+type ja3List struct {
+	mu   sync.Mutex
+	path string
+	by   map[string]string
+}
+
+func newJA3List(path string) *ja3List {
+	l := &ja3List{path: path, by: map[string]string{}}
+	l.Reload()
+	return l
+}
+
+// Reload re-reads the blocklist from disk. Safe to call on a timer after a feed refreshes the file; a missing or
+// empty file just means the list stays empty.
+func (l *ja3List) Reload() {
+	f, err := os.Open(l.path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	by := map[string]string{}
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		ln := strings.TrimSpace(sc.Text())
+		if ln == "" || strings.HasPrefix(ln, "#") {
+			continue
+		}
+		hash, name, ok := strings.Cut(ln, ",")
+		hash, name = strings.TrimSpace(hash), strings.TrimSpace(name)
+		if !ok || len(hash) != 32 || name == "" {
+			continue
+		}
+		by[strings.ToLower(hash)] = name
+	}
+	l.mu.Lock()
+	l.by = by
+	l.mu.Unlock()
+}
+
+// Lookup reports whether hash is on the blocklist and, if so, the name to put in the event.
+func (l *ja3List) Lookup(hash string) (string, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	name, ok := l.by[hash]
+	return name, ok
+}
+
 type tlsSNIFinding struct {
-	T    int64  `json:"t"`
-	MAC  string `json:"mac,omitempty"`
-	Src  string `json:"src"`
-	Dst  string `json:"dst"`
-	Name string `json:"name,omitempty"` // set only when the SNI was literally the bare IP
+	T       int64  `json:"t"`
+	MAC     string `json:"mac,omitempty"`
+	Src     string `json:"src"`
+	Dst     string `json:"dst"`
+	Name    string `json:"name,omitempty"` // set only when the SNI was literally the bare IP
+	JA3     string `json:"ja3,omitempty"`
+	JA3Name string `json:"ja3_name,omitempty"` // set only on a blocklist match
 }
 
 type tlsSNIWatch struct {
 	mu      sync.Mutex
 	lastEv  map[string]time.Time
 	finds   []tlsSNIFinding
+	ja3     *ja3List
 	now     func() time.Time
 	emit    func(evt)
 	macOf   func(ip string) string
@@ -147,8 +332,8 @@ type tlsSNIWatch struct {
 	capOnce bool
 }
 
-func newTLSSNIWatch() *tlsSNIWatch {
-	return &tlsSNIWatch{lastEv: map[string]time.Time{}, now: time.Now,
+func newTLSSNIWatch(ja3File string) *tlsSNIWatch {
+	return &tlsSNIWatch{lastEv: map[string]time.Time{}, ja3: newJA3List(ja3File), now: time.Now,
 		emit: func(e evt) {
 			if events != nil {
 				events.Add([]evt{e})
@@ -192,12 +377,14 @@ func (w *tlsSNIWatch) observe(f tlsFrame, now time.Time) {
 	if src == nil || dst == nil || !lan.Contains(src) || lan.Contains(dst) {
 		return // only a LAN device opening TLS to something outside is in scope
 	}
-	name, hasSNI, ok := parseClientHelloSNI(f.Payload)
+	ch, ok := parseClientHello(f.Payload)
 	if !ok {
 		return
 	}
-	bare := !hasSNI || name == f.Dst
-	if !bare {
+	bare := !ch.HasSNI || ch.SNI == f.Dst
+	_, hash := ja3(ch)
+	badName, flagged := w.ja3.Lookup(hash)
+	if !bare && !flagged {
 		return
 	}
 	w.mu.Lock()
@@ -213,17 +400,25 @@ func (w *tlsSNIWatch) observe(f tlsFrame, now time.Time) {
 		}
 	}
 	mac := w.macOf(f.Src)
-	find := tlsSNIFinding{T: now.Unix(), MAC: mac, Src: f.Src, Dst: f.Dst}
-	if hasSNI {
-		find.Name = name
+	find := tlsSNIFinding{T: now.Unix(), MAC: mac, Src: f.Src, Dst: f.Dst, JA3: hash}
+	if ch.HasSNI {
+		find.Name = ch.SNI
+	}
+	if flagged {
+		find.JA3Name = badName
 	}
 	w.finds = append(w.finds, find)
 	if len(w.finds) > 100 {
 		w.finds = w.finds[len(w.finds)-100:]
 	}
 	who := w.label(f.Src, mac)
+	if flagged {
+		text := fmt.Sprintf("%s opened a TLS connection to %s whose fingerprint (JA3 %s) matches a known %s client: this is a strong signal, not a guess from SNI alone.", who, f.Dst, hash, badName)
+		w.emit(evt{T: now.Unix(), Kind: "tls_ja3_match", Sev: sevAlert, Text: text, Public: "A device's TLS fingerprint matched a known malicious client"})
+		return
+	}
 	var text string
-	if hasSNI {
+	if ch.HasSNI {
 		text = fmt.Sprintf("%s opened a TLS connection to %s and sent that address itself as the TLS server name, instead of a hostname: unusual, though some hand-configured tools do this on purpose.", who, f.Dst)
 	} else {
 		text = fmt.Sprintf("%s opened a TLS connection to %s with no server name (SNI) at all: almost every browser and app sends one, so this is worth a look, though a few IoT devices and local tools skip it.", who, f.Dst)
