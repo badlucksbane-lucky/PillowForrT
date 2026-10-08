@@ -86,7 +86,7 @@ func handleVPNAPI(w http.ResponseWriter, r *http.Request, path string) {
 	}
 	if r.Method == http.MethodGet && path == "vpn" {
 		vpn.EnsureRelays()
-		writeJSON(w, 200, vpn.Status())
+		writeJSON(w, 200, vpnStatusJSON())
 		return
 	}
 	if r.Method != http.MethodPost {
@@ -138,7 +138,15 @@ func handleVPNAPI(w http.ResponseWriter, r *http.Request, path string) {
 		writeJSON(w, 400, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, 200, vpn.Status())
+	writeJSON(w, 200, vpnStatusJSON())
+}
+
+// vpnStatusJSON is the VPN status plus which rung is serving the router's own traffic (owndial.go).
+func vpnStatusJSON() any {
+	return struct {
+		vpnStatus
+		Own ownView `json:"own"`
+	}{vpn.Status(), ownR.View()}
 }
 
 // handleAccount: who is logged in (with the CSRF token the page must send), and changing the password.
