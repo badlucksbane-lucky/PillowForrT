@@ -70,6 +70,7 @@ button{min-height:36px}
   <table id="cu"></table>
   <div class="row" style="margin-top:8px"><input id="cu_w" placeholder="check a name, e.g. ads.example.com" aria-label="Explain" autocomplete="off" autocapitalize="off" spellcheck="false"><button onclick="cuwhy()">Why?</button></div>
   <div id="cuwhy" class="mut" style="margin-top:4px"></div></details></div>
+<div class="card"><h2>Devices <span id="egbadge"></span></h2><div id="egmsg" class="msg"></div><div id="eg" class="mut">loading</div></div>
 <div class="card"><h2>Proxy</h2><div id="pxpol"></div>
  <div class="row" style="margin-top:10px"><b>Mullvad</b> <span id="vpnbadge"></span></div><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div>
  <div class="row" style="margin-top:10px"><b>Tor</b> <span id="torbadge"></span></div><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
@@ -101,7 +102,6 @@ button{min-height:36px}
 <div class="card"><h2>Top asked</h2><table id="tq"></table></div>
 <div class="card"><h2>Recent</h2><table id="rc"></table></div>
 <div class="sec">Devices</div>
-<div class="card"><h2>Devices <span id="egbadge"></span></h2><div id="egmsg" class="msg"></div><div id="eg" class="mut">loading</div></div>
 <div class="card"><h2>Wi-Fi</h2><div id="wifi" class="mut">loading</div><div id="wmsg" class="msg"></div></div>
 <div class="card"><h2>Blocked devices</h2><div id="blk" class="mut">loading</div><div id="bmsg" class="msg"></div></div>
 <div class="card"><h2>Internet schedules</h2><div id="fws" class="mut">loading</div><div id="fmsg" class="msg"></div></div>
@@ -824,7 +824,7 @@ function egdevs(){const m={},add=(mac,o)=>{mac=(mac||'').toLowerCase();if(!mac)r
  if(Eg){Object.keys(Eg.devices||{}).forEach(k=>add(k,{}));Object.keys(Eg.dev_services||{}).forEach(k=>add(k,{}));(Eg.http_upgrade_skip||[]).forEach(k=>add(k,{}));(Eg.observed||[]).forEach(o=>add(o.mac,{ip:o.ip}))}
  return Object.keys(m).map(k=>{const d=m[k];d.pend=((Eg&&Eg.observed)||[]).filter(o=>(o.mac||'').toLowerCase()===k);d.name=d.name||d.ip||k;return d}).sort((x,y)=>(y.pend.length>0)-(x.pend.length>0)||(!!y.online)-(!!x.online)||x.name.localeCompare(y.name))}
 function egcard(d){const mac=d.mac,ex=(Eg.dev_services||{})[mac]||[],rules=(Eg.devices||{})[mac]||[],skip=(Eg.http_upgrade_skip||[]).indexOf(mac)>=0,viaTor=!!(Tr&&(Tr.devices||[]).some(x=>(x.mac||'').toLowerCase()===mac)),xit=viaTor?'tor':((V&&V.device_exit||{})[d.ip]||'');
- const open=mac in EgTog?EgTog[mac]:(d.pend.length>0&&Eg.mode==='monitor'),dv=d.dev,inf=dv?devinfo(dv,EgDns):null,own=ex.length+rules.length;
+ const open=egopen(d),dv=d.dev,inf=dv?devinfo(dv,EgDns):null,own=ex.length+rules.length;
  const badge=(d.pend.length?'<b class="err">'+d.pend.length+' would be refused</b>':'')+(dv&&dv.blocked?'<b class="err">blocked</b>':'')+(dv&&dv.cut_now?'<b class="err">cut</b>':'')+(own?'<span class="cnt" title="its own rules">'+own+'</span>':'')+(xit?' <span class="mut">'+({tor:'Tor',mullvad:'Mullvad',direct:'Direct'}[xit]||xit)+'</span>':'')+(skip?' <span class="mut">HTTPS off</span>':'');
  let h='<div class="dcard"><div class="dhead" role="button" tabindex="0" aria-expanded="'+open+'" onclick="egtog(\''+esc(mac)+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();egtog(\''+esc(mac)+'\')}"><span class="dcar">'+(open?'&#9662;':'&#9656;')+'</span><span class="dot" style="background:'+(d.online?'var(--okc)':'var(--ln)')+'" title="'+(d.online?'online':'offline')+'"></span><b>'+esc(d.name)+'</b><span class="mut">'+esc(d.ip||'')+(d.known?'':' &middot; not in the device list')+'</span><span class="dbad">'+badge+'</span></div>';
  if(!open)return h+'</div>';
@@ -841,20 +841,19 @@ function egcard(d){const mac=d.mac,ex=(Eg.dev_services||{})[mac]||[],rules=(Eg.d
  return h+'</div></div>'}
 function egrender(force){const el=$('eg');if(!Eg||guard(el,force))return;
 EgDns={};(DnsC||[]).forEach(c=>EgDns[c.ip]=c);
-const devs=egdevs(),pt=devs.reduce((n,d)=>n+d.pend.length,0),mclr=Eg.mode==='enforce'?'var(--ac)':Eg.mode==='monitor'?'var(--warn)':'var(--mut)';
+const devs=egdevs(),pt=devs.reduce((n,d)=>n+d.pend.length,0);
 $('egbadge').innerHTML='<span class="cnt" title="devices">'+devs.length+'</span>'+(pt?'<span class="cnt" style="color:var(--bad);border-color:var(--bad)" title="would be refused">'+pt+'</span>':'');
-el.innerHTML='<details'+(EgTog._f?' open':'')+' ontoggle="EgTog._f=this.open"><summary><b>Outbound firewall</b> <span style="color:'+mclr+'">&bull; '+({off:'off',monitor:'watching only',enforce:'enforcing'}[Eg.mode]||Eg.mode)+'</span></summary>'+
-  '<div class="mut" style="margin:4px 0">Only listed services may connect out (DNS handled separately). <b>Watch only</b> = log without blocking. Undo: <code>ssh orbic rm /data/proxy/egress.json</code>.</div>'+
-  '<div class="row">'+seg('Outbound firewall',[['off','Off'],['monitor','Watch only'],['enforce','Enforce']],Eg.mode,v=>"yegm('"+v+"')")+(Eg.rules_in_place?'':'<span class="err">rules not in place yet (20 s)</span>')+'</div>'+
-  '<details style="margin-top:8px"'+(EgTog._g?' open':'')+' ontoggle="EgTog._g=this.open"><summary><b>For everyone</b> <span class="mut">services, other ports, HTTP upgrade, .onion</span></summary>'+
+el.innerHTML='<div class="row" title="Only listed services may connect out (DNS is separate). Watch only logs without blocking. Undo: ssh orbic rm /data/proxy/egress.json"><span class="mut">Outbound</span>'+seg('Outbound firewall',[['off','Off'],['monitor','Watch only'],['enforce','Enforce']],Eg.mode,v=>"yegm('"+v+"')")+(Eg.rules_in_place?'':'<span class="err">rules not in place yet (20 s)</span>')+'</div>'+
+  '<details style="margin-top:8px"'+(EgTog._f?' open':'')+' ontoggle="EgTog._f=this.open"><summary><b>For everyone</b> <span class="mut">services, other ports, HTTP upgrade, .onion</span></summary>'+
   '<table>'+Eg.services.map(s=>'<tr><td style="width:28px"><input type="checkbox" aria-label="Allow '+esc(s.name)+' for everyone"'+(s.on?' checked':'')+' onchange="yegsv(\''+s.id+'\',this.checked,\'\')"></td><td><b>'+esc(s.name)+'</b><br><span class="mut">'+esc(s.desc)+'</span></td><td class="mut">'+esc(s.ports)+'</td></tr>').join('')+'</table>'+
   '<div style="margin-top:8px"><b>Other allowed ports</b></div><table style="margin-top:6px">'+(Eg.allow||[]).map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td>'+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\'\')">remove</button></td></tr>').join('')+(Eg.allow&&Eg.allow.length?'':'<tr><td class="mut">none</td></tr>')+'</table>'+
   (Tr&&Tr.available!==false?'<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.onion?'checked ':'')+'onchange="trset('+Tr.enabled+',this.checked)"> <b>.onion for the whole house</b></label></div>':'')+
   '<div style="margin-top:8px"><b>Upgrade plain HTTP to HTTPS</b> <b style="color:var(--ac)">'+(Eg.http_upgrade?'on':'off')+'</b></div>'+
   '<div class="mut" style="margin:4px 0">Port 80 stays open, but a page asked for over plain HTTP is first sent to its https:// address. If the same device comes back for the same site within 2 minutes and no HTTPS connection exists, it <b>fell back</b>: that is noted and the plain request is let through. A device that cannot follow redirects (curl without -L, some gadgets, firmware updaters) will not work: leave it out on its card. Served '+Eg.http_upgraded+', fell back '+Eg.http_fell_back+' since start.</div>'+
-  '<div class="row"><button class="'+(Eg.http_upgrade?'on':'')+'" onclick="yhup('+!Eg.http_upgrade+',\'\')">'+(Eg.http_upgrade?'Turn the upgrade off':'Turn the upgrade on')+'</button>'+((Eg.http_upgrade_skip||[]).length?'<span class="mut">'+Eg.http_upgrade_skip.length+' device(s) left out</span>':'')+'</div></details></details>'+
+  '<div class="row"><button class="'+(Eg.http_upgrade?'on':'')+'" onclick="yhup('+!Eg.http_upgrade+',\'\')">'+(Eg.http_upgrade?'Turn the upgrade off':'Turn the upgrade on')+'</button>'+((Eg.http_upgrade_skip||[]).length?'<span class="mut">'+Eg.http_upgrade_skip.length+' device(s) left out</span>':'')+'</div></details>'+
   (devs.map(egcard).join('')||'<div class="mut">no devices yet</div>')}
-function egtog(mac){const d=egdevs().find(x=>x.mac===mac);const cur=mac in EgTog?EgTog[mac]:(d&&d.pend.length>0&&Eg.mode==='monitor');EgTog[mac]=!cur;egrender(true)}
+function egopen(d){return d.mac in EgTog?EgTog[d.mac]:(d.pend.length>0&&Eg.mode==='monitor')||!!d.online}
+function egtog(mac){const d=egdevs().find(x=>x.mac===mac);EgTog[mac]=!(d&&egopen(d));egrender(true)}
 let Sa=null,Sl=null,Eg=null;
 async function yload(){try{Sy=await (await api('/api/system')).json();Sa=await (await api('/api/system/stockadmin')).json();Sl=await (await api('/api/system/lanv6')).json();Eg=await (await api('/api/egress')).json();yrender();egrender()}catch(e){}}
 async function egreload(m){$('egmsg').textContent=m||'';Eg=await (await api('/api/egress')).json();egrender(true)}
