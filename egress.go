@@ -7,7 +7,8 @@ package main
 //            be built from what the house really uses before anything breaks;
 //   enforce  TCP outside the list is refused with a reset, UDP with port-unreachable, other protocols with an ICMP reject. ICMP echo and the ICMPv6 types IPv6 needs always pass.
 // Only the LAN-to-outside direction is policed (the web page and the LAN are never affected). Traffic that tinyfwd and Tor open from the Orbic itself (the PAC proxy, DoH,
-// the tunnel) is OUTPUT, not forwarded, and is not covered here. DNS and DoT stay refused by the guard whatever this says. File: /data/proxy/egress.json.
+// the tunnel) is OUTPUT, not forwarded, and is not covered here. DNS and DoT stay refused by the guard whatever this says, and in enforce mode by the first rules of the chain.
+// Port 80 stays allowed, but httpupgrade.go first sends a device's port-80 connections to the https:// address and notes the ones that fell back to plain HTTP. File: /data/proxy/egress.json.
 
 import (
 	"bufio"
@@ -37,6 +38,11 @@ type egressCfg struct {
 	Allow    []egressRule            `json:"allow"`
 	Devices  map[string][]egressRule `json:"devices,omitempty"`      // lower-case MAC
 	DevSvc   map[string][]string     `json:"dev_services,omitempty"` // extra services for one device
+	// NoHTTPUpgrade turns the port-80 redirect to https:// off (httpupgrade.go); the zero value is on, so a file written before it existed gets it. HTTPSkip lists the
+	// devices (lower-case MAC) whose port 80 is left alone. httpExempt is the short-lived "fell back" pass for one (device, destination) pair and is never saved.
+	NoHTTPUpgrade bool         `json:"no_http_upgrade,omitempty"`
+	HTTPSkip      []string     `json:"http_upgrade_skip,omitempty"`
+	httpExempt    []httpExempt `json:"-"`
 }
 
 // egressService is a named bundle of ports you can tick, so nobody has to know that push notifications live on 5223.
@@ -49,7 +55,7 @@ type egressService struct {
 }
 
 var egressServices = []egressService{
-	{"web", "Web", "Websites and most apps (HTTP and HTTPS)", []egressRule{{"tcp", "80,443", ""}}, true},
+	{"web", "Web", "Websites and most apps (HTTP and HTTPS; plain HTTP is sent to the https:// address first, see the upgrade below)", []egressRule{{"tcp", "80,443", ""}}, true},
 	{"quic", "QUIC / HTTP3", "Faster web for Chrome and many apps; apps fall back to normal HTTPS without it", []egressRule{{"udp", "443", ""}}, true},
 	{"ntp", "Clock sync", "Network time (NTP)", []egressRule{{"udp", "123", ""}}, true},
 	{"ssh", "SSH and git", "Secure shell and git over ssh", []egressRule{{"tcp", "22", ""}}, true},
@@ -113,6 +119,8 @@ type egressMgr struct {
 	apply   func(rules4, rules6 string, hooked bool) error
 	now     func() time.Time
 	lastErr string
+	// noUpgrade is -http-upgrade=false: the redirect rules are never rendered, whatever the saved config says.
+	noUpgrade bool
 }
 
 var portsRe = regexp.MustCompile(`^[0-9]{1,5}(:[0-9]{1,5})?(,[0-9]{1,5}(:[0-9]{1,5})?)*$`)
@@ -205,6 +213,14 @@ func egressRules(c egressCfg, v6 bool) string {
 	} else {
 		b.WriteString("-A HS_EGRESS -p icmp -j RETURN\n")
 	}
+	if c.Mode == "enforce" { // DNS and DoT never leave from here, whatever is ticked below: the guard's redirect sends them to the filter, and this is the net under it (both tunnels included)
+		if v6 {
+			b.WriteString("-A HS_EGRESS -p udp -m multiport --dports 53,853 -j REJECT --reject-with icmp6-port-unreachable\n")
+		} else {
+			b.WriteString("-A HS_EGRESS -p udp -m multiport --dports 53,853 -j REJECT --reject-with icmp-port-unreachable\n")
+		}
+		b.WriteString("-A HS_EGRESS -p tcp -m multiport --dports 53,853 -j REJECT --reject-with tcp-reset\n")
+	}
 	emit := func(prefix string, rs []egressRule) {
 		for _, r := range rs {
 			for _, ch := range portChunks(r.Ports) {
@@ -243,6 +259,9 @@ func egressRules(c egressCfg, v6 bool) string {
 		}
 	}
 	b.WriteString("COMMIT\n")
+	if !v6 { // the kernel has no ip6 nat table; iptables-restore takes several tables in one input
+		b.WriteString(httpUpgradeNat(c))
+	}
 	return b.String()
 }
 
@@ -259,24 +278,36 @@ func applyEgress(r4, r6 string, hooked bool) error {
 				run("sh", "-c", "while "+x.tool+" -D FORWARD "+spec+" 2>/dev/null; do :; done")
 			}
 		}
+		if x.tool == "iptables" { // the chain is empty unless the upgrade is in force, so hooking it whenever the list is on costs one port-80 match
+			const up = "-i bridge0 -p tcp --dport 80 -j HS_HTTPUP"
+			if hooked {
+				run("sh", "-c", "iptables -t nat -C PREROUTING "+up+" 2>/dev/null || iptables -t nat -I PREROUTING 1 "+up)
+			} else {
+				run("sh", "-c", "while iptables -t nat -D PREROUTING "+up+" 2>/dev/null; do :; done")
+			}
+		}
 	}
 	return nil
 }
 
-func (m *egressMgr) Reconcile() {
+func (m *egressMgr) Reconcile() { m.reconcile() }
+
+func (m *egressMgr) reconcile() error {
 	m.mu.Lock()
+	m.pruneExemptLocked()
 	c := m.cfg
+	c.NoHTTPUpgrade = c.NoHTTPUpgrade || m.noUpgrade
 	m.mu.Unlock()
-	if err := m.apply(egressRules(c, false), egressRules(c, true), c.Mode != "off"); err != nil {
-		m.mu.Lock()
+	err := m.apply(egressRules(c, false), egressRules(c, true), c.Mode != "off")
+	m.mu.Lock()
+	if err != nil {
 		m.lastErr = err.Error()
-		m.mu.Unlock()
 		log.Printf("egress rules: %v", err)
 	} else {
-		m.mu.Lock()
 		m.lastErr = ""
-		m.mu.Unlock()
 	}
+	m.mu.Unlock()
+	return err
 }
 
 // egressBlockList is the destination-IP blocklist for the sampler: published C2 and sinkhole addresses, operator-supplied and empty by default, loaded from
@@ -661,6 +692,10 @@ type egressSvcView struct {
 
 type egressView struct {
 	Mode     string                  `json:"mode"`
+	HTTPUp   bool                    `json:"http_upgrade"`   // port-80 connections are sent to https:// first
+	HTTPUpN  uint64                  `json:"http_upgraded"`  // redirects served since start (no names kept)
+	HTTPFell uint64                  `json:"http_fell_back"` // repeats that would have fallen back to plain HTTP and were let through
+	HTTPSkip []string                `json:"http_upgrade_skip"`
 	Services []egressSvcView         `json:"services"`
 	Allow    []egressRule            `json:"allow"`
 	Devices  map[string][]egressRule `json:"devices"`
@@ -718,12 +753,44 @@ func (m *egressMgr) SetService(id string, on bool, mac string) error {
 	return nil
 }
 
+// SetHTTPUpgrade turns the port-80 redirect to https:// on or off for everyone (mac "") or leaves one device out of it (on = false) / puts it back (on = true).
+func (m *egressMgr) SetHTTPUpgrade(on bool, mac string) error {
+	mac = strings.ToLower(mac)
+	if mac != "" {
+		if _, err := net.ParseMAC(mac); err != nil {
+			return errors.New("bad MAC")
+		}
+	}
+	m.mu.Lock()
+	if mac == "" {
+		m.cfg.NoHTTPUpgrade = !on
+	} else {
+		var keep []string
+		for _, x := range m.cfg.HTTPSkip {
+			if x != mac {
+				keep = append(keep, x)
+			}
+		}
+		if !on {
+			keep = append(keep, mac)
+		}
+		m.cfg.HTTPSkip = keep
+	}
+	err := m.saveLocked()
+	m.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	m.Reconcile()
+	return nil
+}
+
 func (m *egressMgr) View() egressView { return m.ViewFor("") }
 
 // ViewFor is the view with the "Extra" ticks for one device (mac "" = none).
 func (m *egressMgr) ViewFor(mac string) egressView {
 	m.mu.Lock()
-	v := egressView{Mode: m.cfg.Mode, Allow: m.cfg.Allow, Devices: m.cfg.Devices, Error: m.lastErr}
+	v := egressView{Mode: m.cfg.Mode, HTTPUp: !m.cfg.NoHTTPUpgrade, HTTPUpN: httpUp.Redirected.Load(), HTTPFell: httpUp.FellBack.Load(), HTTPSkip: append([]string{}, m.cfg.HTTPSkip...), Allow: m.cfg.Allow, Devices: m.cfg.Devices, Error: m.lastErr}
 	on := map[string]bool{}
 	for _, id := range m.cfg.Services {
 		on[id] = true

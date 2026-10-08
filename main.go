@@ -60,6 +60,7 @@ var (
 	sshDir          = flag.String("ssh-dir", "/data/dropbear/ssh", "dropbear's -D directory (authorized_keys, host key)")
 	stockAdminFlag  = flag.String("stock-admin-flag", "/data/proxy/stockadmin.off", "when this file exists the stock admin is switched off for the network (the page sets it)")
 	lanV6Flag       = flag.String("lan-v6-flag", "/data/proxy/lanv6.on", "LAN IPv6 is ON only while this file exists; without it (the default) router advertisements are dropped and a withdraw is sent (the page sets it)")
+	httpUpgradeOn   = flag.Bool("http-upgrade", true, "send port-80 connections to the https:// address first and note the ones that fall back to plain HTTP (listens on the LAN address only)")
 	egressFile      = flag.String("egress-file", "/data/proxy/egress.json", "the outbound-service allow-list (mode off, monitor or enforce; the page edits it)")
 	actionsFile     = flag.String("actions-file", "/data/proxy/actions.json", "scheduled actions (snapshot, update lists, diagnostics, reboot)")
 	eventsFile      = flag.String("events-file", "/data/proxy/events.json", "the newest events (new device, uplink down, ...)")
@@ -501,6 +502,21 @@ func main() {
 	}
 	egressM = newEgressMgr(*egressFile)
 	go egressM.Run()
+	httpUp.exempt = egressM.AddHTTPExempt
+	httpUp.httpsUp = func(client, dst string) bool {
+		b, _ := os.ReadFile("/proc/net/nf_conntrack")
+		return conntrackHasTLS(string(b), client, dst)
+	}
+	httpUp.emit = func(e evt) {
+		if events != nil {
+			events.Add([]evt{e})
+		}
+	}
+	if *httpUpgradeOn {
+		go serveHTTPUpgrade(torHouseIP + ":" + strconv.Itoa(httpUpPort))
+	} else {
+		egressM.noUpgrade = true // no listener, so no redirect rules either
+	}
 	lanV6Mgr = defaultLanV6()
 	go lanV6Mgr.Run()
 	if *uiListen != "" {
