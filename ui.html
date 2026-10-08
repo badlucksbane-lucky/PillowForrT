@@ -45,6 +45,17 @@ button{min-height:36px}
 .sec::before{content:"";flex:none;width:6px;height:6px;border:solid var(--mut);border-width:0 2px 2px 0;transform:rotate(45deg);transition:transform .15s}
 .sec.closed::before{transform:rotate(-45deg)}
 .sec:focus-visible{outline:2px solid var(--s1);outline-offset:3px;border-radius:4px}
+[hidden]{display:none!important}
+main{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+.lights{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:12px 0}
+.light{display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 0 8px;border-radius:14px;border:1px solid var(--ln);background:var(--card);font-size:12px;color:var(--mut);min-height:68px}
+.light .c{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--ln);color:var(--fg)}
+.light.ok .c{background:var(--okc);color:#fff}.light.warn .c{background:var(--warn);color:#fff}.light.bad .c{background:var(--bad);color:#fff}
+svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+#tabs{position:fixed;left:0;right:0;bottom:0;z-index:5;background:var(--card);border-top:1px solid var(--ln);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+#tabs .in{max-width:760px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+#tabs button{border:0;background:none;border-radius:12px;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px;color:var(--mut);position:relative}
+#tabs button.on{color:var(--ac);font-weight:600}#tabs button.on::before{content:"";position:absolute;top:-6px;width:34px;height:3px;border-radius:2px;background:var(--ac)}
 </style></head><body><main>
 <div class="brand"><img class="mark" src="/favicon.svg" alt=""><div><h1>Stone of Heimdall <span class="mut" id="ver"></span></h1><div class="tag mut">a watchman for your hotspot</div></div></div>
 <div class="row" style="margin-bottom:6px"><form method="post" action="/logout" style="margin:0"><button>Sign out</button></form></div>
@@ -55,7 +66,7 @@ button{min-height:36px}
  <div class="row" id="dpath" style="margin-top:8px"></div></div>
 <div class="tools"><button type="button" onclick="ccAll(true)">Collapse all</button><button type="button" onclick="ccAll(false)">Expand all</button></div>
 <div class="sec">Bridge control</div>
-<div class="card"><h2>Ad / Tracking Block <span id="dnsbadge"></span></h2>
+<div class="card" id="c-ad"><h2>Ad / Tracking Block <span id="dnsbadge"></span></h2>
  <div class="row" id="modes"></div>
  <div class="row" id="pause" style="margin-top:6px"></div>
  <div id="msg" class="msg"></div>
@@ -70,8 +81,8 @@ button{min-height:36px}
   <table id="cu"></table>
   <div class="row" style="margin-top:8px"><input id="cu_w" placeholder="check a name, e.g. ads.example.com" aria-label="Explain" autocomplete="off" autocapitalize="off" spellcheck="false"><button onclick="cuwhy()">Why?</button></div>
   <div id="cuwhy" class="mut" style="margin-top:4px"></div></details></div>
-<div class="card"><h2>Devices <span id="egbadge"></span></h2><div id="egmsg" class="msg"></div><div id="eg" class="mut">loading</div></div>
-<div class="card"><h2>Proxy</h2><div id="pxpol"></div>
+<div class="card" id="c-dev"><h2>Devices <span id="egbadge"></span></h2><div id="egmsg" class="msg"></div><div id="eg" class="mut">loading</div></div>
+<div class="card" id="c-px"><h2>Proxy</h2><div id="pxpol"></div>
  <div class="row" style="margin-top:10px"><b>Mullvad</b> <span id="vpnbadge"></span></div><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div>
  <div class="row" style="margin-top:10px"><b>Tor</b> <span id="torbadge"></span></div><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
 <div class="sec">Monitoring</div>
@@ -139,7 +150,7 @@ function allow(){const v=$('allowin').value.trim();if(v){post('dns/allow',{name:
 const ago=t=>{if(!t||t.startsWith('0001'))return 'never';const s=(Date.now()-Date.parse(t))/1000;return s<90?'just now':s<5400?Math.round(s/60)+' min ago':s<172800?Math.round(s/3600)+' h ago':Math.round(s/86400)+' d ago'};
 const fmt=n=>n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':n;
 function tbl(id,rows){$(id).innerHTML=rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')||'<tr><td class="mut">nothing yet</td></tr>'}
-function render(d){
+function render(d){AdS={enabled:d.enabled,mode:d.mode,paused:!!d.paused_until&&new Date(d.paused_until)>Date.now()};
  if(!d.enabled){$('banner').innerHTML='<div class="banner">DNS filter is not running.</div>';return}
  const u=d.upstream;
  $('banner').innerHTML=u.mode!=='doh'?'<div class="banner">Encrypted DNS is down: name lookups are being refused, none go out in the clear. '+esc(u.warning||'')+'</div>':'';
@@ -172,13 +183,13 @@ async function cuadd(){const r=await apost('dns/custom',{pattern:$('cu_p').value
 async function curm(p,ip){const r=await apost('dns/custom/remove',{pattern:p,ip});$('cumsg').textContent=r.j.error||'removed';tick()}
 async function cuwhy(){const n=$('cu_w').value.trim();if(!n)return;try{const j=await (await api('/api/dns/explain?name='+encodeURIComponent(n))).json();
  $('cuwhy').textContent=j.name+': '+j.result+(j.by?' - '+(j.by==='custom'?'your rule '+(j.detail||''):j.by==='your always-allow list'?'your always-allow list'+(j.detail?' ('+j.detail+')':''):'list '+j.by+(j.category?' ('+j.category+')':'')):'')}catch(e){$('cuwhy').textContent="couldn't ask"}}
-function node(j){const s=j.system||{},p=j.proxy||{},us=j.usage||{},b=j.budget||{},h=j.heartbeat||{},up=j.uplink||{};
+function node(j){const s=j.system||{},p=j.proxy||{},us=j.usage||{},b=j.budget||{},h=j.heartbeat||{},up=j.uplink||{};UpOk=up.ok;
  $('ver').textContent=j.version;
  tbl('node',[['Uptime',Math.round(s.uptime_s/3600)+' h'],['Temp',s.temp_c_max+' C'],['Free RAM',Math.round(s.mem_avail_kb/1024)+' MB'],['Wi-Fi clients',j.wifi_clients],
   ['Uplink',up.ok?'up':'<span class="err">down</span>'],['Plan used',b.used_gb!==undefined?b.used_gb.toFixed(1)+' GB'+(b.cap_gb?' of '+b.cap_gb:''):'-'],
   ['Proxy',p.conns_active+' active, '+fmt(p.conns_total)+' total']])}
 
-let V=null;
+let V=null,AdS=null,UpOk;
 const seg=(label,opts,cur,fn)=>'<span class="seg" role="radiogroup" aria-label="'+esc(label)+'">'+opts.map(o=>'<button type="button" role="radio" aria-checked="'+(cur===o[0])+'" class="'+(cur===o[0]?'on':'')+'"'+(o[2]?' title="'+esc(o[2])+'"':'')+(cur===o[0]?'':' onclick="'+fn(o[0])+'"')+'>'+o[1]+'</button>').join('')+'</span>';
 const exitSeg=(ip,mac)=>{const tor=((Tr&&Tr.devices)||[]).some(d=>d.ip===ip);const cur=tor?'tor':((V.device_exit||{})[ip]||'');return seg('Exit for this device',[['','Default ('+(V.default_exit==='mullvad'?'Mullvad':'Direct')+')'],['direct','Direct'],['mullvad','Mullvad'],['tor','Tor']],cur,v=>"devmode('"+esc(ip)+"','"+v+"')")};
 async function devmode(ip,mode){if(mode==='tor'&&!confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.')){try{V=await (await api('/api/vpn')).json();vrender(V,true);egrender(true)}catch(e){}return}const r=await apost('device/mode',{ip,mode:mode||'default'});$('egmsg').textContent=r.j.error||'';try{V=await (await api('/api/vpn')).json();vrender(V,true)}catch(e){}trload()}
@@ -949,6 +960,40 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
   setSecClosed(s,k,!!sst[k]);
   const tog=()=>{setSecClosed(s,k,!s.classList.contains('closed'));saveSec()};
   s.addEventListener('click',tog);s.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tog()}})});
+
+ // tabs: the same cards, grouped so one thumb-reachable view shows at a time
+ const IC={bridge:'M2 18h20M4 18v-4c0-4 3.5-7 8-7s8 3 8 7v4M8 18v-5M12 18v-6M16 18v-5',devices:'M4 5h16v11H4zM8 20h8M12 16v4',eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',shield:'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',lock:'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',globe:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',wall:'M3 5h18v14H3zM3 10h18M3 15h18M9 5v5M15 10v5M9 15v4',wifi:'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01'};
+ const ic=n=>'<svg class="i" viewBox="0 0 24 24"><path d="'+IC[n]+'"/></svg>';
+ const SECS={'Bridge control':['none','bridge'],'Monitoring':['watch','watch'],'Security':['watch','watch'],'DNS':['watch','watch'],'Devices':['none','devices'],'Network':['more','more'],'System':['more','more']};
+ const CARDS={'Devices':'devices','Blocked devices':'devices','Internet schedules':'devices','Wi-Fi':'more'};
+ const main=document.querySelector('main');
+ const hero=main.querySelector('.card.hero');
+ const lights=document.createElement('div');lights.className='lights';lights.id='lights';hero.after(lights);
+ let cur='bridge',ct='bridge';
+ [...main.children].forEach(el=>{
+  if(el.classList.contains('sec')){const m=SECS[el.textContent.trim()]||['more','more'];el.dataset.tab=m[0];ct=m[1];if(m[0]==='none')setSecClosed(el,el.textContent.trim(),false);return}
+  if(el===hero||el===lights||el.classList.contains('tools')){el.dataset.tab='bridge';return}
+  if(el.classList.contains('card')){const h=el.querySelector(':scope>h2'),k=h&&h.firstChild?h.firstChild.textContent.trim():'';el.dataset.tab=CARDS[k]||ct}});
+ const nav=document.createElement('nav');nav.id='tabs';nav.innerHTML='<div class="in"></div>';document.body.appendChild(nav);
+ const TABS=[['bridge','Bridge','bridge'],['devices','Devices','devices'],['watch','Watch','eye'],['more','More','grid']];
+ function showTab(t,keep){cur=t;main.querySelectorAll(':scope>[data-tab]').forEach(e=>e.hidden=e.dataset.tab!==t);
+  nav.firstChild.innerHTML=TABS.map(x=>'<button type="button" class="'+(x[0]===t?'on':'')+'" data-t="'+x[0]+'">'+ic(x[2])+x[1]+'</button>').join('');
+  if(!keep){try{localStorage.setItem('tab',t)}catch(e){}scrollTo(0,0)}}
+ nav.addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(b)showTab(b.dataset.t)});
+ window.goCard=(t,id)=>{showTab(t);const c=document.getElementById(id);if(c){if(c.classList.contains('closed')){const h=c.querySelector(':scope>h2.cc');if(h)h.click()}c.scrollIntoView({behavior:'smooth',block:'start'})}};
+ let t0='bridge';try{t0=location.hash.slice(1)||localStorage.getItem('tab')||'bridge'}catch(e){}
+ if(!TABS.some(x=>x[0]===t0))t0='bridge';showTab(t0,true);
+ // status lights from the live data the cards already load
+ let lastL='';
+ function lightsRender(){const L=[
+  ['wifi','Uplink',UpOk===undefined?'':UpOk?'ok':'bad','more',''],
+  ['shield','Ads',!AdS?'':!AdS.enabled?'bad':AdS.mode==='off'?'':AdS.paused?'warn':'ok','bridge','c-ad'],
+  ['lock','Mullvad',!V||V.available===false?'':V.up?'ok':V.enabled?'warn':'','bridge','c-px'],
+  ['globe','Tor',!Tr||Tr.available===false?'':Tr.blocked?'bad':Tr.ready?'ok':Tr.enabled?'warn':'','bridge','c-px'],
+  ['wall','Firewall',!Eg?'':Eg.mode==='enforce'?'ok':Eg.mode==='monitor'?'warn':'','devices','c-dev']];
+  const h=L.map(x=>'<button type="button" class="light '+x[2]+'" onclick="goCard(\''+x[3]+'\',\''+x[4]+'\')"><span class="c">'+ic(x[0])+'</span>'+x[1]+'</button>').join('');
+  if(h!==lastL){lastL=h;lights.innerHTML=h}}
+ lightsRender();setInterval(lightsRender,1500);
  // result lines: green when the last request worked, red when it failed
  new MutationObserver(ms=>{for(const m of ms){const e=m.target.nodeType===3?m.target.parentElement:m.target;if(e&&e.classList&&e.classList.contains('msg'))e.classList.toggle('ok',LAST_OK&&!!e.textContent)}}).observe(document.body,{childList:true,characterData:true,subtree:true});
  // a card whose data never arrived says so instead of "loading" for ever
