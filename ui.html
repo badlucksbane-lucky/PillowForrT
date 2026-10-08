@@ -412,7 +412,7 @@ function dcrender(force){const el=$('dc');if(!Dc||guard(el,force))return;
  const h=Dc.hits||[];
  $('dcbadge').innerHTML=h.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+h.length+' hit'+(h.length===1?'':'s')+'</span>':'';
  const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const what={canary:'decoy name','plain_fallback':'plain DNS while DoH is up',exfil:'tunneling-shaped lookups'};
+ const what={canary:'decoy name',exfil:'tunneling-shaped lookups'};
  const rows=h.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'</td><td class="mut">'+(what[x.kind]||esc(x.kind))+'</td></tr>').join('')||'<tr><td class="mut">nothing yet</td></tr>';
  el.innerHTML='<div class="row"><span>'+(Dc.enabled?'<b style="color:var(--ac)">watching</b>':'<span class="mut">switched off</span>')+'</span><button class="'+(Dc.enabled?'':'on')+'" onclick="dcset('+(!Dc.enabled)+')">'+(Dc.enabled?'Switch off':'Switch on')+'</button></div>'+
   '<div class="mut" style="margin:6px 0">Watches every DNS query for decoy names, plain DNS while encrypted DNS is in use, and tunneling-shaped runs of lookups.</div>'+
