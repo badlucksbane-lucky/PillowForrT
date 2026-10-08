@@ -1,16 +1,16 @@
 package main
 
 // DNS exfiltration canary: a lookup that should never happen on an honest LAN is itself the signal, the same idea as canary.go but on the name a device asks for instead of the
-// address it touches. Three things are watched, all from inside the DNS stub (dnsproxy.go) where every query already passes through, so nothing new is opened on the wire:
+// address it touches. Two things are watched, all from inside the DNS stub (dnsproxy.go) where every query already passes through, so nothing new is opened on the wire:
 //   dns_canary       a device asked for one of a small set of decoy names (house-internal-looking names nobody configured, and a few names shaped like common C2/beacon domains).
 //                     Reuses a device's own reservation name where DHCP has one, exactly like the canary and ARP watch.
-//   dns_plain_fallback a device's query left as plain UDP/TCP port 53 while the stub's own upstream is still doing DoH: that only happens when something routes around the stub
-//                     (a device with its own resolver settings, or malware carrying one), since every normal query already arrives here over the LAN side.
 //   dns_exfil        a run of queries to the same base domain whose labels look like encoded data (long, high-entropy, many unique subdomains in a short time): the classic shape of
 //                     DNS tunneling and beaconing. This one is heuristic and noisier, so it asks for a higher bar (distinct-label count) before it fires, and at most once per 10 min
 //                     per (client, base domain).
 // Nothing is ever sent outward, no name is logged beyond the ring buffers already in dnsproxy.go, and this never blocks or alters an answer: it only watches and emits an event.
-// Honest limits: a device that ignores the stub entirely (hard-coded DoH/DoT elsewhere) is invisible here, the same gap egress.go's service list cannot close either.
+// Honest limits: a device that ignores the stub entirely (hard-coded DoH/DoT elsewhere) is invisible here, the same gap egress.go's service list cannot close either. (There used to be a
+// third watch, for a query that left as plain port-53 DNS while DoH was up. It is gone with the plain-DNS path itself: the stub has no way to send one, and the DNS guard in dnsguard.go
+// redirects or refuses a device's own plain DNS before it can go anywhere.)
 
 import (
 	"encoding/json"
@@ -34,7 +34,7 @@ type dnsCanaryHit struct {
 	Client string `json:"client"`
 	MAC    string `json:"mac,omitempty"`
 	Name   string `json:"name"`
-	Kind   string `json:"kind"` // canary | plain_fallback | exfil
+	Kind   string `json:"kind"` // canary | exfil
 }
 
 type dnsCanarySource struct {
@@ -62,7 +62,6 @@ type dnsCanaryWatch struct {
 	emit    func(evt)
 	nameOf  func(mac string) string
 	macOf   func(client string) string
-	doh     func() bool // true while the upstream is using DoH (not already in plain fallback): a plain-53 query is only news then
 }
 
 func newDNSCanaryWatch() *dnsCanaryWatch {
@@ -90,9 +89,6 @@ func newDNSCanaryWatch() *dnsCanaryWatch {
 				}
 			}
 			return ""
-		},
-		doh: func() bool {
-			return dnsProxy != nil && dnsProxy.Up != nil && !dnsProxy.Up.inFallback()
 		},
 	}
 	w.st.Enabled = true
@@ -152,8 +148,8 @@ func baseDomain(name string) string {
 	return strings.Join(parts[len(parts)-2:], ".")
 }
 
-// Observe is called from DNSProxy.Handle for every query, after the name is known. viaPlain says the query is about to go out (or came back) over plain port-53 DNS rather than DoH/VPN/Tor.
-func (w *dnsCanaryWatch) Observe(client, name string, viaPlain bool, now time.Time) {
+// Observe is called from DNSProxy.Handle for every query, after the name is known.
+func (w *dnsCanaryWatch) Observe(client, name string, now time.Time) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !w.st.Enabled || client == "" || name == "" {
@@ -176,11 +172,8 @@ func (w *dnsCanaryWatch) Observe(client, name string, viaPlain bool, now time.Ti
 	}
 	s.Last, s.MAC = now, mac
 
-	switch {
-	case isCanaryName(name, w.st.Decoys):
+	if isCanaryName(name, w.st.Decoys) {
 		w.fire(s, client, mac, name, "canary", now)
-	case viaPlain && w.doh():
-		w.fire(s, client, mac, name, "plain_fallback", now)
 	}
 
 	base := baseDomain(name)
@@ -218,11 +211,8 @@ func (w *dnsCanaryWatch) fire(s *dnsCanarySource, client, mac, name, kind string
 	s.LastEvent[kind] = now
 	w.recordHit(client, mac, name, kind, now)
 	who := label(client, w.nameOf(mac), mac)
-	switch kind {
-	case "canary":
+	if kind == "canary" {
 		w.emit(evt{T: now.Unix(), Kind: "dns_canary", Sev: sevAttention, Text: fmt.Sprintf("%s looked up a DNS canary name: %s", who, name), Public: "A device queried a decoy DNS name"})
-	case "plain_fallback":
-		w.emit(evt{T: now.Unix(), Kind: "dns_plain_fallback", Sev: sevAttention, Text: fmt.Sprintf("%s's query for %s left as plain DNS while the Orbic's own upstream is still using DoH: something on that device may be bypassing the resolver policy", who, name), Public: "A device sent a plain DNS query while encrypted DNS is in use"})
 	}
 }
 

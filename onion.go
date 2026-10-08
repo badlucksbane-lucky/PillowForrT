@@ -180,7 +180,7 @@ func (m *torMgr) onionDir() string { return filepath.Join(m.dataDir, "onion", "a
 
 // renderTorrc is the one place the torrc is built (Tor's own lines plus the door's when it is active). The caller holds m.mu.
 func (m *torMgr) renderTorrc() string {
-	return torrcFor(m.dataDir, m.logPath, onionTorrcLines(m.cfg.Door, m.onionDir())...)
+	return torrcFor(m.dataDir, m.logPath, append(onionTorrcLines(m.cfg.Door, m.onionDir()), torVPNTorrcLines(m.cfg.OverVPN, m.proxyKey)...)...)
 }
 
 func torOwner() int {

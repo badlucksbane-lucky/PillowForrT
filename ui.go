@@ -95,8 +95,8 @@ func handleVPNAPI(w http.ResponseWriter, r *http.Request, path string) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var b struct {
-		Account, Country, City, Exit, IP string
-		On                               bool
+		Account, Country, City, Exit, IP, Tier string
+		On                                     bool
 	}
 	json.NewDecoder(r.Body).Decode(&b)
 	var err error
@@ -112,9 +112,19 @@ func handleVPNAPI(w http.ResponseWriter, r *http.Request, path string) {
 	case "default":
 		err = vpn.SetDefaultExit(b.Exit)
 	case "device":
-		err = vpn.SetDeviceExit(b.IP, b.Exit)
+		if b.Exit == "mullvad" || b.Exit == "direct" {
+			err = liveModeDeps().set(b.IP, "", b.Exit) // moving a Tor device to an exit takes it off Tor too, after the exit is in place
+		} else {
+			err = vpn.SetDeviceExit(b.IP, b.Exit)
+		}
 	case "killswitch":
 		vpn.SetKillSwitch(b.On)
+	case "tier":
+		err = vpn.SetKillTier(b.Tier, func(t string) error {
+			wanted, _, _ := vpn.OwnState()
+			torOn, torVPN := torMgrG.Switches()
+			return killTierPrereq(t, wanted, torOn, torVPN)
+		})
 	case "dnsvpn":
 		vpn.SetDNSViaVPN(b.On)
 	case "panic":
@@ -469,11 +479,39 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 			writeJSON(w, 400, map[string]string{"error": "bad request"})
 			return
 		}
-		if err := torMgrG.SetDevice(b.MAC, b.On); err != nil {
+		var err error
+		if b.On {
+			err = liveModeDeps().set("", b.MAC, "tor") // a Tor device has no exit override beside it
+		} else {
+			err = torMgrG.SetDevice(b.MAC, false)
+		}
+		if err != nil {
 			writeJSON(w, 400, map[string]string{"error": err.Error()})
 			return
 		}
 		writeJSON(w, 200, torMgrG.View())
+	case path == "tor/overvpn" && r.Method == http.MethodPost:
+		var b struct{ On bool }
+		if torMgrG == nil || json.NewDecoder(r.Body).Decode(&b) != nil {
+			writeJSON(w, 400, map[string]string{"error": "bad request"})
+			return
+		}
+		if err := torMgrG.SetOverVPN(b.On); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, torMgrG.View())
+	case path == "device/mode" && r.Method == http.MethodPost:
+		var b struct{ IP, MAC, Mode string }
+		if json.NewDecoder(r.Body).Decode(&b) != nil {
+			writeJSON(w, 400, map[string]string{"error": "bad request"})
+			return
+		}
+		if err := liveModeDeps().set(b.IP, b.MAC, b.Mode); err != nil {
+			writeJSON(w, 400, map[string]string{"error": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"status": "ok"})
 	case path == "tor/test" && r.Method == http.MethodPost:
 		if torMgrG == nil || !torMgrG.ready() {
 			writeJSON(w, 400, map[string]string{"error": "Tor is not ready yet"})
@@ -1054,7 +1092,7 @@ func handleBackup(w http.ResponseWriter, r *http.Request, path string) {
 // settingsPaths are the endpoints handled by handleSettings (everything that is not DNS, VPN, account or backup). Adding an endpoint there means adding it here too.
 var settingsPaths = map[string]bool{
 	"wifi": true, "dhcp": true, "cell": true, "diag": true, "diag/run": true, "diag/report": true, "cert": true, "cert/renew": true, "cert/download": true,
-	"ssh": true, "ssh/add": true, "ssh/delete": true, "sms": true, "devices": true, "devices/note": true, "graphs": true, "linkhist": true, "canary": true, "rogue-dhcp": true, "rogue-dhcp/allow": true, "arp": true, "tor": true, "tor/set": true, "tor/device": true, "tor/test": true, "speed": true, "speed/set": true, "speed/run": true, "canary/set": true, "canary/ignore": true, "actions": true, "actions/set": true, "actions/delete": true, "actions/run": true, "events": true, "events/seen": true, "events/clear": true, "notify/set": true, "notify/clear": true, "notify/test": true, "devices/wake": true, "devices/watch": true,
+	"ssh": true, "ssh/add": true, "ssh/delete": true, "sms": true, "devices": true, "devices/note": true, "graphs": true, "linkhist": true, "canary": true, "rogue-dhcp": true, "rogue-dhcp/allow": true, "arp": true, "tor": true, "tor/set": true, "tor/device": true, "tor/overvpn": true, "device/mode": true, "tor/test": true, "speed": true, "speed/set": true, "speed/run": true, "canary/set": true, "canary/ignore": true, "actions": true, "actions/set": true, "actions/delete": true, "actions/run": true, "events": true, "events/seen": true, "events/clear": true, "notify/set": true, "notify/clear": true, "notify/test": true, "devices/wake": true, "devices/watch": true,
 	"system": true, "system/reboot": true, "system/stockadmin": true, "system/lanv6": true, "egress": true, "egress/set": true, "egress/allow": true, "egress/remove": true, "egress/service": true, "egress/httpupgrade": true,
 	"dnscanary": true, "dnscanary/set": true, "macchurn": true, "torbypass": true, "beacon": true, "beacon/ignore": true, "dganxdomain": true, "tlssni": true, "tlscert": true, "lanannounce": true, "dnsxcheck": true, "dnsmitm": true, "dhcpfp": true, "ttl": true, "ttl/ignore": true, "admintrip": true, "steer": true, "steer/allow": true, "rebind": true, "rebind/set": true, "rebind/allow": true,
 }

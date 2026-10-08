@@ -7,7 +7,7 @@ package main
 //            be built from what the house really uses before anything breaks;
 //   enforce  TCP outside the list is refused with a reset, UDP with port-unreachable, other protocols with an ICMP reject. ICMP echo and the ICMPv6 types IPv6 needs always pass.
 // Only the LAN-to-outside direction is policed (the web page and the LAN are never affected). Traffic that tinyfwd and Tor open from the Orbic itself (the PAC proxy, DoH,
-// the tunnel) is OUTPUT, not forwarded, and is not covered here. DNS and DoT stay refused by the guard whatever this says, and in enforce mode by the first rules of the chain.
+// the tunnel) is OUTPUT, not forwarded, and is not covered here. DNS and DoT stay refused by the DNS guard (dnsguard.go) whatever this says.
 // Port 80 stays allowed, but httpupgrade.go first sends a device's port-80 connections to the https:// address and notes the ones that fell back to plain HTTP. File: /data/proxy/egress.json.
 
 import (
@@ -212,14 +212,6 @@ func egressRules(c egressCfg, v6 bool) string {
 		}
 	} else {
 		b.WriteString("-A HS_EGRESS -p icmp -j RETURN\n")
-	}
-	if c.Mode == "enforce" { // DNS and DoT never leave from here, whatever is ticked below: the guard's redirect sends them to the filter, and this is the net under it (both tunnels included)
-		if v6 {
-			b.WriteString("-A HS_EGRESS -p udp -m multiport --dports 53,853 -j REJECT --reject-with icmp6-port-unreachable\n")
-		} else {
-			b.WriteString("-A HS_EGRESS -p udp -m multiport --dports 53,853 -j REJECT --reject-with icmp-port-unreachable\n")
-		}
-		b.WriteString("-A HS_EGRESS -p tcp -m multiport --dports 53,853 -j REJECT --reject-with tcp-reset\n")
 	}
 	emit := func(prefix string, rs []egressRule) {
 		for _, r := range rs {

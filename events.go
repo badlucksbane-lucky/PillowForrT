@@ -9,7 +9,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
@@ -114,7 +113,7 @@ type evIn struct {
 	Online       []devObs
 	UplinkOK     bool
 	UplinkFails  int
-	DoHFallback  bool
+	DoHDown      bool
 	ServicesDown []string
 	TempMax      float64
 	SSHFailed    int
@@ -166,7 +165,7 @@ func (d *detector) step(in evIn) []evt {
 		}
 		d.certFP, d.sshBase, d.lastUp = in.CertFP, in.SSHFailed, in.SysUptime
 		d.uplinkDown = !in.UplinkOK && in.UplinkFails >= 3
-		d.dohFB = in.DoHFallback
+		d.dohFB = in.DoHDown
 		msg := "The web page and proxy started"
 		if in.SysUptime < 900 {
 			msg = "The Orbic restarted"
@@ -198,10 +197,10 @@ func (d *detector) step(in evIn) []evt {
 		out = append(out, mk("uplink_up", sevInfo, fmt.Sprintf("The internet is back after about %d minute(s)", int(dur.Minutes())), "The Orbic's internet connection is back", now))
 	}
 	switch {
-	case in.DoHFallback && !d.dohFB:
+	case in.DoHDown && !d.dohFB:
 		d.dohFB = true
-		out = append(out, mk("doh_fallback", sevAttention, "Encrypted DNS is failing: lookups are going out as plain DNS", "Encrypted DNS is failing on the Orbic", now))
-	case !in.DoHFallback && d.dohFB:
+		out = append(out, mk("doh_down", sevAttention, "Encrypted DNS is failing: name lookups are being refused, and nothing is sent in the clear", "Encrypted DNS is failing on the Orbic", now))
+	case !in.DoHDown && d.dohFB:
 		d.dohFB = false
 		out = append(out, mk("doh_ok", sevInfo, "Encrypted DNS is working again", "Encrypted DNS is working again", now))
 	}
@@ -607,9 +606,9 @@ func (s *eventStore) Test() error {
 	return s.post(u, "Orbic", "A test notification from the Orbic", 3)
 }
 
-// postNtfy sends one notification the way ntfy expects: the body is the message, headers carry the title and priority. It goes out through our own dialler and root set.
+// postNtfy sends one notification the way ntfy expects: the body is the message, headers carry the title and priority. It goes out through ownDial (the tunnel, Tor or the cellular link as the state says: owndial.go) and our own root set.
 func postNtfy(u, title, body string, prio int) error {
-	c := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: rootPool(), MinVersion: tls.VersionTLS12}, DialContext: func(ctx context.Context, n, a string) (net.Conn, error) { return dialUpstream(ctx, n, a) }}}
+	c := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: rootPool(), MinVersion: tls.VersionTLS12}, DialContext: ownDial, DisableKeepAlives: true}}
 	req, err := http.NewRequest("POST", u, bytes.NewReader([]byte(body)))
 	if err != nil {
 		return errors.New("bad address")
@@ -663,7 +662,7 @@ func gatherEvIn() evIn {
 	in.UplinkOK, in.UplinkFails = uplink.OK, uplink.Fails
 	uplinkMu.Unlock()
 	if dnsProxy != nil {
-		in.DoHFallback = dnsProxy.Up.State().Mode == "plain-fallback"
+		in.DoHDown = dnsProxy.Up.Failing()
 	}
 	comms, stopped, lines := scanProcs("/proc")
 	on5 := false

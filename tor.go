@@ -13,7 +13,12 @@ package main
 //     ip6    HS_TOR6  : its IPv6 is refused (IPv6 would bypass Tor); apps fall back to IPv4
 //     DNS    its lookups still reach the DNS stub (blocklists apply), which answers them through Tor's DNS port, or SERVFAIL when Tor is not ready: never from a public resolver.
 //   The device assignment is separate from the daemon switch ON PURPOSE: switching Tor off leaves an assigned device blocked, not suddenly direct; unassign it to give it back its direct line.
-//   A Tor device is not also sent through Mullvad (the Tor rules come first). Tor's own connections leave the Orbic by the cellular link.
+//   A Tor device is not also sent through Mullvad: a device has ONE mode (devmode.go), changed make-before-break, and while it is in both the Tor rules come first.
+//   Tor's own connections leave the Orbic by the cellular link, unless "Tor over Mullvad" is on (OverVPN, torvpn.go): then Tor is configured to make every connection through tinyfwd's
+//   CONNECT proxy, which dials only through the tunnel (bound to mullvad0), and Tor is started only with the tunnel up. (The Orbic's kernel has no iptables owner match, so Tor's traffic
+//   cannot be picked out in the firewall; routing it through a proxy that only knows the tunnel is what keeps it off the cellular link.)
+//   DNS rules: a Tor device's lookups go through the list filter first, Tor's answer then gets the CNAME-cloaking and rebind checks, and a failure is a refused lookup (SERVFAIL) with a
+//   dns_hardblock event, never another resolver (dnsproxy.go).
 //
 // Memory is the hard limit (one core, ~77 MB available, no swap): the supervisor lowers Tor's priority, watches its resident size and the box's free memory, and stops Tor first (a "yield",
 // with an event) rather than let the kernel pick a modem daemon, and Tor carries oom_score_adj 1000 so that if it comes to the kernel's choice, Tor is the one. The data directory is on FLASH
@@ -50,10 +55,11 @@ const (
 )
 
 type torConfig struct {
-	Enabled bool      `json:"enabled"` // the daemon runs
-	Onion   bool      `json:"onion"`   // house-wide .onion
-	Devices []string  `json:"devices"` // MACs whose traffic is forced through Tor
-	Door    onionDoor `json:"door"`    // the onion door (onion.go): remote web (read-only) and SSH for a few keyed devices
+	Enabled bool      `json:"enabled"`  // the daemon runs
+	Onion   bool      `json:"onion"`    // house-wide .onion
+	OverVPN bool      `json:"over_vpn"` // Tor's own connections leave through the Mullvad tunnel instead of the cellular link (Tor over VPN)
+	Devices []string  `json:"devices"`  // MACs whose traffic is forced through Tor
+	Door    onionDoor `json:"door"`     // the onion door (onion.go): remote web (read-only) and SSH for a few keyed devices
 }
 
 // ---- pure pieces: torrc, firewall rules, log parsing, the supervisor's decisions ----
@@ -139,7 +145,7 @@ type torObs struct {
 const (
 	torRSSLimitKB     = 90 * 1024
 	torYieldBelowKB   = 20 * 1024 // stop Tor when the box has less than this available
-	torResumeAboveKB  = 60 * 1024 // and only start it again with at least this much
+	torResumeAboveKB  = 50 * 1024 // and only start it again with at least this much (was 60; lowered 2026-10-08 to let Tor start on a router sitting near 58 MB)
 	torYieldPause     = 10 * time.Minute
 	torMinRestartWait = 15 * time.Second
 	torMaxRestartWait = 5 * time.Minute
@@ -191,6 +197,8 @@ type torMgr struct {
 	startProc  func(m *torMgr) (*exec.Cmd, error)
 	resolve    func(q []byte) ([]byte, error)
 	onions     *onionMap
+	vpnUp      func() bool // is the Mullvad tunnel up (Tor over VPN starts only then)
+	proxyKey   string      // the secret Tor presents to tinyfwd's CONNECT proxy for this run (Tor over VPN); empty when not in use
 }
 
 func newTorMgr() *torMgr {
@@ -230,6 +238,7 @@ func newTorMgr() *torMgr {
 	}
 	m.startProc = startTorProc
 	m.resolve = torResolve
+	m.vpnUp = func() bool { return vpn != nil && vpn.tun.isUp() }
 	m.onions = newOnionMap()
 	if b, err := os.ReadFile(m.path); err == nil {
 		json.Unmarshal(b, &m.cfg)
@@ -322,6 +331,10 @@ func startTorProc(m *torMgr) (*exec.Cmd, error) {
 	if err := syncOnionDir(m.onionDir(), m.cfg.Door, torOwner()); err != nil { // the caller (Tick) holds m.mu
 		return nil, err
 	}
+	m.proxyKey = ""
+	if m.cfg.OverVPN {
+		m.proxyKey = newTorProxyKey() // a fresh secret for every run of Tor: only this Tor knows it
+	}
 	if err := os.WriteFile(m.torrc, []byte(m.renderTorrc()), 0o600); err != nil {
 		return nil, err
 	}
@@ -404,7 +417,7 @@ func (m *torMgr) Tick() {
 		}
 		m.emit(evt{T: now.Unix(), Kind: "tor_down", Sev: sevAttention, Text: "Tor stopped unexpectedly and will be restarted. Devices sent through Tor stay blocked, not direct, until it is back.", Public: "The Tor service stopped and is restarting"})
 	}
-	o := torObs{Running: run, AvailKB: m.memAvail(), Want: m.cfg.Enabled && !yielding && !now.Before(m.nextTry), Yielding: yielding}
+	o := torObs{Running: run, AvailKB: m.memAvail(), Want: m.cfg.Enabled && !yielding && !now.Before(m.nextTry) && m.vpnGateLocked(), Yielding: yielding}
 	if run {
 		o.RSSKB = m.rssOf(m.cmd.Process.Pid)
 	}
@@ -434,6 +447,12 @@ func (m *torMgr) Tick() {
 			m.emit(evt{T: now.Unix(), Kind: "tor_ready", Sev: sevInfo, Text: "Tor is connected and ready.", Public: "The Tor service is ready"})
 		}
 	}
+}
+
+// vpnGateLocked: with Tor over VPN, Tor runs only while the tunnel is up. (The proxy it connects through refuses everything while the tunnel is down as well; this just stops a Tor that
+// could do nothing from sitting there retrying.)
+func (m *torMgr) vpnGateLocked() bool {
+	return !m.cfg.OverVPN || (m.vpnUp != nil && m.vpnUp())
 }
 
 // Reconcile applies the firewall plan. Always applied, whether or not the daemon runs: an assigned device stays blocked (fail closed) while Tor is off.
@@ -503,6 +522,7 @@ func (m *torMgr) killStray() {
 }
 
 func (m *torMgr) Run() {
+	removeLegacyTorOut()
 	m.killStray()
 	m.mu.Lock()
 	if err := m.applyDoorLocked(); err != nil { // after a boot: the authorized_clients files and the SSH flag match the settings again
@@ -648,6 +668,27 @@ func (m *torMgr) Set(enabled, onion bool) error {
 	return m.Reconcile()
 }
 
+// replaceable for tests
+var vpnRegistered = func() bool { return vpn != nil && vpn.Registered() }
+
+// SetOverVPN sends Tor's own connections through the Mullvad tunnel (or back to the cellular link). Tor reaches the network only through tinyfwd's CONNECT proxy while this is on (see
+// torProxyAllowed), and the proxy dials through the tunnel only. Tor is restarted either way: its torrc changes, and circuits built over one path should not quietly carry on over the other.
+func (m *torMgr) SetOverVPN(on bool) error {
+	if on && !vpnRegistered() {
+		return errors.New("register this Orbic with your Mullvad account first")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cfg.OverVPN == on {
+		return nil
+	}
+	m.cfg.OverVPN = on
+	m.save()
+	m.stopProc()
+	m.nextTry, m.boot = time.Time{}, -1
+	return nil
+}
+
 func (m *torMgr) SetDevice(mac string, on bool) error {
 	mac = strings.ToLower(strings.TrimSpace(mac))
 	if !macRe.MatchString(mac) {
@@ -676,6 +717,32 @@ func (m *torMgr) SetDevice(mac string, on bool) error {
 	m.save()
 	m.mu.Unlock()
 	return m.Reconcile()
+}
+
+// Switches reports whether the Tor daemon is switched on and whether it is set to run over Mullvad.
+func (m *torMgr) Switches() (enabled, overVPN bool) {
+	if m == nil {
+		return false, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cfg.Enabled, m.cfg.OverVPN
+}
+
+// HasDevice says whether a MAC is assigned to Tor.
+func (m *torMgr) HasDevice(mac string) bool {
+	if m == nil {
+		return false
+	}
+	mac = strings.ToLower(mac)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, d := range m.cfg.Devices {
+		if d == mac {
+			return true
+		}
+	}
+	return false
 }
 
 func ownBridgeMAC() string {
@@ -712,6 +779,8 @@ type torView struct {
 	Socks     string          `json:"socks"`
 	Devices   []torDeviceView `json:"devices"`
 	Blocked   bool            `json:"blocked"` // assigned devices exist but Tor is not ready: they have no internet (by design)
+	OverVPN   bool            `json:"over_vpn"`
+	VPNWait   bool            `json:"vpn_wait,omitempty"` // Tor over VPN is on and the tunnel is not up, so Tor is held back
 }
 
 func (m *torMgr) View() torView {
@@ -744,6 +813,8 @@ func (m *torMgr) View() torView {
 		v.Devices = append(v.Devices, dv)
 	}
 	v.Blocked = len(v.Devices) > 0 && !v.Ready
+	v.OverVPN = m.cfg.OverVPN
+	v.VPNWait = m.cfg.OverVPN && !m.vpnGateLocked()
 	return v
 }
 

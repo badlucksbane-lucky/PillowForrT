@@ -53,8 +53,35 @@ type vpnConfig struct {
 	Relay       vpnRelayPick      `json:"relay"`
 	DefaultExit string            `json:"default_exit"`          // "direct" | "mullvad"
 	DeviceExit  map[string]string `json:"device_exit,omitempty"` // device IPv4 -> "direct" | "mullvad" (absent = the default)
-	KillSwitch  bool              `json:"kill_switch"`
+	KillSwitch  bool              `json:"kill_switch"`           // derived from KillTier (on for the middle and top tiers); what the device rules and the proxy look at
+	KillTier    string            `json:"kill_tier,omitempty"`
 	DNSViaVPN   bool              `json:"dns_via_vpn"`
+}
+
+// The kill switch is a ladder of how much must be private before anything is allowed out:
+//
+//	top     Tor through Mullvad: tinyfwd's own traffic goes only through Tor running over the tunnel, and is blocked when that is not up;
+//	middle  Mullvad or Tor: through the tunnel or through Tor, blocked when neither is up;
+//	direct  nothing is blocked: the best private path that is up, else the cellular link (with a warning when a path is configured but down).
+//
+// Mullvad devices are cut off when the tunnel is down in the top and middle tiers (the device rules look at KillSwitch), as before.
+const (
+	tierDirect     = "direct"
+	tierPrivate    = "mullvad_or_tor"
+	tierTorMullvad = "tor_over_mullvad"
+)
+
+func validTier(t string) bool { return t == tierDirect || t == tierPrivate || t == tierTorMullvad }
+
+// tier is the effective tier: the stored one, or (for a config from before tiers) what the old on/off switch meant.
+func (c vpnConfig) tier() string {
+	if validTier(c.KillTier) {
+		return c.KillTier
+	}
+	if c.KillSwitch {
+		return tierPrivate
+	}
+	return tierDirect
 }
 
 func defaultVPNConfig() vpnConfig {
@@ -289,6 +316,8 @@ type VPN struct {
 	cfg      vpnConfig
 	api      *mullvadClient
 	tun      *tunnel
+	dohHook  func(q []byte) ([]byte, error) // tests: stands in for the encrypted lookup through the tunnel
+	upFn     func() bool                    // tests: stands in for the tunnel's state
 	relays   []vpnRelay
 	relayAt  time.Time
 	fetching bool
@@ -357,6 +386,21 @@ func (v *VPN) ExitFor(client string) string {
 		return "direct" // the Orbic's own queries never take the exit
 	}
 	return v.cfg.DefaultExit
+}
+
+// OwnState is what tinyfwd's own traffic needs to know: is Mullvad wanted (registered and on), is the tunnel up, and which kill-switch tier is set.
+func (v *VPN) OwnState() (wanted, up bool, tier string) {
+	v.mu.Lock()
+	wanted, tier = v.cfg.Registered && v.cfg.Enabled, v.cfg.tier()
+	v.mu.Unlock()
+	return wanted, v.tunnelUp(), tier
+}
+
+// Registered says whether this Orbic holds a Mullvad device slot (the tunnel can be used at all).
+func (v *VPN) Registered() bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.cfg.Registered
 }
 
 func (v *VPN) fail(err error) error {
@@ -443,7 +487,7 @@ func (v *VPN) Remove(account string) error {
 	v.mu.Lock()
 	keep := v.cfg
 	v.cfg = defaultVPNConfig()
-	v.cfg.KillSwitch, v.cfg.DNSViaVPN = keep.KillSwitch, keep.DNSViaVPN
+	v.cfg.KillSwitch, v.cfg.KillTier, v.cfg.DNSViaVPN = keep.KillSwitch, keep.KillTier, keep.DNSViaVPN
 	v.lastErr = ""
 	v.saveLocked()
 	v.mu.Unlock()
@@ -536,8 +580,41 @@ func (v *VPN) SetDeviceExit(ip, e string) error {
 	return nil
 }
 
-func (v *VPN) SetKillSwitch(on bool) { v.update(func(c *vpnConfig) { c.KillSwitch = on }) }
-func (v *VPN) SetDNSViaVPN(on bool)  { v.update(func(c *vpnConfig) { c.DNSViaVPN = on }) }
+// SetKillSwitch is the old on/off switch: on keeps the current tier unless it was direct (then the middle tier), off is the direct tier.
+func (v *VPN) SetKillSwitch(on bool) {
+	v.update(func(c *vpnConfig) {
+		t := c.tier()
+		switch {
+		case !on:
+			t = tierDirect
+		case t == tierDirect:
+			t = tierPrivate
+		}
+		c.KillTier, c.KillSwitch = t, t != tierDirect
+	})
+}
+
+// SetKillTier sets the tier after check has confirmed what it needs is switched on (a tier nobody can satisfy would block everything).
+func (v *VPN) SetKillTier(tier string, check func(tier string) error) error {
+	if !validTier(tier) {
+		return errors.New("the kill switch tier must be direct, mullvad_or_tor or tor_over_mullvad")
+	}
+	if check != nil {
+		if err := check(tier); err != nil {
+			return err
+		}
+	}
+	v.update(func(c *vpnConfig) { c.KillTier, c.KillSwitch = tier, tier != tierDirect })
+	return nil
+}
+
+// KillTier is the effective tier.
+func (v *VPN) KillTier() string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.cfg.tier()
+}
+func (v *VPN) SetDNSViaVPN(on bool) { v.update(func(c *vpnConfig) { c.DNSViaVPN = on }) }
 
 // Panic sends everything direct at once (the tunnel stays up).
 func (v *VPN) Panic() {
@@ -560,6 +637,7 @@ type vpnStatus struct {
 	Default    string            `json:"default_exit"`
 	DeviceExit map[string]string `json:"device_exit"`
 	KillSwitch bool              `json:"kill_switch"`
+	KillTier   string            `json:"kill_tier"`
 	DNSViaVPN  bool              `json:"dns_via_vpn"`
 	Error      string            `json:"error,omitempty"`
 	Locations  []vpnCountry      `json:"locations"`
@@ -570,7 +648,7 @@ func (v *VPN) Status() vpnStatus {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	st := vpnStatus{Registered: v.cfg.Registered, DeviceName: v.cfg.DeviceName, Address: v.cfg.IPv4, Enabled: v.cfg.Enabled, Up: up, Relay: relay, RelayPick: v.cfg.Relay,
-		HandshakeS: hs, Rx: rx, Tx: tx, Default: v.cfg.DefaultExit, DeviceExit: map[string]string{}, KillSwitch: v.cfg.KillSwitch, DNSViaVPN: v.cfg.DNSViaVPN, Error: v.lastErr}
+		HandshakeS: hs, Rx: rx, Tx: tx, Default: v.cfg.DefaultExit, DeviceExit: map[string]string{}, KillSwitch: v.cfg.KillSwitch, KillTier: v.cfg.tier(), DNSViaVPN: v.cfg.DNSViaVPN, Error: v.lastErr}
 	if up && !since.IsZero() {
 		st.UpSince = &since
 	}

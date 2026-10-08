@@ -48,9 +48,10 @@ var (
 	eventHook       = flag.String("on-event", "", "executable run as `hook silent` / `hook recover` when the heartbeat stops / returns")
 	dnsListen       = flag.String("dns-listen", "", "address for the DNS filter stub, e.g. 127.0.0.1:5354 (empty = DNS filter off)")
 	dnsDir          = flag.String("dns-dir", "/data/dnsfilter", "directory for the filter's lists, allow-list and state")
-	dnsPlainAfter   = flag.Duration("dns-plain-after", 60*time.Second, "how long encrypted DNS must keep failing before queries may go out as plain DNS (SERVFAIL meanwhile); 0 = at the first failure, negative = never")
+	dnsGuardOn      = flag.Bool("dns-guard", true, "install and watch the DNS guard's firewall rules (redirect of devices' DNS to the filter; no plain DNS or DoT out of the cellular side); off leaves them to wpad-guard.sh")
+	_               = flag.Duration("dns-plain-after", 0, "ignored: there is no plain-DNS fallback any more (the flag stays so an older init script still starts)")
 	dnsDoH          = flag.String("dns-doh", "https://9.9.9.9/dns-query,https://1.1.1.1/dns-query,https://149.112.112.112/dns-query", "comma-separated DoH endpoints (IP literals, no bootstrap DNS)")
-	dnsResolv       = flag.String("dns-resolv", "/etc/resolv.conf", "file with the carrier's plain resolvers, the fallback when DoH is down")
+	dnsResolv       = flag.String("dns-resolv", "/etc/resolv.conf", "file with the carrier's resolvers: shown on the cellular card and watched for link changes (never used to resolve anything)")
 	leasesFile      = flag.String("leases", "/data/dnsmasq.leases", "dnsmasq lease file (device names for the web page)")
 	dhcpHostsFile   = flag.String("dhcp-hosts", "/data/dhcp_hosts", "dnsmasq reservations file (device names for the web page)")
 	macBlockFile    = flag.String("mac-block", "/data/proxy/macblock.list", "the Wi-Fi block list (one MAC per line)")
@@ -203,7 +204,17 @@ func allowed(remote string) bool {
 }
 
 func handleConnect(w http.ResponseWriter, r *http.Request) {
-	dst, err := vpn.DialFor(r.Context(), clientIP(r.RemoteAddr), "tcp", r.Host)
+	var dst net.Conn
+	var err error
+	if isTor, terr := torMgrG.torProxyAllowed(r); isTor { // Tor over Mullvad (torvpn.go): the tunnel or nothing
+		if terr != nil {
+			http.Error(w, terr.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		dst, err = dialTor(r.Context(), r.Host)
+	} else {
+		dst, err = vpn.DialFor(r.Context(), clientIP(r.RemoteAddr), "tcp", r.Host)
+	}
 	if err != nil {
 		log.Printf("CONNECT dial error for %s: %v", r.Host, err)
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -371,6 +382,9 @@ func main() {
 		WriteTimeout: 0,
 	}
 	loadState()
+	if *dnsGuardOn && *dnsListen != "" {
+		startDNSGuard() // before anything else is up: the redirect and the refusals are in place from the first second
+	}
 	debug.SetMemoryLimit(48 << 20)
 	debug.SetGCPercent(40) // the live heap is small, so a tighter target costs little CPU and keeps resident memory near the live size (default 100 let it sit at twice that)
 	if *dnsListen != "" {
@@ -378,7 +392,7 @@ func main() {
 		flt := NewFilter(*dnsDir)
 		flt.Load()
 		debug.FreeOSMemory() // hand the lists' parse garbage back to the OS now, not whenever the scavenger gets to it
-		up := newUpstream(upstreamConfig{DoHURLs: strings.Split(*dnsDoH, ","), Roots: rootPool(), Plain: carrierResolvers(*dnsResolv), PlainAfter: *dnsPlainAfter, Dial: dialUpstream})
+		up := newUpstream(upstreamConfig{DoHURLs: strings.Split(*dnsDoH, ","), Roots: rootPool(), Dial: ownDial, TimeoutFor: ownTimeout, RouteGen: ownRouteGen, BootDial: dialUpstream})
 		dnsProxy = &DNSProxy{Filter: flt, Up: up, Cache: newDNSCache(2000), Stats: NewDNSStats(), BlockTTL: 60, Neigh: newNeighbours()}
 		dnsUpdater = newListUpdater(flt)
 		if err := serveDNS(dnsProxy, *dnsListen); err != nil {
@@ -394,6 +408,8 @@ func main() {
 	go usageLoop()
 	linkMgr = newLinkHist(*linkFile)
 	go probeLoop()
+	startGuardWatch()
+	startRungProber()
 	go watchdogLoop()
 	if *vpnDir != "" {
 		vpn = NewVPN(*vpnDir, &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{

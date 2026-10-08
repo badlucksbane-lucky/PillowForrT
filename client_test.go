@@ -71,8 +71,7 @@ func TestSplitClient(t *testing.T) {
 
 func TestPerDeviceCounts(t *testing.T) {
 	doh, pool := newFakeDoH(t)
-	plain, _ := fakePlain(t)
-	p := testProxy(t, doh, pool, plain)
+	p := testProxy(t, doh, pool)
 	ecs := opt(8, 0, 1, 32, 0, 192, 168, 1, 40)
 	p.Handle(queryWithOpt("example.com", ecs))
 	p.Handle(queryWithOpt("example.com", ecs))
@@ -100,8 +99,7 @@ func TestDeviceNames(t *testing.T) {
 
 func TestPerDeviceThroughProxy(t *testing.T) {
 	doh, pool := newFakeDoH(t)
-	plain, _ := fakePlain(t)
-	p := testProxy(t, doh, pool, plain) // oisd list blocks blocked.example.com
+	p := testProxy(t, doh, pool) // oisd list blocks blocked.example.com
 	p.Filter.SetDeviceMode("192.168.1.40", "off")
 	kid := opt(8, 0, 1, 32, 0, 192, 168, 1, 40)
 	other := opt(8, 0, 1, 32, 0, 192, 168, 1, 20)
@@ -134,8 +132,7 @@ func TestIPv6TiedToDevice(t *testing.T) {
 		}
 	}
 	doh, pool := newFakeDoH(t)
-	plain, _ := fakePlain(t)
-	p := testProxy(t, doh, pool, plain)
+	p := testProxy(t, doh, pool)
 	p.Neigh = n
 	p.Filter.SetDeviceMode("192.168.1.20", "off")
 	v6 := opt(8, append([]byte{0, 2, 128, 0}, net.ParseIP("fe80::c443:b2ff:fe14:e0b4").To16()...)...)

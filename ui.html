@@ -138,11 +138,11 @@ function tbl(id,rows){$(id).innerHTML=rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td
 function render(d){
  if(!d.enabled){$('banner').innerHTML='<div class="banner">DNS filter is not running.</div>';return}
  const u=d.upstream;
- $('banner').innerHTML=u.mode!=='doh'?'<div class="banner">Encrypted DNS is down: using plain carrier DNS. '+esc(u.warning||'')+'</div>':'';
+ $('banner').innerHTML=u.mode!=='doh'?'<div class="banner">Encrypted DNS is down: name lookups are being refused, none go out in the clear. '+esc(u.warning||'')+'</div>':'';
  $('modes').innerHTML=[['off','Off'],['on','On']].map(m=>'<button class="'+(d.mode===m[0]?'on':'')+'" onclick="post(\'dns/mode\',{mode:\''+m[0]+'\'})">'+m[1]+'</button>').join('');
  $('pause').textContent=d.paused_until?'Paused until '+new Date(d.paused_until).toLocaleTimeString():'';
  const s=d.stats;
- const sc=[['Queries',s.Queries,'--ax'],['Blocked',s.Blocked,'--s2'],['Cached',s.Cached,'--ax'],['Encrypted',s.DoH,'--okc'],['Plain',s.Plain,'--warn'],['Via VPN',s.VPN||0,'--s1'],['Errors',s.Errors,'--bad']];
+ const sc=[['Queries',s.Queries,'--ax'],['Blocked',s.Blocked,'--s2'],['Cached',s.Cached,'--ax'],['Encrypted',s.DoH,'--okc'],['Via VPN',s.VPN||0,'--s1'],['Errors',s.Errors,'--bad']];
  $('counts').innerHTML=sc.map(c=>{const clr=c[1]&&c[2]!=='--ax';return '<div><div class="n"'+(clr?' style="color:var('+c[2]+')"':'')+'>'+fmt(c[1])+'</div><div class="mut">'+c[0]+'</div><div class="stat-bar" style="background:var('+c[2]+')"></div></div>'}).join('');
  const nm={};(s.Clients||[]).forEach(c=>nm[c.ip]=c.name||c.ip);
  DnsC=s.Clients||[];devrender();
@@ -171,7 +171,8 @@ function node(j){const s=j.system||{},p=j.proxy||{},us=j.usage||{},b=j.budget||{
   ['Proxy',p.conns_active+' active, '+fmt(p.conns_total)+' total']])}
 
 let V=null;
-const exitSel=ip=>{if(!V||!V.registered)return '<span class="mut">-</span>';const cur=(V.device_exit||{})[ip]||'';return '<select title="exit" onchange="vpost(\'device\',{ip:\''+esc(ip)+'\',exit:this.value})">'+[['','Exit: default'],['direct','Exit: direct'],['mullvad','Exit: Mullvad']].map(o=>'<option value="'+o[0]+'"'+(cur===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>'};
+const exitSel=ip=>{if(!V||!V.registered)return '<span class="mut">-</span>';const tor=((Tr&&Tr.devices)||[]).some(d=>d.ip===ip);const cur=tor?'tor':((V.device_exit||{})[ip]||'');return '<select title="exit" onchange="devmode(\''+esc(ip)+'\',this.value)">'+[['','Exit: default'],['direct','Exit: direct'],['mullvad','Exit: Mullvad'],['tor','Exit: Tor']].map(o=>'<option value="'+o[0]+'"'+(cur===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>'};
+async function devmode(ip,mode){if(mode==='tor'&&!confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.')){try{V=await (await api('/api/vpn')).json();vrender(V,true)}catch(e){}return}const r=await apost('device/mode',{ip,mode:mode||'default'});$('vmsg').textContent=r.j.error||'';try{V=await (await api('/api/vpn')).json();vrender(V,true)}catch(e){}trload()}
 async function vpost(p,b){const r=await api('/api/vpn/'+p,{method:'POST',headers:hdr(),body:JSON.stringify(b||{})});const j=await r.json();if(r.status===403){await session();$('vmsg').textContent=j.error||'';return}
  $('vmsg').textContent=j.error||'';if(!j.error){V=j;vrender(j,true)}}
 const fmtB=n=>n>=1e9?(n/1e9).toFixed(2)+' GB':n>=1e6?(n/1e6).toFixed(1)+' MB':n>=1e3?(n/1e3).toFixed(0)+' kB':n+' B';
@@ -194,7 +195,8 @@ function vrender(d,force){
   '<select onchange="pickCity(this.value)">'+cities.map(c=>'<option value="'+c.code+'"'+(c.code===cy?' selected':'')+'>'+esc(c.name)+' ('+c.relays+')</option>').join('')+'</select>'+
   '<button onclick="vpost(\'relay\',{country:\''+(country?country.code:'')+'\',city:vsel.city||\''+(cy||'')+'\'})">Use this location</button></div>'+
   '<div class="row" style="margin-top:8px"><span class="mut">Everyone\'s exit:</span>'+btn(1,'Direct',d.default_exit==='direct','vpost(\'default\',{exit:\'direct\'})')+btn(1,'Mullvad',d.default_exit==='mullvad','vpost(\'default\',{exit:\'mullvad\'})')+'<span class="mut">(each device below can override)</span></div>'+
-  '<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(d.kill_switch?'checked':'')+' onchange="vpost(\'killswitch\',{on:this.checked})"> Kill switch (block instead of leaking if the tunnel drops)</label></div>'+
+  '<div class="row" style="margin-top:8px"><span class="mut">Kill switch (what must be private before anything is allowed out):</span>'+btn(1,'Direct',d.kill_tier==='direct','vpost(\'tier\',{tier:\'direct\'})')+btn(1,'Mullvad or Tor',d.kill_tier==='mullvad_or_tor','vpost(\'tier\',{tier:\'mullvad_or_tor\'})')+btn(1,'Tor through Mullvad',d.kill_tier==='tor_over_mullvad','vpost(\'tier\',{tier:\'tor_over_mullvad\'})')+'</div>'+
+  '<div class="mut">The router\'s own traffic (encrypted name lookups for every device, list downloads, notifications) tries Tor through Mullvad first, then Mullvad or Tor, then direct. This sets the lowest step allowed: Direct falls all the way back (with a warning); Mullvad or Tor blocks if neither is up; Tor through Mullvad blocks unless that is up. Blocking also cuts off devices set to Mullvad. Tor through Mullvad ties every device\'s new name lookups to Tor: they wait a few minutes after a restart, and stop for about 10 minutes whenever the router pauses Tor to protect its memory (cached names still work). Watch the Tor card for "paused" events before relying on it.</div>'+
   '<div class="row"><label><input type="checkbox" '+(d.dns_via_vpn?'checked':'')+' onchange="vpost(\'dnsvpn\',{on:this.checked})"> Use Mullvad DNS for devices that exit via Mullvad</label></div>'+
   '<div class="row" style="margin-top:8px"><button onclick="vpost(\'panic\')">Panic: everything direct</button><button onclick="const a=prompt(\'Account number, to remove this device from your Mullvad account:\');if(a!==null)vpost(\'remove\',{account:a})">Remove device</button></div>'}
 
@@ -268,6 +270,7 @@ function trrender(force){const el=$('tor');if(!Tr||guard(el,force))return;
  el.innerHTML='<div class="row"><span>'+trstate()+(Tr.running?' <span class="mut">'+(Tr.rss_mb?Tr.rss_mb.toFixed(0)+' MB used, ':'')+Tr.avail_mb.toFixed(0)+' MB free on the router'+(Tr.restarts?', '+Tr.restarts+' restart'+(Tr.restarts===1?'':'s'):'')+'</span>':'')+'</span><span><button class="'+(Tr.enabled?'':'on')+'" onclick="trset('+(!Tr.enabled)+','+Tr.onion+')">'+(Tr.enabled?'Switch off':'Switch on')+'</button></span></div>'+
   (Tr.error?'<div class="err" style="margin-top:4px">'+esc(Tr.error)+'</div>':'')+
   '<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.onion?'checked ':'')+'onchange="trset('+Tr.enabled+',this.checked)"> <b>.onion for the whole house</b></label><span class="mut">any device can open a .onion address with no setup; browsers using the proxy file also get a SOCKS rule</span></div>'+
+  '<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.over_vpn?'checked ':'')+'onchange="trovervpn(this.checked)"> <b>Tor over Mullvad</b></label><span class="mut">Tor\'s own connections go only through the Mullvad tunnel, so the carrier sees the tunnel and not Tor. Tor waits for the tunnel and has no other way out.'+(Tr.vpn_wait?' <b class="err">Waiting for the tunnel.</b>':'')+'</span></div>'+
   '<div class="mut" style="margin:8px 0 4px"><b>Send a device through Tor</b>: all traffic forced through Tor (TCP only; UDP, ICMP, IPv6 are blocked). No internet while Tor is not ready.</div>'+
   '<table>'+devs+'</table>'+
   '<div class="row" style="margin-top:6px"><select id="tor_dev">'+devopts('Choose a device...')+'</select><button onclick="trdevpick()">Send through Tor</button><button onclick="trtest()">Test Tor from the router</button></div>'+
@@ -295,6 +298,7 @@ async function odset(en,rw){const n={enabled:odpick(en,Od.enabled),remote_write:
  const r=await apost('tor/onion/set',n);$('odmsg').textContent=r.j.error||'';odload()}
 async function odadd(){const r=await apost('tor/onion/client',{name:$('od_name').value,pub:$('od_pub').value});$('odmsg').textContent=r.j.error||'';odload()}
 async function odrm(name){if(!confirm('Remove '+name+'? It can no longer find the door (a connection it already holds may continue until it closes).'))return;const r=await apost('tor/onion/client/remove',{name});$('odmsg').textContent=r.j.error||'';odload()}
+async function trovervpn(on){const r=await apost('tor/overvpn',{on});$('tormsg').textContent=r.j.error||'';trload()}
 async function trset(en,on){const r=await apost('tor/set',{enabled:en,onion:on});$('tormsg').textContent=r.j.error||'';trload()}
 async function trdev(mac,on){if(!on&&!confirm('Give this device its direct internet line back? Its traffic will no longer go through Tor.'))return;const r=await apost('tor/device',{mac,on});$('tormsg').textContent=r.j.error||'';trload()}
 function trdevpick(){const v=$('tor_dev').value;if(!v){$('tormsg').textContent='Choose a device first';return}if(confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.'))trdev(v,true)}
@@ -408,7 +412,7 @@ function dcrender(force){const el=$('dc');if(!Dc||guard(el,force))return;
  const h=Dc.hits||[];
  $('dcbadge').innerHTML=h.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+h.length+' hit'+(h.length===1?'':'s')+'</span>':'';
  const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const what={canary:'decoy name','plain_fallback':'plain DNS while DoH is up',exfil:'tunneling-shaped lookups'};
+ const what={canary:'decoy name',exfil:'tunneling-shaped lookups'};
  const rows=h.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'</td><td class="mut">'+(what[x.kind]||esc(x.kind))+'</td></tr>').join('')||'<tr><td class="mut">nothing yet</td></tr>';
  el.innerHTML='<div class="row"><span>'+(Dc.enabled?'<b style="color:var(--ac)">watching</b>':'<span class="mut">switched off</span>')+'</span><button class="'+(Dc.enabled?'':'on')+'" onclick="dcset('+(!Dc.enabled)+')">'+(Dc.enabled?'Switch off':'Switch on')+'</button></div>'+
   '<div class="mut" style="margin:6px 0">Watches every DNS query for decoy names, plain DNS while encrypted DNS is in use, and tunneling-shaped runs of lookups.</div>'+

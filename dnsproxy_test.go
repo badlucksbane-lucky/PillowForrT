@@ -3,11 +3,13 @@ package main
 import (
 	"crypto/x509"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,12 +39,14 @@ type fakeDoH struct {
 	nx    atomic.Bool
 	delay atomic.Int64
 	last  atomic.Value // the last query body the upstream received
+	conns sync.Map     // the distinct client addresses (= connections) that have asked
 }
 
 func newFakeDoH(t *testing.T) (*fakeDoH, *x509.CertPool) {
 	f := &fakeDoH{ttl: 120}
 	f.Server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.hits.Add(1)
+		f.conns.Store(r.RemoteAddr, true)
 		if d := f.delay.Load(); d > 0 {
 			time.Sleep(time.Duration(d))
 		}
@@ -67,41 +71,20 @@ func newFakeDoH(t *testing.T) (*fakeDoH, *x509.CertPool) {
 	return f, pool
 }
 
-// fakePlain is a UDP resolver that answers every query.
-func fakePlain(t *testing.T) (addr string, hits *atomic.Int64) {
-	pc, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	hits = &atomic.Int64{}
-	go func() {
-		buf := make([]byte, 1500)
-		for {
-			n, a, err := pc.ReadFrom(buf)
-			if err != nil {
-				return
-			}
-			hits.Add(1)
-			if r := answerFor(buf[:n], 60, false); r != nil {
-				setID(r, binary.BigEndian.Uint16(buf[0:2]))
-				pc.WriteTo(r, a)
-			}
-		}
-	}()
-	t.Cleanup(func() { pc.Close() })
-	return pc.LocalAddr().String(), hits
-}
-
-func testProxy(t *testing.T, doh *fakeDoH, pool *x509.CertPool, plainAddr string) *DNSProxy {
+func testProxyURLs(t *testing.T, urls []string, pool *x509.CertPool) *DNSProxy {
 	f := NewFilter(t.TempDir())
 	testSetList(f, defaultLists[0], []string{"blocked.example.com"}, "", "")
 	f.SetMode("oisd")
 	up := newUpstream(upstreamConfig{
-		DoHURLs: []string{doh.URL}, Roots: pool, Plain: func() []string { return []string{plainAddr} },
-		DoHTimeout: 400 * time.Millisecond, PlainTimeout: 400 * time.Millisecond, ProbeEvery: 150 * time.Millisecond,
+		DoHURLs: urls, Roots: pool,
+		DoHTimeout: 300 * time.Millisecond, ProbeEvery: 100 * time.Millisecond,
 		Dial: (&net.Dialer{Timeout: time.Second}).DialContext,
 	})
 	return &DNSProxy{Filter: f, Up: up, Cache: newDNSCache(100), Stats: NewDNSStats(), BlockTTL: 30}
+}
+
+func testProxy(t *testing.T, doh *fakeDoH, pool *x509.CertPool) *DNSProxy {
+	return testProxyURLs(t, []string{doh.URL}, pool)
 }
 
 func ask(p *DNSProxy, name string, id uint16) []byte {
@@ -122,15 +105,14 @@ func addrOf(r []byte) string {
 
 func TestDoHPathCacheAndIDs(t *testing.T) {
 	doh, pool := newFakeDoH(t)
-	plain, plainHits := fakePlain(t)
-	p := testProxy(t, doh, pool, plain)
+	p := testProxy(t, doh, pool)
 
 	r := ask(p, "example.org", 0xAAAA)
 	if addrOf(r) != "93.184.216.34" || binary.BigEndian.Uint16(r[0:2]) != 0xAAAA {
 		t.Fatalf("first answer wrong / id not restored: id %x addr %s", r[0:2], addrOf(r))
 	}
-	if doh.hits.Load() != 1 || plainHits.Load() != 0 {
-		t.Fatalf("hits doh=%d plain=%d (the query must go out encrypted only)", doh.hits.Load(), plainHits.Load())
+	if doh.hits.Load() != 1 {
+		t.Fatalf("hits doh=%d (the query must go out encrypted, once)", doh.hits.Load())
 	}
 	r = ask(p, "example.org", 0xBBBB)
 	if doh.hits.Load() != 1 || binary.BigEndian.Uint16(r[0:2]) != 0xBBBB || addrOf(r) != "93.184.216.34" {
@@ -146,11 +128,10 @@ func TestDoHPathCacheAndIDs(t *testing.T) {
 
 func TestBlockedNeverLeaves(t *testing.T) {
 	doh, pool := newFakeDoH(t)
-	plain, plainHits := fakePlain(t)
-	p := testProxy(t, doh, pool, plain)
+	p := testProxy(t, doh, pool)
 	r := ask(p, "sub.blocked.example.com", 1)
-	if addrOf(r) != "0.0.0.0" || doh.hits.Load() != 0 || plainHits.Load() != 0 {
-		t.Fatalf("blocked name: addr %s doh=%d plain=%d", addrOf(r), doh.hits.Load(), plainHits.Load())
+	if addrOf(r) != "0.0.0.0" || doh.hits.Load() != 0 {
+		t.Fatalf("blocked name: addr %s doh=%d", addrOf(r), doh.hits.Load())
 	}
 	p.Filter.SetMode("off") // the switch is instant: the very next query is resolved
 	if addrOf(ask(p, "blocked.example.com", 2)) != "93.184.216.34" {
@@ -165,51 +146,53 @@ func TestBlockedNeverLeaves(t *testing.T) {
 	}
 }
 
-func TestFallbackWarningAndRecovery(t *testing.T) {
+// Encrypted DNS failing is a refused lookup and a visible warning, never an answer from anywhere else; it clears by itself when DoH comes back.
+func TestFailingWarningAndRecovery(t *testing.T) {
 	doh, pool := newFakeDoH(t)
-	plain, plainHits := fakePlain(t)
-	p := testProxy(t, doh, pool, plain)
+	p := testProxy(t, doh, pool)
 	doh.fail.Store(true)
 
-	r := ask(p, "one.example.net", 1)
-	if addrOf(r) != "93.184.216.34" {
-		t.Fatal("the query must still be answered through the plain fallback")
+	for i := uint16(1); i < upstreamDownAfter; i++ {
+		if rcodeOf(ask(p, fmt.Sprintf("n%d.example.net", i), i)) != 2 {
+			t.Fatal("with DoH down the answer is SERVFAIL, from nowhere else")
+		}
+		if p.Up.Failing() {
+			t.Fatalf("one or two failures are not an outage yet (after %d)", i)
+		}
 	}
+	ask(p, "last.example.net", 9)
 	st := p.Up.State()
-	if st.Mode != "plain-fallback" || st.Warning == "" || plainHits.Load() != 1 || p.Stats.Plain.Load() != 1 {
-		t.Fatalf("expected a visible fallback warning: %+v plain=%d", st, plainHits.Load())
+	if st.Mode != "failing" || st.Warning == "" || !p.Up.Failing() {
+		t.Fatalf("expected a visible warning after %d failures in a row: %+v", upstreamDownAfter, st)
 	}
-	hitsAfterFirst := doh.hits.Load()
-	ask(p, "two.example.net", 2) // while in fallback, queries go straight to plain: no DoH attempts of their own
-	if plainHits.Load() != 2 {
-		t.Fatalf("second query did not use plain: %d", plainHits.Load())
+	if p.Stats.Errors.Load() != uint64(upstreamDownAfter) || p.Stats.DoH.Load() != 0 {
+		t.Fatalf("errors %d doh %d", p.Stats.Errors.Load(), p.Stats.DoH.Load())
 	}
+	hits := doh.hits.Load()
 	time.Sleep(450 * time.Millisecond) // the probe keeps trying (and failing) in the background
-	if doh.hits.Load() <= hitsAfterFirst {
+	if doh.hits.Load() <= hits {
 		t.Fatal("the recovery probe is not running")
 	}
-	if p.Up.State().Mode != "plain-fallback" {
+	if !p.Up.Failing() {
 		t.Fatal("recovered while DoH was still down")
 	}
 	doh.fail.Store(false)
 	deadline := time.Now().Add(2 * time.Second)
-	for p.Up.State().Mode != "doh" && time.Now().Before(deadline) {
+	for p.Up.Failing() && time.Now().Before(deadline) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	if st := p.Up.State(); st.Mode != "doh" || st.Warning != "" {
 		t.Fatalf("did not recover and clear the warning: %+v", st)
 	}
-	before := plainHits.Load()
-	ask(p, "three.example.net", 3)
-	if plainHits.Load() != before {
-		t.Fatal("after recovery the query still went out as plain DNS")
+	if addrOf(ask(p, "back.example.net", 10)) != "93.184.216.34" {
+		t.Fatal("answers again after recovery")
 	}
 }
 
 func TestAllUpstreamsDownIsServfailNotAHang(t *testing.T) {
 	doh, pool := newFakeDoH(t)
 	doh.fail.Store(true)
-	p := testProxy(t, doh, pool, "127.0.0.1:1") // nothing listens there
+	p := testProxy(t, doh, pool) // nothing listens there
 	t0 := time.Now()
 	r := ask(p, "dead.example.net", 7)
 	if rcodeOf(r) != 2 || binary.BigEndian.Uint16(r[0:2]) != 7 {
@@ -264,8 +247,7 @@ func TestCacheTTLAndNegative(t *testing.T) {
 
 func TestGarbageGetsFormerr(t *testing.T) {
 	doh, pool := newFakeDoH(t)
-	plain, _ := fakePlain(t)
-	p := testProxy(t, doh, pool, plain)
+	p := testProxy(t, doh, pool)
 	for _, g := range [][]byte{{}, {1}, {1, 2, 3, 4, 5}, make([]byte, 11), append(make([]byte, 12), 0xFF)} {
 		r := p.Handle(g)
 		if len(r) < 12 || rcodeOf(r) != 1 {
@@ -277,114 +259,20 @@ func TestGarbageGetsFormerr(t *testing.T) {
 	}
 }
 
-func TestCarrierResolvers(t *testing.T) {
-	path := t.TempDir() + "/resolv"
-	data := "# c\nnameserver 198.51.100.1\nnameserver 2001:db8::1\nnameserver 198.51.100.2\nsearch x\n"
-	if err := writeFile(path, data); err != nil {
-		t.Fatal(err)
-	}
-	got := carrierResolvers(path)()
-	if len(got) != 2 || got[0] != "198.51.100.1:53" || got[1] != "198.51.100.2:53" {
-		t.Fatalf("%v (IPv6 must be skipped: the cellular link has no IPv6)", got)
-	}
-	if carrierResolvers(path+"-missing")() != nil {
-		t.Fatal("a missing file should give nil")
-	}
-}
-
 func writeFile(path, data string) error { return os.WriteFile(path, []byte(data), 0o644) }
 
-// testProxyGrace is testProxy with the plain-fallback policy and a list of encrypted endpoints.
-func testProxyGrace(t *testing.T, urls []string, pool *x509.CertPool, plainAddr string, plainAfter time.Duration) *DNSProxy {
-	f := NewFilter(t.TempDir())
-	testSetList(f, defaultLists[0], []string{"blocked.example.com"}, "", "")
-	f.SetMode("oisd")
-	up := newUpstream(upstreamConfig{
-		DoHURLs: urls, Roots: pool, Plain: func() []string { return []string{plainAddr} },
-		DoHTimeout: 300 * time.Millisecond, PlainTimeout: 300 * time.Millisecond, ProbeEvery: 100 * time.Millisecond, PlainAfter: plainAfter,
-		Dial: (&net.Dialer{Timeout: time.Second}).DialContext,
-	})
-	return &DNSProxy{Filter: f, Up: up, Cache: newDNSCache(100), Stats: NewDNSStats(), BlockTTL: 30}
-}
-
-// A brief encrypted-DNS failure must not put anything on the wire in the clear; only a sustained one may (PlainAfter).
-func TestGraceHoldsPlainBackThenAllowsItWhenSustained(t *testing.T) {
-	doh, pool := newFakeDoH(t)
-	plain, plainHits := fakePlain(t)
-	p := testProxyGrace(t, []string{doh.URL}, pool, plain, 700*time.Millisecond)
-	doh.fail.Store(true)
-
-	r := ask(p, "a.example.net", 1)
-	if rcodeOf(r) != 2 {
-		t.Fatalf("inside the grace window the answer must be SERVFAIL, got rcode %d", rcodeOf(r))
-	}
-	if plainHits.Load() != 0 || p.Up.State().Mode != "doh" {
-		t.Fatalf("plain DNS was used inside the grace window: hits=%d mode=%s", plainHits.Load(), p.Up.State().Mode)
-	}
-	deadline := time.Now().Add(4 * time.Second) // keep failing back to back: after PlainAfter the fallback is allowed
-	var got string
-	for i := uint16(2); time.Now().Before(deadline); i++ {
-		got = addrOf(ask(p, "b.example.net", i))
-		if got != "-" {
-			break
-		}
-		time.Sleep(120 * time.Millisecond)
-	}
-	if got != "93.184.216.34" || plainHits.Load() == 0 || p.Up.State().Mode != "plain-fallback" {
-		t.Fatalf("a sustained failure must fall back to plain: addr=%s hits=%d mode=%s", got, plainHits.Load(), p.Up.State().Mode)
-	}
-}
-
-// One success ends a run of failures, so the next failure starts a fresh grace window instead of inheriting the old one.
-func TestGraceRestartsAfterASuccess(t *testing.T) {
-	doh, pool := newFakeDoH(t)
-	plain, plainHits := fakePlain(t)
-	p := testProxyGrace(t, []string{doh.URL}, pool, plain, 600*time.Millisecond)
-	doh.fail.Store(true)
-	ask(p, "x1.example.net", 1)
-	time.Sleep(450 * time.Millisecond) // most of the grace window used up
-	doh.fail.Store(false)
-	if addrOf(ask(p, "x2.example.net", 2)) != "93.184.216.34" {
-		t.Fatal("encrypted DNS recovered but the query did not succeed")
-	}
-	doh.fail.Store(true)
-	time.Sleep(300 * time.Millisecond) // old failure is now past PlainAfter; a new run must not inherit it
-	r := ask(p, "x3.example.net", 3)
-	if rcodeOf(r) != 2 || plainHits.Load() != 0 {
-		t.Fatalf("the grace window did not restart after a success: rcode=%d plainHits=%d", rcodeOf(r), plainHits.Load())
-	}
-}
-
-// PlainAfter < 0 is the strict policy: never plain, however long the outage.
-func TestNeverPlainPolicy(t *testing.T) {
-	doh, pool := newFakeDoH(t)
-	plain, plainHits := fakePlain(t)
-	p := testProxyGrace(t, []string{doh.URL}, pool, plain, -1)
-	doh.fail.Store(true)
-	for i := uint16(1); i <= 6; i++ {
-		if rcodeOf(ask(p, "strict.example.net", i)) != 2 {
-			t.Fatal("the strict policy must answer SERVFAIL")
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
-	if plainHits.Load() != 0 || p.Up.State().Mode != "doh" {
-		t.Fatalf("plain DNS was used under the strict policy: hits=%d mode=%s", plainHits.Load(), p.Up.State().Mode)
-	}
-}
-
-// A second provider covers the first one failing: the query is answered encrypted, with no fallback and no failure run.
+// A second provider covers the first one failing: the query is answered encrypted, with no failure run.
 func TestSecondProviderCoversTheFirst(t *testing.T) {
 	dead, pool := newFakeDoH(t)
 	good, pool2 := newFakeDoH(t)
 	pool.AddCert(good.Server.Certificate())
 	_ = pool2
 	dead.fail.Store(true)
-	plain, plainHits := fakePlain(t)
-	p := testProxyGrace(t, []string{dead.URL, good.URL}, pool, plain, 60*time.Second)
+	p := testProxyURLs(t, []string{dead.URL, good.URL}, pool)
 	if addrOf(ask(p, "two.example.net", 1)) != "93.184.216.34" {
 		t.Fatal("the second encrypted endpoint should have answered")
 	}
-	if plainHits.Load() != 0 || p.Up.State().Mode != "doh" || p.Stats.Plain.Load() != 0 {
-		t.Fatalf("it went to plain although a second encrypted endpoint was up: hits=%d mode=%s", plainHits.Load(), p.Up.State().Mode)
+	if p.Up.Failing() || p.Up.State().Mode != "doh" || p.Stats.Errors.Load() != 0 {
+		t.Fatalf("a covered failure is not an outage: %+v", p.Up.State())
 	}
 }

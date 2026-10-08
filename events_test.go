@@ -85,11 +85,11 @@ func TestDetectorUplinkAndDoH(t *testing.T) {
 	if kinds(es) != "uplink_up" || !strings.Contains(es[0].Text, "7 minute") {
 		t.Errorf("%+v", es)
 	}
-	in.DoHFallback = true
-	if kinds(d.step(in)) != "doh_fallback" || kinds(d.step(in)) != "" {
+	in.DoHDown = true
+	if kinds(d.step(in)) != "doh_down" || kinds(d.step(in)) != "" {
 		t.Error("doh fallback must be reported once")
 	}
-	in.DoHFallback = false
+	in.DoHDown = false
 	if kinds(d.step(in)) != "doh_ok" {
 		t.Error("doh recovery")
 	}
@@ -365,14 +365,14 @@ func TestMarkSeenKindsOnlyTouchesTheNamedKinds(t *testing.T) {
 	s, _, _ := newES(t)
 	s.Add([]evt{
 		{Kind: "tor_down", Sev: sevAttention, Text: "t1"}, {Kind: "tor_down", Sev: sevAttention, Text: "t2"},
-		{Kind: "doh_fallback", Sev: sevAttention, Text: "d1"}, {Kind: "rogue_dhcp", Sev: sevAlert, Text: "r1"},
+		{Kind: "doh_down", Sev: sevAttention, Text: "d1"}, {Kind: "rogue_dhcp", Sev: sevAlert, Text: "r1"},
 	})
 	if n := s.MarkSeenKinds([]string{"tor_down", "rogue_dhcp"}); n != 3 {
 		t.Fatalf("changed %d, want 3", n)
 	}
 	un, _ := s.Counts()
 	if un != 1 {
-		t.Fatalf("unseen %d, want 1 (the doh_fallback)", un)
+		t.Fatalf("unseen %d, want 1 (the doh_down)", un)
 	}
 	if n := s.MarkSeenKinds([]string{"tor_down"}); n != 0 {
 		t.Fatalf("marking an already-seen kind changed %d", n)

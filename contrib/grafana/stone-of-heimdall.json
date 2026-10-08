@@ -191,7 +191,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "1 - orbic_dns_upstream_fallback",
+     "expr": "1 - orbic_dns_upstream_failing",
      "legendFormat": ""
     }
    ],
@@ -635,7 +635,7 @@
   {
    "id": 10,
    "type": "timeseries",
-   "title": "DNS upstream: encrypted vs plain per minute",
+   "title": "DNS upstream: encrypted lookups and errors per minute",
    "datasource": {
     "type": "prometheus",
     "uid": "${DS_PROMETHEUS}"
@@ -670,15 +670,6 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "rate(orbic_dns_upstream_plain_total[5m])*60",
-     "legendFormat": "plain fallback"
-    },
-    {
-     "datasource": {
-      "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
-     },
-     "refId": "C",
      "expr": "rate(orbic_dns_errors_total[5m])*60",
      "legendFormat": "errors"
     }

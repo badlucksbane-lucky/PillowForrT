@@ -14,7 +14,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -40,13 +39,13 @@ type kv struct {
 }
 
 type DNSStats struct {
-	Queries, Blocked, Cached, DoH, Plain, VPN, Tor, Errors atomic.Uint64
-	Since                                                  time.Time
-	mu                                                     sync.Mutex
-	topBlocked, topQueried                                 map[string]uint32
-	clients                                                map[string]*clientStat
-	ring                                                   [300]dnsEvent
-	n                                                      int
+	Queries, Blocked, Cached, DoH, VPN, Tor, Errors, HardBlock atomic.Uint64
+	Since                                                      time.Time
+	mu                                                         sync.Mutex
+	topBlocked, topQueried                                     map[string]uint32
+	clients                                                    map[string]*clientStat
+	ring                                                       [300]dnsEvent
+	n                                                          int
 }
 
 func NewDNSStats() *DNSStats {
@@ -104,18 +103,18 @@ func topCounts(m map[string]uint32, n int) []kv {
 }
 
 type statsSnapshot struct {
-	Queries, Blocked, Cached, DoH, Plain, VPN, Errors uint64
-	Since                                             time.Time
-	TopBlocked, TopQueried                            []kv
-	Clients                                           []clientView
-	Recent                                            []dnsEvent
+	Queries, Blocked, Cached, DoH, VPN, Errors uint64
+	Since                                      time.Time
+	TopBlocked, TopQueried                     []kv
+	Clients                                    []clientView
+	Recent                                     []dnsEvent
 }
 
 func (s *DNSStats) Snapshot(topN, recentN int) statsSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sn := statsSnapshot{Queries: s.Queries.Load(), Blocked: s.Blocked.Load(), Cached: s.Cached.Load(), DoH: s.DoH.Load(),
-		Plain: s.Plain.Load(), VPN: s.VPN.Load(), Errors: s.Errors.Load(), Since: s.Since, TopBlocked: topCounts(s.topBlocked, topN), TopQueried: topCounts(s.topQueried, topN)}
+		VPN: s.VPN.Load(), Errors: s.Errors.Load(), Since: s.Since, TopBlocked: topCounts(s.topBlocked, topN), TopQueried: topCounts(s.topQueried, topN)}
 	for ip, c := range s.clients {
 		sn.Clients = append(sn.Clients, clientView{IP: ip, clientStat: *c})
 	}
@@ -198,43 +197,47 @@ func (c *dnsCache) put(key string, resp []byte, now time.Time) {
 	c.m[key] = &cent{resp: append([]byte(nil), resp...), at: now, exp: now.Add(time.Duration(ttl) * time.Second)}
 }
 
-// ---------- upstream: DoH first, plain DNS as a visible fallback ----------
+// ---------- upstream: encrypted DNS (DoH) only ----------
+// There is no plain-DNS path. A name lookup is answered by DoH or refused (SERVFAIL); it is never sent in the clear, and nothing here can be configured to. (The old fallback to the carrier's
+// resolvers, its grace period and its flags are gone: the firewall refused that traffic anyway, see dnsguard.go, so the code only ever looked like a way out.)
 
 type upstreamConfig struct {
-	DoHURLs      []string
-	Roots        *x509.CertPool
-	Plain        func() []string // plain resolvers "ip:53", tried in order when DoH is down
-	DoHTimeout   time.Duration
-	PlainTimeout time.Duration
-	ProbeEvery   time.Duration
-	// PlainAfter: how long encrypted DNS must keep failing (queries failing back to back, gaps under 30 s) before queries are allowed out as plain DNS.
-	// 0 = at the first failure (the old behaviour); > 0 = hold off that long, answering SERVFAIL meanwhile (the cache still answers); < 0 = never fall back to plain.
-	PlainAfter time.Duration
+	DoHURLs    []string
+	Roots      *x509.CertPool
+	DoHTimeout time.Duration
+	ProbeEvery time.Duration
 	Dial       func(ctx context.Context, network, addr string) (net.Conn, error)
+	// optional: the timeout to use now (a slower route needs longer), and a number that changes when the route does, so connections opened under the old route are closed
+	TimeoutFor func() time.Duration
+	RouteGen   func() uint64
+	// optional: dials for the one bootstrap lookup that is allowed while the route is blocked (ResolveBootstrap)
+	BootDial func(ctx context.Context, network, addr string) (net.Conn, error)
 }
 
+// upstreamDownAfter is how many lookups in a row must fail (every resolver tried each time) before encrypted DNS is reported as down.
+const upstreamDownAfter = 3
+
 type Upstream struct {
-	cfg                 upstreamConfig
-	client              *http.Client
-	mu                  sync.Mutex
-	fb                  bool
-	fbSince             time.Time
-	lastErr             string
-	lastOK              time.Time
-	failSince, lastFail time.Time // the current run of failing encrypted lookups (see upstreamConfig.PlainAfter)
-	probing             bool
-	DoHOK               atomic.Uint64
-	DoHFail             atomic.Uint64
-	PlainOK             atomic.Uint64
-	lastMS              atomic.Int64
+	cfg       upstreamConfig
+	client    *http.Client
+	mu        sync.Mutex
+	down      bool
+	downSince time.Time
+	consec    int // lookups failed in a row
+	lastErr   string
+	lastOK    time.Time
+	probing   bool
+	DoHOK     atomic.Uint64
+	DoHFail   atomic.Uint64
+	lastMS    atomic.Int64
+	gen       uint64
+	bootOnce  sync.Once
+	bootCl    *http.Client
 }
 
 func newUpstream(cfg upstreamConfig) *Upstream {
 	if cfg.DoHTimeout == 0 {
 		cfg.DoHTimeout = 2 * time.Second
-	}
-	if cfg.PlainTimeout == 0 {
-		cfg.PlainTimeout = 2 * time.Second
 	}
 	if cfg.ProbeEvery == 0 {
 		cfg.ProbeEvery = 15 * time.Second
@@ -249,17 +252,19 @@ func newUpstream(cfg upstreamConfig) *Upstream {
 		TLSHandshakeTimeout:   cfg.DoHTimeout,
 		ResponseHeaderTimeout: cfg.DoHTimeout,
 	}
+	if cfg.TimeoutFor != nil { // the per-request context sets the real limit; the transport's own must not cut a slower route short
+		tr.TLSHandshakeTimeout, tr.ResponseHeaderTimeout = 20*time.Second, 20*time.Second
+	}
 	return &Upstream{cfg: cfg, client: &http.Client{Transport: tr}}
 }
 
 type upstreamState struct {
-	Mode      string    `json:"mode"` // doh | plain-fallback
+	Mode      string    `json:"mode"` // doh | failing
 	Warning   string    `json:"warning,omitempty"`
 	Since     time.Time `json:"since,omitempty"`
 	LastOK    time.Time `json:"last_doh_ok,omitempty"`
 	DoHOK     uint64    `json:"doh_ok"`
 	DoHFail   uint64    `json:"doh_fail"`
-	PlainOK   uint64    `json:"plain_ok"`
 	LastMS    int64     `json:"last_doh_ms"`
 	Resolvers []string  `json:"doh_resolvers"`
 }
@@ -267,38 +272,32 @@ type upstreamState struct {
 func (u *Upstream) State() upstreamState {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	st := upstreamState{Mode: "doh", LastOK: u.lastOK, DoHOK: u.DoHOK.Load(), DoHFail: u.DoHFail.Load(), PlainOK: u.PlainOK.Load(), LastMS: u.lastMS.Load(), Resolvers: u.cfg.DoHURLs}
-	if u.fb {
-		st.Mode, st.Since = "plain-fallback", u.fbSince
-		st.Warning = "Encrypted DNS (DoH) is failing: queries are going out as plain DNS. Last error: " + u.lastErr
+	st := upstreamState{Mode: "doh", LastOK: u.lastOK, DoHOK: u.DoHOK.Load(), DoHFail: u.DoHFail.Load(), LastMS: u.lastMS.Load(), Resolvers: u.cfg.DoHURLs}
+	if u.down {
+		st.Mode, st.Since = "failing", u.downSince
+		st.Warning = "Encrypted DNS (DoH) is failing: name lookups are being refused, and nothing is sent in the clear. Last error: " + u.lastErr
 	}
 	return st
 }
 
-// holdOff reports whether this failed encrypted lookup should be answered with an error rather than sent out as plain DNS (upstreamConfig.PlainAfter). A run of failures is queries failing back to
-// back with gaps under 30 s; the first failure after a longer quiet spell starts a new run.
-func (u *Upstream) holdOff(err error) bool {
-	if u.cfg.PlainAfter == 0 {
-		return false
-	}
+// Failing says whether encrypted DNS is down (several lookups in a row failed and none has worked since).
+func (u *Upstream) Failing() bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	now := time.Now()
-	u.lastErr = err.Error()
-	if u.lastFail.IsZero() || now.Sub(u.lastFail) > 30*time.Second {
-		u.failSince = now
-	}
-	u.lastFail = now
-	return u.cfg.PlainAfter < 0 || now.Sub(u.failSince) < u.cfg.PlainAfter
-}
-
-func (u *Upstream) inFallback() bool {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	return u.fb
+	return u.down
 }
 
 func (u *Upstream) doh(q []byte) ([]byte, string, error) {
+	if u.cfg.RouteGen != nil { // the route changed (tunnel up or down, Tor ready): a pooled connection opened under the old one must not be reused
+		g := u.cfg.RouteGen()
+		u.mu.Lock()
+		changed := g != u.gen
+		u.gen = g
+		u.mu.Unlock()
+		if changed {
+			u.client.CloseIdleConnections()
+		}
+	}
 	var last error
 	for _, url := range u.cfg.DoHURLs {
 		b, err := u.dohOne(url, q)
@@ -314,7 +313,11 @@ func (u *Upstream) doh(q []byte) ([]byte, string, error) {
 func (u *Upstream) dohOne(url string, q []byte) ([]byte, error) {
 	body := append([]byte(nil), q...)
 	setID(body, 0) // RFC 8484: id 0 makes the request cache-friendly; the caller restores the client's id
-	ctx, cancel := context.WithTimeout(context.Background(), u.cfg.DoHTimeout)
+	to := u.cfg.DoHTimeout
+	if u.cfg.TimeoutFor != nil {
+		to = u.cfg.TimeoutFor()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), to)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/dns-message")
@@ -338,83 +341,28 @@ func (u *Upstream) dohOne(url string, q []byte) ([]byte, error) {
 	return b, nil
 }
 
-func (u *Upstream) plainServers() []string {
-	if u.cfg.Plain != nil {
-		if s := u.cfg.Plain(); len(s) > 0 {
-			return s
-		}
-	}
-	return []string{"9.9.9.9:53"}
-}
-
-func (u *Upstream) plain(q []byte) ([]byte, error) {
-	var last error
-	for _, srv := range u.plainServers() {
-		c, err := net.DialTimeout("udp4", srv, u.cfg.PlainTimeout)
-		if err != nil {
-			last = err
-			continue
-		}
-		c.SetDeadline(time.Now().Add(u.cfg.PlainTimeout))
-		c.Write(q)
-		buf := make([]byte, 4096)
-		n, err := c.Read(buf)
-		c.Close()
-		if err != nil {
-			last = err
-			continue
-		}
-		if n >= 12 && buf[2]&0x02 != 0 { // truncated: retry over TCP
-			if b, err := plainTCP(srv, q, u.cfg.PlainTimeout); err == nil {
-				return b, nil
-			}
-		}
-		return buf[:n], nil
-	}
-	if last == nil {
-		last = errors.New("no plain resolver answered")
-	}
-	return nil, last
-}
-
-func plainTCP(srv string, q []byte, to time.Duration) ([]byte, error) {
-	c, err := net.DialTimeout("tcp4", srv, to)
-	if err != nil {
-		return nil, err
-	}
-	defer c.Close()
-	c.SetDeadline(time.Now().Add(to))
-	c.Write(append([]byte{byte(len(q) >> 8), byte(len(q))}, q...))
-	var h [2]byte
-	if _, err := io.ReadFull(c, h[:]); err != nil {
-		return nil, err
-	}
-	b := make([]byte, int(h[0])<<8|int(h[1]))
-	_, err = io.ReadFull(c, b)
-	return b, err
-}
-
-func (u *Upstream) enterFallback(err error) {
+// fail records a lookup that no resolver answered; after upstreamDownAfter in a row encrypted DNS is reported as down, and a probe starts to notice when it comes back.
+func (u *Upstream) fail(err error) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.lastErr = err.Error()
-	if !u.fb {
-		u.fb, u.fbSince = true, time.Now()
+	if u.consec++; u.consec >= upstreamDownAfter && !u.down {
+		u.down, u.downSince = true, time.Now()
 	}
-	if !u.probing {
+	if u.down && !u.probing {
 		u.probing = true
 		go u.probeLoop()
 	}
 }
 
-// probeLoop retries DoH with a harmless query until it works again, then clears the warning.
+// probeLoop retries DoH with a harmless query until it works again, then clears the warning (a busy house clears it sooner, with its own lookups).
 func (u *Upstream) probeLoop() {
 	probe := mkProbeQuery()
 	for {
 		time.Sleep(u.cfg.ProbeEvery)
 		if _, _, err := u.doh(probe); err == nil {
 			u.mu.Lock()
-			u.fb, u.probing, u.lastOK = false, false, time.Now()
+			u.down, u.probing, u.consec, u.lastOK = false, false, 0, time.Now()
 			u.mu.Unlock()
 			return
 		}
@@ -430,36 +378,60 @@ func mkProbeQuery() []byte {
 	return append(b, 0, 0, 1, 0, 1)
 }
 
-// Resolve answers q (a client query with its own id). via is "doh" or "plain".
+// Resolve answers q (a client query with its own id) over DoH.
 func (u *Upstream) Resolve(q []byte) ([]byte, string, error) {
 	b, via, _, err := u.ResolveFrom(q)
 	return b, via, err
 }
 
-// ResolveFrom is Resolve, also naming the DoH resolver that answered (empty for a plain answer).
+// ResolveFrom is Resolve, also naming the DoH resolver that answered. A failure is returned as an error and the caller refuses the lookup; there is nothing else to try.
 func (u *Upstream) ResolveFrom(q []byte) ([]byte, string, string, error) {
-	if !u.inFallback() {
-		b, url, err := u.doh(q)
-		if err == nil {
-			u.DoHOK.Add(1)
-			u.mu.Lock()
-			u.lastOK = time.Now()
-			u.failSince, u.lastFail = time.Time{}, time.Time{} // a success ends any run of failures
-			u.mu.Unlock()
-			return b, "doh", url, nil
-		}
-		u.DoHFail.Add(1)
-		if u.holdOff(err) {
-			return nil, "", "", err // encrypted DNS is failing, but not for long enough to send anything in the clear: the client gets a SERVFAIL and retries
-		}
-		u.enterFallback(err)
-	}
-	b, err := u.plain(q)
+	b, url, err := u.doh(q)
 	if err != nil {
+		u.DoHFail.Add(1)
+		u.fail(err)
 		return nil, "", "", err
 	}
-	u.PlainOK.Add(1)
-	return b, "plain", "", nil
+	u.DoHOK.Add(1)
+	u.mu.Lock()
+	u.lastOK, u.consec, u.down = time.Now(), 0, false // a success ends any run of failures
+	u.mu.Unlock()
+	return b, "doh", url, nil
+}
+
+// ResolveBootstrap answers one query over DoH on the cellular link, bypassing the route (owndial.go: the lookup of api.mullvad.net while the route is blocked, so the tunnel can come back).
+func (u *Upstream) ResolveBootstrap(q []byte) ([]byte, string, error) {
+	u.bootOnce.Do(func() {
+		dial := u.cfg.BootDial
+		if dial == nil {
+			dial = u.cfg.Dial
+		}
+		u.bootCl = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: u.cfg.Roots, MinVersion: tls.VersionTLS12}, ForceAttemptHTTP2: true, DialContext: dial,
+			MaxIdleConns: 1, IdleConnTimeout: 30 * time.Second, TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 10 * time.Second}}
+	})
+	var last error
+	for _, url := range u.cfg.DoHURLs {
+		body := append([]byte(nil), q...)
+		setID(body, 0)
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/dns-message")
+		req.Header.Set("Accept", "application/dns-message")
+		resp, err := u.bootCl.Do(req)
+		if err != nil {
+			cancel()
+			last = err
+			continue
+		}
+		b, rerr := io.ReadAll(io.LimitReader(resp.Body, 65536))
+		resp.Body.Close()
+		cancel()
+		if rerr == nil && resp.StatusCode == 200 && len(b) >= 12 && b[2]&0x80 != 0 {
+			return b, url, nil
+		}
+		last = fmt.Errorf("%s: bad answer", url)
+	}
+	return nil, "", last
 }
 
 // ---------- the pipeline ----------
@@ -473,6 +445,40 @@ type DNSProxy struct {
 	Neigh    *neighbours // optional: ties a device's IPv6 address to its IPv4 one
 	VPN      *VPN        // optional: a device whose exit is Mullvad resolves through the tunnel
 	Tor      *torMgr     // optional: .onion names, and every name a Tor device asks, are answered by Tor and never go to a public resolver
+	warnMu   sync.Mutex
+	warnAt   map[string]time.Time
+}
+
+const hardBlockWarnEvery = 10 * time.Minute
+
+// hardBlock records that a Tor or Mullvad device's lookup was refused because the encrypted path for it is not working. Nothing is sent in the clear instead (the device gets SERVFAIL),
+// and the owner is told once per path per ten minutes, so a long outage is one event and not a flood.
+func ownBlocked() bool { r, _ := ownRouteNow(); return r == routeBlock }
+
+func (p *DNSProxy) hardBlock(path, client string, err error) {
+	p.Stats.HardBlock.Add(1)
+	p.warnMu.Lock()
+	if p.warnAt == nil {
+		p.warnAt = map[string]time.Time{}
+	}
+	now := time.Now()
+	if t, ok := p.warnAt[path]; ok && now.Sub(t) < hardBlockWarnEvery {
+		p.warnMu.Unlock()
+		return
+	}
+	p.warnAt[path] = now
+	p.warnMu.Unlock()
+	if events == nil {
+		return
+	}
+	why := "unknown"
+	if err != nil {
+		why = err.Error()
+	}
+	who := map[string]string{"tor": "Tor devices", "mullvad": "Mullvad devices"}[path]
+	events.Add([]evt{{T: now.Unix(), Kind: "dns_hardblock", Sev: sevAttention,
+		Text:   fmt.Sprintf("Encrypted DNS is not working for %s (last asked by %s: %s). Their lookups are being refused, not sent in the clear. Nothing falls back to plain DNS for them.", who, client, why),
+		Public: "Name lookups for devices on a private path are blocked because encrypted DNS is down"}})
 }
 
 func (p *DNSProxy) Handle(q []byte) []byte {
@@ -506,15 +512,35 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	if dq.Class == qclassI {
 		if resp, ok := p.Tor.DNS(client, dq, q); ok {
 			p.Stats.Tor.Add(1)
+			if rcodeOf(resp) == 2 { // Tor is not ready or did not answer: SERVFAIL, never a public resolver
+				p.hardBlock("tor", client, errors.New("Tor did not answer"))
+			}
+			if hit, by := p.cnameBlocked(client, resp, t0); hit { // the same list rules apply to what Tor answered: a cloaked tracker is as unwelcome over Tor
+				p.Stats.Blocked.Add(1)
+				ev.List = by
+				finish("blocked")
+				return buildBlocked(q, dq, p.BlockTTL)
+			}
+			if dq.Name != "onion" && !strings.HasSuffix(dq.Name, ".onion") { // an onion name's answer is the bridge's own private range, by design
+				if _, refuse := rebindMgr.Refuse(dq.Name, resp); refuse {
+					finish("rebind")
+					return buildRcode(q, dq, 5)
+				}
+			}
 			finish("tor")
 			return resp
 		}
 	}
 	if dnsCanaryMgr != nil && dq.Class == qclassI { // a decoy name or a tunneling-shaped run of lookups is worth flagging whatever the query resolves to
-		dnsCanaryMgr.Observe(client, dq.Name, false, t0)
+		dnsCanaryMgr.Observe(client, dq.Name, t0)
 	}
 	key := cacheKey(dq)
 	viaVPN := p.VPN.UseVPNDNS(client)
+	if viaVPN { // Mullvad's own resolver is rung 2 (the tunnel): when rung 1 (Tor through Mullvad) is up it goes first, and when the allowed rungs are all down the lookup is refused below
+		if r, _ := ownRouteNow(); r != routeTunnel {
+			viaVPN = false
+		}
+	}
 	if viaVPN {
 		key = "vpn|" + key // another resolver, another answer set
 	}
@@ -544,22 +570,26 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	}
 	var resp []byte
 	var via, fromURL string
-	if viaVPN {
+	switch {
+	case viaVPN:
 		resp, err = p.VPN.ResolveDNS(q)
 		via = "vpn"
-	} else {
+	case ownBootstrapName(dq.Name) && ownBlocked():
+		resp, fromURL, err = p.Up.ResolveBootstrap(q)
+		via = "doh"
+	default:
 		resp, via, fromURL, err = p.Up.ResolveFrom(q)
 	}
 	if err != nil {
+		if viaVPN || p.VPN.ExitFor(client) == "mullvad" {
+			p.hardBlock("mullvad", client, err)
+		}
 		p.Stats.Errors.Add(1)
 		finish("error")
 		return buildRcode(q, dq, 2) // SERVFAIL
 	}
 	setID(resp, dq.ID)
 	p.Cache.put(key, resp, time.Now())
-	if dnsCanaryMgr != nil && via == "plain" && dq.Class == qclassI {
-		dnsCanaryMgr.Observe(client, dq.Name, true, t0)
-	}
 	if via == "doh" {
 		p.Stats.DoH.Add(1)
 		if dnsXMgr != nil && dq.Class == qclassI && dq.Type == 1 {
@@ -567,8 +597,6 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 		}
 	} else if via == "vpn" {
 		p.Stats.VPN.Add(1)
-	} else {
-		p.Stats.Plain.Add(1)
 	}
 	if hit, by := p.cnameBlocked(client, resp, t0); hit {
 		p.Stats.Blocked.Add(1)
@@ -600,24 +628,6 @@ func (p *DNSProxy) cnameBlocked(client string, resp []byte, now time.Time) (bool
 		}
 	}
 	return false, ""
-}
-
-// carrierResolvers reads the plain resolvers the modem learned (the same ones dnsmasq used before the stub).
-func carrierResolvers(path string) func() []string {
-	return func() []string {
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
-		var out []string
-		for _, ln := range strings.Split(string(b), "\n") {
-			f := strings.Fields(ln)
-			if len(f) == 2 && f[0] == "nameserver" && net.ParseIP(f[1]) != nil && net.ParseIP(f[1]).To4() != nil {
-				out = append(out, f[1]+":53")
-			}
-		}
-		return out
-	}
 }
 
 func (c *dnsCache) Len() int {

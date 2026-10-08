@@ -26,8 +26,9 @@ func newListUpdater(f *Filter) *listUpdater {
 		Timeout: 3 * time.Minute,
 		Transport: &http.Transport{
 			TLSClientConfig:     &tls.Config{RootCAs: rootPool(), MinVersion: tls.VersionTLS12},
-			DialContext:         dialUpstream,
+			DialContext:         ownDial, // follows the state: tunnel, Tor or (with a warning) the cellular link; blocked when the kill switch says so (owndial.go)
 			TLSHandshakeTimeout: 20 * time.Second,
+			DisableKeepAlives:   true, // a download a day: nothing worth pooling, and a pooled connection would outlive a change of route
 		},
 	}}
 }

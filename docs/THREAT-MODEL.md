@@ -27,7 +27,7 @@ A person who carries a cellular hotspot and wants fewer third parties able to pr
 - In the code. It was written by an AI model under the maintainer's direction and has not had an independent human security audit; the maintainer did not write or line-by-line review it. It has a large automated test suite and has run on one unit. Read before you run.
 - In the third-party programs it fetches (dnsmasq, dropbear, Tor).
 - In your VPN provider, if you use one.
-- In the DNS-over-HTTPS resolvers (Quad9 and Cloudflare by default; plain DNS only after 60 seconds of failure unless you turn the fallback off).
+- In the DNS-over-HTTPS resolvers (Quad9 and Cloudflare by default). If they are all unreachable, lookups fail rather than fall back to anyone else.
 - In the block-list publishers, for what gets filtered.
 
 ## Tested on

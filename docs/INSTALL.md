@@ -158,7 +158,7 @@ Every finding is an event, on the **Events** card and on the detector's own card
 levels. **Alert** means something is impersonating or steering the network (`arp_gateway`,
 `arp_conflict`, `dns_mitm_confirmed`, `rogue_dhcp`, `ra_rogue`, `redirect_rogue`, `tls_ja3_match`). **To look at** means unusual, with a benign
 explanation possible (everything else: `arp_flip`, `arp_sweep`, `canary`, `canary_scan`, `tls_bare_ip`,
-`dhcp_fingerprint_drift`, `dns_canary`, `dns_plain_fallback`, `dns_exfil`, `dns_nxdomain_flood`,
+`dhcp_fingerprint_drift`, `dns_canary`, `dns_exfil`, `dns_nxdomain_flood`,
 `dns_mitm_suspect`, `tor_bypass_exit`, `tor_bypass_onion`, `beacon_pattern`, `ttl_forwarding`, `ttl_two_stacks`,
 `stock_admin_probe`, and the MAC churn pair).
 Each detector's source file opens with its false positives; the ones to expect on an ordinary LAN:
