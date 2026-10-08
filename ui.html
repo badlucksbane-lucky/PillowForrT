@@ -13,7 +13,7 @@ h1{font-size:20px;margin:8px 0}.brand{display:flex;gap:12px;align-items:center;m
 button{font:inherit;padding:6px 12px;border:1px solid var(--ln);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer}
 button.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 .seg{display:inline-flex;flex-wrap:nowrap}.seg button{border-radius:0;margin-left:-1px;position:relative}.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}.seg button:last-child{border-radius:0 8px 8px 0}.seg button.on{z-index:1}
-.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.bar{height:4px;background:var(--ln);border-radius:2px;margin-top:6px}.bar>i{display:block;height:4px;background:var(--ac);border-radius:2px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.bar{height:4px;background:var(--ln);border-radius:2px;margin-top:6px}.bar>i{display:block;height:4px;background:var(--ac);border-radius:2px}
 input{font:inherit;padding:6px 8px;border:1px solid var(--ln);border-radius:8px;background:var(--bg);color:var(--fg);min-width:0;flex:1}
 .banner{padding:10px 12px;border-radius:8px;background:var(--warn);color:#000;margin:12px 0;font-weight:600}
 .err{color:var(--bad)}.mut{color:var(--mut)}.blk{color:var(--bad)}
@@ -70,7 +70,6 @@ button{min-height:36px}
   <table id="cu"></table>
   <div class="row" style="margin-top:8px"><input id="cu_w" placeholder="check a name, e.g. ads.example.com" aria-label="Explain" autocomplete="off" autocapitalize="off" spellcheck="false"><button onclick="cuwhy()">Why?</button></div>
   <div id="cuwhy" class="mut" style="margin-top:4px"></div></details></div>
-<div class="card"><h2>Outbound services</h2><div id="eg" class="mut">loading</div><div id="egmsg" class="msg"></div></div>
 <div class="card"><h2>Proxy</h2><div id="pxpol"></div>
  <div class="row" style="margin-top:10px"><b>Mullvad</b> <span id="vpnbadge"></span></div><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div>
  <div class="row" style="margin-top:10px"><b>Tor</b> <span id="torbadge"></span></div><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
@@ -102,7 +101,7 @@ button{min-height:36px}
 <div class="card"><h2>Top asked</h2><table id="tq"></table></div>
 <div class="card"><h2>Recent</h2><table id="rc"></table></div>
 <div class="sec">Devices</div>
-<div class="card"><h2>Devices</h2><div id="devs" class="mut">loading</div><div id="devmsg" class="msg"></div></div>
+<div class="card"><h2>Devices <span id="egbadge"></span></h2><div id="egmsg" class="msg"></div><div id="eg" class="mut">loading</div></div>
 <div class="card"><h2>Wi-Fi</h2><div id="wifi" class="mut">loading</div><div id="wmsg" class="msg"></div></div>
 <div class="card"><h2>Blocked devices</h2><div id="blk" class="mut">loading</div><div id="bmsg" class="msg"></div></div>
 <div class="card"><h2>Internet schedules</h2><div id="fws" class="mut">loading</div><div id="fmsg" class="msg"></div></div>
@@ -154,7 +153,7 @@ function render(d){
  const sc=[['Queries',s.Queries,'--ax'],['Blocked',s.Blocked,'--s2'],['Cached',s.Cached,'--ax'],['Encrypted',s.DoH,'--okc'],['Via VPN',s.VPN||0,'--s1'],['Errors',s.Errors,'--bad']];
  $('counts').innerHTML=sc.map(c=>{const clr=c[1]&&c[2]!=='--ax';return '<div><div class="n"'+(clr?' style="color:var('+c[2]+')"':'')+'>'+fmt(c[1])+'</div><div class="mut">'+c[0]+'</div><div class="stat-bar" style="background:var('+c[2]+')"></div></div>'}).join('');
  const nm={};(s.Clients||[]).forEach(c=>nm[c.ip]=c.name||c.ip);
- DnsC=s.Clients||[];devrender();
+ DnsC=s.Clients||[];egrender();
  let lc='';$('lists').innerHTML=d.lists.map(l=>{const h=l.category!==lc?'<tr><th colspan="4" style="padding-top:8px">'+esc(l.category||'Other')+'</th></tr>':'';lc=l.category;
   return h+'<tr><td style="width:28px"><input type="checkbox" aria-label="Use '+esc(l.name)+'"'+(l.enabled?' checked':'')+' onchange="post(\'dns/list\',{name:\''+esc(l.name)+'\',on:this.checked})"></td><td><b>'+esc(l.name)+'</b><br><span class="mut">'+esc(l.desc||'')+'</span></td><td>'+(l.entries?fmt(l.entries)+' names':'not downloaded')+'<br><span class="mut">'+(l.wildcard?'with subdomains':'exact')+'</span></td><td>'+(l.error?'<span class="err">'+esc(l.error)+'</span>':l.entries?ago(l.updated):(l.enabled?'downloading...':''))+'</td></tr>'}).join('');
  crender(d);
@@ -764,10 +763,7 @@ function smrender(force){const el=$('sms');if(!Sm||guard(el,force))return;
   '<div class="mut" style="margin-top:6px">Read-only carrier messages. Text stays on this page only (not in feeds or logs).</div>'}
 async function smload(){try{const r=await api('/api/sms');const j=await r.json();if(r.ok){Sm=j;smrender()}else $('sms').textContent=j.error||'could not read messages'}catch(e){}}
 let Dv=null,DnsC=[];
-function devrender(force){const el=$('devs');if(!Dv||guard(el,force))return;
- const dnsBy={};DnsC.forEach(c=>dnsBy[c.ip]=c);
- const modeSel=ip=>'<select title="DNS filter for this device" onchange="post(\'dns/device\',{ip:\''+esc(ip)+'\',mode:this.value})">'+[['','DNS: default'],['off','DNS: off'],['strict','DNS: all lists']].map(o=>'<option value="'+o[0]+'"'+(((dnsBy[ip]||{}).mode||'')===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>';
- const rows=(Dv.devices||[]).map(d=>{const c=dnsBy[d.ip]||{};const orig=d.name||d.hostname||'';const nm=d.label||orig||(d.random_mac?'private-MAC device':'unknown device');
+function devinfo(d,dnsBy){const c=dnsBy[d.ip]||{};const orig=d.name||d.hostname||'';const nm=d.label||orig||(d.random_mac?'private-MAC device':'unknown device');
   const flags=[d.vendor?'<span class="mut" title="what the device announces when it asks for an address">'+esc(d.vendor)+'</span>':'',d.watched?'<span style="color:var(--ac)">watched</span>':'',d.reserved?'<span class="mut">reserved</span>':'',d.random_mac?'<span class="mut" title="Phones use a different MAC per network, and it can change">private MAC</span>':'',d.blocked?'<span class="err">blocked</span>':'',d.cut_now?'<span class="err">internet cut'+(d.paused_until?' until '+esc(d.paused_until):'')+'</span>':'',d.schedules&&!d.cut_now?'<span class="mut">'+d.schedules+' schedule'+(d.schedules>1?'s':'')+'</span>':''].filter(Boolean).join(' &middot; ');
   const hm=t=>new Date(t*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   const seen=t=>{const a=(Date.now()/1000-t);return a<90?'just now':a<5400?Math.round(a/60)+' min ago':a<172800?Math.round(a/3600)+' h ago':Math.round(a/86400)+' d ago'};
@@ -780,13 +776,11 @@ function devrender(force){const el=$('devs');if(!Dv||guard(el,force))return;
    '<button onclick="dvact(\'devices/watch\',{mac:\''+d.mac+'\',watch:'+(d.watched?'false':'true')+'})" title="An event (and a push, if you set one up) each time this device arrives or leaves">'+(d.watched?'Stop watching':'Watch')+'</button>',
    !d.online?'<button onclick="dvwake(\''+d.mac+'\')" title="Sends a wake-on-LAN packet: wired devices and ones set up for wake-on-wireless wake; most Wi-Fi devices ignore it">Wake</button>':'',
    !d.reserved&&d.ip?'<button onclick="dvreserve(\''+d.mac+'\',\''+esc(d.ip)+'\',\''+esc(d.hostname||'')+'\')">Reserve address</button>':''].filter(Boolean).join(' ');
-  return '<tr><td><b>'+esc(nm)+'</b>'+(d.label&&orig?' <span class="mut">('+esc(orig)+')</span>':'')+'<div class="mut">'+esc(d.mac)+'</div>'+(d.note?'<div class="mut" style="white-space:pre-wrap">'+esc(d.note)+'</div>':'')+'</td><td>'+ip+'</td><td>'+conn+'</td><td>'+(flags||'<span class="mut">-</span>')+'</td><td>'+(c.queries!=null?fmt(c.queries)+' asked, '+fmt(c.blocked)+' blocked<div class="mut">'+ago(c.last)+'</div>':'<span class="mut">no DNS lately</span>')+'</td></tr>'+
-   '<tr><td colspan="5" style="border-top:0;padding-top:0"><div class="row">'+(d.ip?modeSel(d.ip):'')+btns+'</div></td></tr>'}).join('')||'<tr><td class="mut">no devices</td></tr>';
- el.innerHTML='<table><tr><th>Device</th><th>Address</th><th>Connection</th><th>State</th><th>DNS</th></tr>'+rows+'</table><div class="mut" style="margin-top:6px">Connected first, then DHCP-known. Pause = 30 min internet cut (LAN stays). Schedules on the Internet schedules card.</div>'}
-async function dvload(){try{Dv=await (await api('/api/devices')).json();devrender()}catch(e){}}
-async function dvact(p,b){const r=await apost(p,b);$('devmsg').textContent=r.j.error||'';setTimeout(()=>{dvload();bload();fload()},1200)}
+  return {c,orig,nm,flags,conn,btns}}
+async function dvload(){try{Dv=await (await api('/api/devices')).json();egrender()}catch(e){}}
+async function dvact(p,b){const r=await apost(p,b);$('egmsg').textContent=r.j.error||'';setTimeout(()=>{dvload();bload();fload()},1200)}
 function dvname(mac){const d=(Dv.devices||[]).find(x=>x.mac===mac)||{};const l=prompt('Name for this device (shown instead of its DHCP name; blank to clear):',d.label||'');if(l===null)return;const n=prompt('Note (optional, up to 200 characters):',d.note||'');if(n===null)return;dvact('devices/note',{mac,label:l,note:n})}
-async function dvwake(mac){const r=await apost('devices/wake',{mac});$('devmsg').textContent=r.j.error||r.j.status||''}
+async function dvwake(mac){const r=await apost('devices/wake',{mac});$('egmsg').textContent=r.j.error||r.j.status||''}
 function dvpause(mac,nm){if(confirm('Cut the internet for '+nm+' for 30 minutes? Its LAN access, address and this page keep working.'))dvact('fw/pause',{mac,minutes:30})}
 function dvblock(mac,nm){if(confirm('Block '+nm+' ('+mac+') completely? It gets no address, DNS, internet or LAN until you unblock it.'))dvact('wifi/macfilter/add',{mac})}
 function dvreserve(mac,ip,host){const nm=prompt('Reserve '+ip+' for this device. Name:',host.replace(/[^A-Za-z0-9_-]/g,'-').slice(0,32));if(!nm)return;dvact('dhcp/set',{mac,ip,name:nm})}
@@ -824,37 +818,41 @@ function yrender(force){const el=$('sys');if(!Sy||guard(el,force))return;const y
   '<div class="mut" style="margin:4px 0">Prevents WebRTC IPv6 leaks. Off = devices drop carrier IPv6 (IPv4 unaffected). Default off after boot. <code>ssh orbic touch /data/proxy/lanv6.on</code>.</div>'+
   '<div class="row"><button class="'+(Sl&&Sl.off?'':'on')+'" onclick="ylv6('+(Sl&&Sl.off?'false':'true')+')">'+(Sl&&Sl.off?'Switch LAN IPv6 back on':'Switch LAN IPv6 off')+'</button>'+(Sl&&Sl.off&&!Sl.rules_in_place?'<span class="err">the firewall rules are not in place yet: they are applied within 20 seconds</span>':'')+'</div>'+
   '<div class="row" style="margin-top:10px"><button onclick="yreboot()">Reboot the Orbic</button><span class="mut">Everything drops for 1–2 min. DHCP reservations restored on boot.</span></div>'}
-let EgTog={};
+let EgTog={},EgDns={};
 function egdevs(){const m={},add=(mac,o)=>{mac=(mac||'').toLowerCase();if(!mac)return;m[mac]=Object.assign(m[mac]||{mac,known:false},o)};
- ((Dv&&Dv.devices)||[]).forEach(d=>add(d.mac,{known:true,name:d.label||d.name||d.hostname||(d.random_mac?'private-MAC device':'unknown device'),ip:d.ip,online:d.online}));
+ ((Dv&&Dv.devices)||[]).forEach(d=>add(d.mac,{known:true,dev:d,name:d.label||d.name||d.hostname||(d.random_mac?'private-MAC device':'unknown device'),ip:d.ip,online:d.online}));
  if(Eg){Object.keys(Eg.devices||{}).forEach(k=>add(k,{}));Object.keys(Eg.dev_services||{}).forEach(k=>add(k,{}));(Eg.http_upgrade_skip||[]).forEach(k=>add(k,{}));(Eg.observed||[]).forEach(o=>add(o.mac,{ip:o.ip}))}
  return Object.keys(m).map(k=>{const d=m[k];d.pend=((Eg&&Eg.observed)||[]).filter(o=>(o.mac||'').toLowerCase()===k);d.name=d.name||d.ip||k;return d}).sort((x,y)=>(y.pend.length>0)-(x.pend.length>0)||(!!y.online)-(!!x.online)||x.name.localeCompare(y.name))}
 function egcard(d){const mac=d.mac,ex=(Eg.dev_services||{})[mac]||[],rules=(Eg.devices||{})[mac]||[],skip=(Eg.http_upgrade_skip||[]).indexOf(mac)>=0,viaTor=!!(Tr&&(Tr.devices||[]).some(x=>(x.mac||'').toLowerCase()===mac)),xit=viaTor?'tor':((V&&V.device_exit||{})[d.ip]||'');
- const open=mac in EgTog?EgTog[mac]:(d.pend.length>0&&Eg.mode==='monitor');
- const badge=(d.pend.length?'<b class="err">'+d.pend.length+' would be refused</b>':'<span style="color:var(--ac)">all clear</span>')+(ex.length+rules.length?' <span class="mut">&middot; '+(ex.length+rules.length)+' of its own</span>':'')+(xit?' <span class="mut">&middot; exit: '+({tor:'Tor',mullvad:'Mullvad',direct:'direct'}[xit]||xit)+'</span>':'')+(skip?' <span class="mut">&middot; Force HTTPS off</span>':'');
- let h='<div class="dcard"><div class="dhead" role="button" tabindex="0" aria-expanded="'+open+'" onclick="egtog(\''+esc(mac)+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();egtog(\''+esc(mac)+'\')}"><span class="dcar">'+(open?'&#9662;':'&#9656;')+'</span><b>'+esc(d.name)+'</b><span class="mut">'+esc(d.ip||'')+(d.known?(d.online?'':' &middot; offline'):' &middot; not in the device list')+'</span><span class="dbad">'+badge+'</span></div>';
+ const open=mac in EgTog?EgTog[mac]:(d.pend.length>0&&Eg.mode==='monitor'),dv=d.dev,inf=dv?devinfo(dv,EgDns):null,own=ex.length+rules.length;
+ const badge=(d.pend.length?'<b class="err">'+d.pend.length+' would be refused</b>':'')+(dv&&dv.blocked?'<b class="err">blocked</b>':'')+(dv&&dv.cut_now?'<b class="err">cut</b>':'')+(own?'<span class="cnt" title="its own rules">'+own+'</span>':'')+(xit?' <span class="mut">'+({tor:'Tor',mullvad:'Mullvad',direct:'Direct'}[xit]||xit)+'</span>':'')+(skip?' <span class="mut">HTTPS off</span>':'');
+ let h='<div class="dcard"><div class="dhead" role="button" tabindex="0" aria-expanded="'+open+'" onclick="egtog(\''+esc(mac)+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();egtog(\''+esc(mac)+'\')}"><span class="dcar">'+(open?'&#9662;':'&#9656;')+'</span><span class="dot" style="background:'+(d.online?'var(--okc)':'var(--ln)')+'" title="'+(d.online?'online':'offline')+'"></span><b>'+esc(d.name)+'</b><span class="mut">'+esc(d.ip||'')+(d.known?'':' &middot; not in the device list')+'</span><span class="dbad">'+badge+'</span></div>';
  if(!open)return h+'</div>';
  h+='<div class="dbody">';
- if(d.pend.length)h+='<div><b>Would be refused</b> <span class="mut">(since the Orbic started)</span></div><table>'+d.pend.slice(0,25).map(o=>'<tr><td>'+o.proto+' '+o.port+'</td><td class="mut">'+o.flows+' flows to '+esc((o.dsts||[]).join(', '))+'</td><td><button onclick="yega(\''+o.proto+'\','+o.port+',\''+esc(mac)+'\')">Allow for this device</button> <a href="#" class="mut" onclick="yega(\''+o.proto+'\','+o.port+',\'\');return false">for everyone</a></td></tr>').join('')+'</table>';
- h+='<div style="margin-top:6px"><b>Services</b> <span class="mut">ticked for everyone show fixed; tick another to allow it for this device only</span></div><table>'+Eg.services.map(s=>{const on=s.on||ex.indexOf(s.id)>=0;return '<tr><td style="width:28px"><input type="checkbox" aria-label="Allow '+esc(s.name)+' for '+esc(d.name)+'"'+(on?' checked':'')+(s.on?' disabled':'')+' onchange="yegsv(\''+s.id+'\',this.checked,\''+esc(mac)+'\')"></td><td><b>'+esc(s.name)+'</b>'+(s.on?' <span class="mut">(everyone)</span>':'')+'<br><span class="mut">'+esc(s.desc)+'</span></td><td class="mut">'+esc(s.ports)+'</td></tr>'}).join('')+'</table>';
- if(rules.length)h+='<div><b>Its own ports</b></div><table>'+rules.map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td class="mut">'+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\''+esc(mac)+'\')">remove</button></td></tr>').join('')+'</table>';
+ if(inf){h+='<div class="mut">'+esc(mac)+(dv.label&&inf.orig?' &middot; '+esc(inf.orig):'')+'</div><div class="mut">'+inf.conn+(inf.c.queries!=null?' &middot; '+fmt(inf.c.queries)+' asked, '+fmt(inf.c.blocked)+' blocked':'')+'</div>'+(inf.flags?'<div>'+inf.flags+'</div>':'')+(dv.note?'<div class="mut" style="white-space:pre-wrap">'+esc(dv.note)+'</div>':'');
+  h+='<div class="row" style="margin-top:6px">'+inf.btns+'</div>';
+  if(dv.ip)h+='<div class="row" style="margin-top:6px"><span class="mut">DNS</span>'+seg('DNS filter for this device',[['','Default'],['off','Off'],['strict','All lists']],(EgDns[dv.ip]||{}).mode||'',v=>"post('dns/device',{ip:'"+esc(dv.ip)+"',mode:'"+v+"'})")+'</div>'}
  h+='<div class="row" style="margin-top:6px"><span>Force HTTPS</span>'+seg('Force HTTPS for this device',[['on','On'],['off','Off']],skip?'off':'on',v=>"yhup("+(v==='on')+",'"+esc(mac)+"')")+'</div>';
  if(d.ip&&V&&V.registered)h+='<div class="row" style="margin-top:6px"><span class="mut">Exit</span>'+exitSeg(d.ip,mac)+'</div>';
  else if(Tr&&Tr.available!==false)h+='<div class="row" style="margin-top:6px"><button class="'+(viaTor?'on':'')+'" onclick="trdev(\''+esc(mac)+'\','+!viaTor+')">'+(viaTor?'Give it its direct line back':'Send this device through Tor')+'</button></div>';
+ if(d.pend.length)h+='<div style="margin-top:6px"><b>Would be refused</b> <span class="mut">(since the Orbic started)</span></div><table>'+d.pend.slice(0,25).map(o=>'<tr><td>'+o.proto+' '+o.port+'</td><td class="mut">'+o.flows+' flows to '+esc((o.dsts||[]).join(', '))+'</td><td><button onclick="yega(\''+o.proto+'\','+o.port+',\''+esc(mac)+'\')">Allow for this device</button> <a href="#" class="mut" onclick="yega(\''+o.proto+'\','+o.port+',\'\');return false">for everyone</a></td></tr>').join('')+'</table>';
+ h+='<div style="margin-top:6px"><b>Services</b> <span class="mut">ticked for everyone show fixed; tick another to allow it for this device only</span></div><table>'+Eg.services.map(s=>{const on=s.on||ex.indexOf(s.id)>=0;return '<tr><td style="width:28px"><input type="checkbox" aria-label="Allow '+esc(s.name)+' for '+esc(d.name)+'"'+(on?' checked':'')+(s.on?' disabled':'')+' onchange="yegsv(\''+s.id+'\',this.checked,\''+esc(mac)+'\')"></td><td><b>'+esc(s.name)+'</b>'+(s.on?' <span class="mut">(everyone)</span>':'')+'<br><span class="mut">'+esc(s.desc)+'</span></td><td class="mut">'+esc(s.ports)+'</td></tr>'}).join('')+'</table>';
+ if(rules.length)h+='<div><b>Its own ports</b></div><table>'+rules.map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td class="mut">'+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\''+esc(mac)+'\')">remove</button></td></tr>').join('')+'</table>';
  return h+'</div></div>'}
 function egrender(force){const el=$('eg');if(!Eg||guard(el,force))return;
-const devs=egdevs();
-el.innerHTML='<div style="margin-top:0"><b>Outbound services</b> <b style="color:var(--ac)">'+({off:'off',monitor:'watching only',enforce:'enforcing'}[Eg.mode]||Eg.mode)+'</b></div>'+
+EgDns={};(DnsC||[]).forEach(c=>EgDns[c.ip]=c);
+const devs=egdevs(),pt=devs.reduce((n,d)=>n+d.pend.length,0),mclr=Eg.mode==='enforce'?'var(--ac)':Eg.mode==='monitor'?'var(--warn)':'var(--mut)';
+$('egbadge').innerHTML='<span class="cnt" title="devices">'+devs.length+'</span>'+(pt?'<span class="cnt" style="color:var(--bad);border-color:var(--bad)" title="would be refused">'+pt+'</span>':'');
+el.innerHTML='<details'+(EgTog._f?' open':'')+' ontoggle="EgTog._f=this.open"><summary><b>Outbound firewall</b> <span style="color:'+mclr+'">&bull; '+({off:'off',monitor:'watching only',enforce:'enforcing'}[Eg.mode]||Eg.mode)+'</span></summary>'+
   '<div class="mut" style="margin:4px 0">Only listed services may connect out (DNS handled separately). <b>Watch only</b> = log without blocking. Undo: <code>ssh orbic rm /data/proxy/egress.json</code>.</div>'+
-  '<div class="row">'+['off','monitor','enforce'].map(m=>'<button class="'+(Eg.mode===m?'on':'')+'" onclick="yegm(\''+m+'\')">'+({off:'Off',monitor:'Watch only',enforce:'Enforce'}[m])+'</button>').join('')+(Eg.rules_in_place?'':'<span class="err">rules not in place yet (20 s)</span>')+'</div>'+
+  '<div class="row">'+seg('Outbound firewall',[['off','Off'],['monitor','Watch only'],['enforce','Enforce']],Eg.mode,v=>"yegm('"+v+"')")+(Eg.rules_in_place?'':'<span class="err">rules not in place yet (20 s)</span>')+'</div>'+
   '<details style="margin-top:8px"'+(EgTog._g?' open':'')+' ontoggle="EgTog._g=this.open"><summary><b>For everyone</b> <span class="mut">services, other ports, HTTP upgrade, .onion</span></summary>'+
   '<table>'+Eg.services.map(s=>'<tr><td style="width:28px"><input type="checkbox" aria-label="Allow '+esc(s.name)+' for everyone"'+(s.on?' checked':'')+' onchange="yegsv(\''+s.id+'\',this.checked,\'\')"></td><td><b>'+esc(s.name)+'</b><br><span class="mut">'+esc(s.desc)+'</span></td><td class="mut">'+esc(s.ports)+'</td></tr>').join('')+'</table>'+
   '<div style="margin-top:8px"><b>Other allowed ports</b></div><table style="margin-top:6px">'+(Eg.allow||[]).map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td>'+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\'\')">remove</button></td></tr>').join('')+(Eg.allow&&Eg.allow.length?'':'<tr><td class="mut">none</td></tr>')+'</table>'+
   (Tr&&Tr.available!==false?'<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.onion?'checked ':'')+'onchange="trset('+Tr.enabled+',this.checked)"> <b>.onion for the whole house</b></label></div>':'')+
   '<div style="margin-top:8px"><b>Upgrade plain HTTP to HTTPS</b> <b style="color:var(--ac)">'+(Eg.http_upgrade?'on':'off')+'</b></div>'+
   '<div class="mut" style="margin:4px 0">Port 80 stays open, but a page asked for over plain HTTP is first sent to its https:// address. If the same device comes back for the same site within 2 minutes and no HTTPS connection exists, it <b>fell back</b>: that is noted and the plain request is let through. A device that cannot follow redirects (curl without -L, some gadgets, firmware updaters) will not work: leave it out on its card. Served '+Eg.http_upgraded+', fell back '+Eg.http_fell_back+' since start.</div>'+
-  '<div class="row"><button class="'+(Eg.http_upgrade?'on':'')+'" onclick="yhup('+!Eg.http_upgrade+',\'\')">'+(Eg.http_upgrade?'Turn the upgrade off':'Turn the upgrade on')+'</button>'+((Eg.http_upgrade_skip||[]).length?'<span class="mut">'+Eg.http_upgrade_skip.length+' device(s) left out</span>':'')+'</div></details>'+
-  '<div style="margin-top:10px"><b>Devices</b> <span class="mut">'+devs.length+', most refused first</span></div>'+
+  '<div class="row"><button class="'+(Eg.http_upgrade?'on':'')+'" onclick="yhup('+!Eg.http_upgrade+',\'\')">'+(Eg.http_upgrade?'Turn the upgrade off':'Turn the upgrade on')+'</button>'+((Eg.http_upgrade_skip||[]).length?'<span class="mut">'+Eg.http_upgrade_skip.length+' device(s) left out</span>':'')+'</div></details></details>'+
   (devs.map(egcard).join('')||'<div class="mut">no devices yet</div>')}
 function egtog(mac){const d=egdevs().find(x=>x.mac===mac);const cur=mac in EgTog?EgTog[mac]:(d&&d.pend.length>0&&Eg.mode==='monitor');EgTog[mac]=!cur;egrender(true)}
 let Sa=null,Sl=null,Eg=null;
