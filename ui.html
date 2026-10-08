@@ -44,10 +44,10 @@ button{min-height:36px}
 .sec:focus-visible{outline:2px solid var(--s1);outline-offset:3px;border-radius:4px}
 </style></head><body><main>
 <div class="brand"><img class="mark" src="/favicon.svg" alt=""><div><h1>Stone of Heimdall <span class="mut" id="ver"></span></h1><div class="tag mut">a watchman for your hotspot</div></div></div>
-<div class="row" style="margin-bottom:6px"><span class="mut">Signed in as <b id="who"></b></span><form method="post" action="/logout" style="margin:0"><button>Sign out</button></form></div>
+<div class="row" style="margin-bottom:6px"><form method="post" action="/logout" style="margin:0"><button>Sign out</button></form></div>
 <div id="banner"></div>
 <div class="tools"><button type="button" onclick="ccAll(true)">Collapse all</button><button type="button" onclick="ccAll(false)">Expand all</button></div>
-<div class="card hero"><h2>Today</h2>
+<div class="card hero"><h2></h2>
  <div class="grid" id="counts" style="margin-top:12px"></div>
  <div id="gr" style="margin-top:8px" class="mut">collecting the first samples...</div></div>
 <div class="sec">Guard gate</div>
@@ -125,7 +125,7 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 let CSRF='';
 let LAST_OK=true;
 async function api(path,opts){const r=await fetch(path,opts);if(r.status===401){location='/login';throw new Error('login')}LAST_OK=r.ok;if(r.status>=500&&!(opts&&opts.method==='POST'))throw new Error('server '+r.status);return r}
-async function session(){const j=await (await api('/api/session')).json();CSRF=j.csrf;$('who').textContent=j.user}
+async function session(){const j=await (await api('/api/session')).json();CSRF=j.csrf}
 const hdr=()=>({'X-CSRF-Token':CSRF,'Content-Type':'application/json'});
 async function chpw(){const j=await (await api('/api/account/password',{method:'POST',headers:hdr(),body:JSON.stringify({old:$('oldpw').value,new:$('newpw').value})})).json();
  $('amsg').textContent=j.error||j.ok||'';if(j.ok)setTimeout(()=>location='/login',1500)}
@@ -641,7 +641,7 @@ async function twprobe(){$('tw_probe').textContent='probing...';const r=await ap
 async function twfix(){const r=await apost('towers/fix',{lat:parseFloat($('tw_lat').value),lon:parseFloat($('tw_lon').value)});$('twmsg').textContent=r.j.error||r.j.status||'';twload()}
 async function twfixclear(){const r=await apost('towers/fix/clear',{});$('twmsg').textContent=r.j.error||r.j.status||'';twload()}
 async function twclear(){if(!confirm('Delete every stored observation?'))return;const r=await apost('towers/clear',{});$('twmsg').textContent=r.j.error||r.j.status||'';twload()}
-let Gr=null,GrRange='1h',GrTable=false;
+let Gr=null,GrRange='1h';
 const GR_DEFS=[
  {id:'traffic',title:'Internet traffic',axis:h=>h*8>=1e6?{u:'Mbit/s',div:125000}:{u:'kbit/s',div:125},fmt:v=>fmtBits(v),series:[{k:'rx',name:'Download',c:'--s1',m:8},{k:'tx',name:'Upload',c:'--s2',m:8}]},
  {id:'lat',title:'Uplink latency',axis:()=>({u:'ms',div:1}),fmt:v=>Math.round(v)+' ms',series:[{k:'lat',name:'Latency',c:'--s1',m:1}],area:true},
@@ -702,13 +702,8 @@ function grender(){const el=$('gr');if(!Gr)return;
  el.replaceChildren();
  const bar=document.createElement('div');bar.className='row range';
  [['1h','Last hour'],['24h','Last 24 hours']].forEach(([k,t])=>{const b=document.createElement('button');b.type='button';b.className=GrRange===k?'sel':'';b.textContent=(GrRange===k?'✓ ':'')+t;b.onclick=()=>{GrRange=k;grefetch()};bar.appendChild(b)});
- const tb=document.createElement('button');tb.type='button';tb.textContent=GrTable?'Show charts':'Show as table';tb.onclick=()=>{GrTable=!GrTable;grender()};bar.appendChild(tb);
- const info=document.createElement('span');info.className='mut';info.textContent='a sample every '+Gr.interval_s+' s, kept in memory (a restart empties it)';bar.appendChild(info);el.appendChild(bar);
+ el.appendChild(bar);
  if(!Gr.t.length){const m=document.createElement('div');m.className='mut';m.style.marginTop='8px';m.textContent='collecting the first samples...';el.appendChild(m);return}
- if(GrTable){const cols=[['Time',null],['Download','rx',v=>fmtBits(v)],['Upload','tx',v=>fmtBits(v)],['Latency','lat',v=>Math.round(v)+' ms'],['DNS asked/min','q',v=>Math.round(v)],['Blocked/min','blk',v=>Math.round(v)],['Devices','clients',v=>Math.round(v)],['Temp','temp',v=>Math.round(v)+'°C']];
-  const tbl=document.createElement('table');tbl.style.marginTop='8px';const hr=document.createElement('tr');cols.forEach(c=>{const th=document.createElement('th');th.textContent=c[0];hr.appendChild(th)});tbl.appendChild(hr);
-  const stepN=Math.max(1,Math.floor(Gr.t.length/60));for(let i=Gr.t.length-1;i>=0;i-=stepN){const tr=document.createElement('tr');cols.forEach(c=>{const td=document.createElement('td');td.className=c[1]?'':'mut';td.textContent=c[1]?(Gr[c[1]][i]==null?'-':c[2](Gr[c[1]][i])):gtime(Gr.t[i],GrRange==='24h');tr.appendChild(td)});tbl.appendChild(tr)}
-  el.appendChild(tbl);return}
  GR_DEFS.forEach(d=>el.appendChild(gchart(d,Gr)))}
 async function grefetch(){try{const r=await api('/api/graphs?range='+GrRange);Gr=await r.json();grender()}catch(e){}}
 let Dg=null,DgBusy=false;
