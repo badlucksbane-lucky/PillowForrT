@@ -46,10 +46,10 @@ button{min-height:36px}
 <div class="brand"><img class="mark" src="/favicon.svg" alt=""><div><h1>Stone of Heimdall <span class="mut" id="ver"></span></h1><div class="tag mut">a watchman for your hotspot</div></div></div>
 <div class="row" style="margin-bottom:6px"><form method="post" action="/logout" style="margin:0"><button>Sign out</button></form></div>
 <div id="banner"></div>
-<div class="tools"><button type="button" onclick="ccAll(true)">Collapse all</button><button type="button" onclick="ccAll(false)">Expand all</button></div>
 <div class="card hero"><h2></h2>
  <div class="grid" id="counts" style="margin-top:12px"></div>
  <div id="gr" style="margin-top:8px" class="mut">collecting the first samples...</div></div>
+<div class="tools"><button type="button" onclick="ccAll(true)">Collapse all</button><button type="button" onclick="ccAll(false)">Expand all</button></div>
 <div class="sec">Guard gate</div>
 <div class="card"><h2>DNS</h2>
  <div class="row" id="modes"></div>
@@ -702,9 +702,8 @@ function grender(){const el=$('gr');if(!Gr)return;
  el.replaceChildren();
  const bar=document.createElement('div');bar.className='row range';
  [['1h','Last hour'],['24h','Last 24 hours']].forEach(([k,t])=>{const b=document.createElement('button');b.type='button';b.className=GrRange===k?'sel':'';b.textContent=(GrRange===k?'✓ ':'')+t;b.onclick=()=>{GrRange=k;grefetch()};bar.appendChild(b)});
- el.appendChild(bar);
- if(!Gr.t.length){const m=document.createElement('div');m.className='mut';m.style.marginTop='8px';m.textContent='collecting the first samples...';el.appendChild(m);return}
- GR_DEFS.forEach(d=>el.appendChild(gchart(d,Gr)))}
+ if(!Gr.t.length){const m=document.createElement('div');m.className='mut';m.style.marginTop='8px';m.textContent='collecting the first samples...';el.appendChild(m);el.appendChild(bar);return}
+ GR_DEFS.forEach(d=>el.appendChild(gchart(d,Gr)));el.appendChild(bar)}
 async function grefetch(){try{const r=await api('/api/graphs?range='+GrRange);Gr=await r.json();grender()}catch(e){}}
 let Dg=null,DgBusy=false;
 function dgrender(){const el=$('dg');if(!Dg||!Dg.checks){el.innerHTML='<div class="row"><button class="on" onclick="dgrun()">Run diagnostics</button><span class="mut">Checks the uplink, DNS, Wi-Fi, services, firewall, box health and security in about 10 seconds. Nothing is changed.</span></div>';return}
