@@ -171,7 +171,8 @@ function node(j){const s=j.system||{},p=j.proxy||{},us=j.usage||{},b=j.budget||{
   ['Proxy',p.conns_active+' active, '+fmt(p.conns_total)+' total']])}
 
 let V=null;
-const exitSel=ip=>{if(!V||!V.registered)return '<span class="mut">-</span>';const cur=(V.device_exit||{})[ip]||'';return '<select title="exit" onchange="vpost(\'device\',{ip:\''+esc(ip)+'\',exit:this.value})">'+[['','Exit: default'],['direct','Exit: direct'],['mullvad','Exit: Mullvad']].map(o=>'<option value="'+o[0]+'"'+(cur===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>'};
+const exitSel=ip=>{if(!V||!V.registered)return '<span class="mut">-</span>';const tor=((Tr&&Tr.devices)||[]).some(d=>d.ip===ip);const cur=tor?'tor':((V.device_exit||{})[ip]||'');return '<select title="exit" onchange="devmode(\''+esc(ip)+'\',this.value)">'+[['','Exit: default'],['direct','Exit: direct'],['mullvad','Exit: Mullvad'],['tor','Exit: Tor']].map(o=>'<option value="'+o[0]+'"'+(cur===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>'};
+async function devmode(ip,mode){if(mode==='tor'&&!confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.')){try{V=await (await api('/api/vpn')).json();vrender(V,true)}catch(e){}return}const r=await apost('device/mode',{ip,mode:mode||'default'});$('vmsg').textContent=r.j.error||'';try{V=await (await api('/api/vpn')).json();vrender(V,true)}catch(e){}trload()}
 async function vpost(p,b){const r=await api('/api/vpn/'+p,{method:'POST',headers:hdr(),body:JSON.stringify(b||{})});const j=await r.json();if(r.status===403){await session();$('vmsg').textContent=j.error||'';return}
  $('vmsg').textContent=j.error||'';if(!j.error){V=j;vrender(j,true)}}
 const fmtB=n=>n>=1e9?(n/1e9).toFixed(2)+' GB':n>=1e6?(n/1e6).toFixed(1)+' MB':n>=1e3?(n/1e3).toFixed(0)+' kB':n+' B';
@@ -268,6 +269,7 @@ function trrender(force){const el=$('tor');if(!Tr||guard(el,force))return;
  el.innerHTML='<div class="row"><span>'+trstate()+(Tr.running?' <span class="mut">'+(Tr.rss_mb?Tr.rss_mb.toFixed(0)+' MB used, ':'')+Tr.avail_mb.toFixed(0)+' MB free on the router'+(Tr.restarts?', '+Tr.restarts+' restart'+(Tr.restarts===1?'':'s'):'')+'</span>':'')+'</span><span><button class="'+(Tr.enabled?'':'on')+'" onclick="trset('+(!Tr.enabled)+','+Tr.onion+')">'+(Tr.enabled?'Switch off':'Switch on')+'</button></span></div>'+
   (Tr.error?'<div class="err" style="margin-top:4px">'+esc(Tr.error)+'</div>':'')+
   '<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.onion?'checked ':'')+'onchange="trset('+Tr.enabled+',this.checked)"> <b>.onion for the whole house</b></label><span class="mut">any device can open a .onion address with no setup; browsers using the proxy file also get a SOCKS rule</span></div>'+
+  '<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.over_vpn?'checked ':'')+'onchange="trovervpn(this.checked)"> <b>Tor over Mullvad</b></label><span class="mut">Tor\'s own connections leave through the Mullvad tunnel, so the carrier sees only the tunnel. Tor waits for the tunnel and is refused on the cellular link without it.'+(Tr.vpn_wait?' <b class="err">Waiting for the tunnel.</b>':'')+'</span></div>'+
   '<div class="mut" style="margin:8px 0 4px"><b>Send a device through Tor</b>: all traffic forced through Tor (TCP only; UDP, ICMP, IPv6 are blocked). No internet while Tor is not ready.</div>'+
   '<table>'+devs+'</table>'+
   '<div class="row" style="margin-top:6px"><select id="tor_dev">'+devopts('Choose a device...')+'</select><button onclick="trdevpick()">Send through Tor</button><button onclick="trtest()">Test Tor from the router</button></div>'+
@@ -295,6 +297,7 @@ async function odset(en,rw){const n={enabled:odpick(en,Od.enabled),remote_write:
  const r=await apost('tor/onion/set',n);$('odmsg').textContent=r.j.error||'';odload()}
 async function odadd(){const r=await apost('tor/onion/client',{name:$('od_name').value,pub:$('od_pub').value});$('odmsg').textContent=r.j.error||'';odload()}
 async function odrm(name){if(!confirm('Remove '+name+'? It can no longer find the door (a connection it already holds may continue until it closes).'))return;const r=await apost('tor/onion/client/remove',{name});$('odmsg').textContent=r.j.error||'';odload()}
+async function trovervpn(on){const r=await apost('tor/overvpn',{on});$('tormsg').textContent=r.j.error||'';trload()}
 async function trset(en,on){const r=await apost('tor/set',{enabled:en,onion:on});$('tormsg').textContent=r.j.error||'';trload()}
 async function trdev(mac,on){if(!on&&!confirm('Give this device its direct internet line back? Its traffic will no longer go through Tor.'))return;const r=await apost('tor/device',{mac,on});$('tormsg').textContent=r.j.error||'';trload()}
 function trdevpick(){const v=$('tor_dev').value;if(!v){$('tormsg').textContent='Choose a device first';return}if(confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.'))trdev(v,true)}

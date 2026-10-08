@@ -289,6 +289,7 @@ type VPN struct {
 	cfg      vpnConfig
 	api      *mullvadClient
 	tun      *tunnel
+	dohHook  func(q []byte) ([]byte, error) // tests: stands in for the encrypted lookup through the tunnel
 	relays   []vpnRelay
 	relayAt  time.Time
 	fetching bool
@@ -357,6 +358,13 @@ func (v *VPN) ExitFor(client string) string {
 		return "direct" // the Orbic's own queries never take the exit
 	}
 	return v.cfg.DefaultExit
+}
+
+// Registered says whether this Orbic holds a Mullvad device slot (the tunnel can be used at all).
+func (v *VPN) Registered() bool {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.cfg.Registered
 }
 
 func (v *VPN) fail(err error) error {

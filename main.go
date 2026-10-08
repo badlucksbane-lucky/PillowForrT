@@ -48,7 +48,7 @@ var (
 	eventHook       = flag.String("on-event", "", "executable run as `hook silent` / `hook recover` when the heartbeat stops / returns")
 	dnsListen       = flag.String("dns-listen", "", "address for the DNS filter stub, e.g. 127.0.0.1:5354 (empty = DNS filter off)")
 	dnsDir          = flag.String("dns-dir", "/data/dnsfilter", "directory for the filter's lists, allow-list and state")
-	dnsPlainAfter   = flag.Duration("dns-plain-after", 60*time.Second, "how long encrypted DNS must keep failing before queries may go out as plain DNS (SERVFAIL meanwhile); 0 = at the first failure, negative = never")
+	dnsPlainAfter   = flag.Duration("dns-plain-after", -1*time.Second, "how long encrypted DNS must keep failing before queries may go out as plain DNS (SERVFAIL meanwhile); 0 = at the first failure, negative = never (the default; the install script passes it too). Tor and Mullvad devices are never answered in the clear whatever this says")
 	dnsDoH          = flag.String("dns-doh", "https://9.9.9.9/dns-query,https://1.1.1.1/dns-query,https://149.112.112.112/dns-query", "comma-separated DoH endpoints (IP literals, no bootstrap DNS)")
 	dnsResolv       = flag.String("dns-resolv", "/etc/resolv.conf", "file with the carrier's plain resolvers, the fallback when DoH is down")
 	leasesFile      = flag.String("leases", "/data/dnsmasq.leases", "dnsmasq lease file (device names for the web page)")

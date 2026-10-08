@@ -40,13 +40,13 @@ type kv struct {
 }
 
 type DNSStats struct {
-	Queries, Blocked, Cached, DoH, Plain, VPN, Tor, Errors atomic.Uint64
-	Since                                                  time.Time
-	mu                                                     sync.Mutex
-	topBlocked, topQueried                                 map[string]uint32
-	clients                                                map[string]*clientStat
-	ring                                                   [300]dnsEvent
-	n                                                      int
+	Queries, Blocked, Cached, DoH, Plain, VPN, Tor, Errors, HardBlock atomic.Uint64
+	Since                                                             time.Time
+	mu                                                                sync.Mutex
+	topBlocked, topQueried                                            map[string]uint32
+	clients                                                           map[string]*clientStat
+	ring                                                              [300]dnsEvent
+	n                                                                 int
 }
 
 func NewDNSStats() *DNSStats {
@@ -462,6 +462,18 @@ func (u *Upstream) ResolveFrom(q []byte) ([]byte, string, string, error) {
 	return b, "plain", "", nil
 }
 
+// ResolveStrict is ResolveFrom for a client that must never be answered in the clear (a device exiting through Mullvad): encrypted DNS or nothing, whatever PlainAfter says, and it
+// does not touch the fallback state that the other clients share.
+func (u *Upstream) ResolveStrict(q []byte) ([]byte, string, error) {
+	b, url, err := u.doh(q)
+	if err != nil {
+		u.DoHFail.Add(1)
+		return nil, "", err
+	}
+	u.DoHOK.Add(1)
+	return b, url, nil
+}
+
 // ---------- the pipeline ----------
 
 type DNSProxy struct {
@@ -473,6 +485,38 @@ type DNSProxy struct {
 	Neigh    *neighbours // optional: ties a device's IPv6 address to its IPv4 one
 	VPN      *VPN        // optional: a device whose exit is Mullvad resolves through the tunnel
 	Tor      *torMgr     // optional: .onion names, and every name a Tor device asks, are answered by Tor and never go to a public resolver
+	warnMu   sync.Mutex
+	warnAt   map[string]time.Time
+}
+
+const hardBlockWarnEvery = 10 * time.Minute
+
+// hardBlock records that a Tor or Mullvad device's lookup was refused because the encrypted path for it is not working. Nothing is sent in the clear instead (the device gets SERVFAIL),
+// and the owner is told once per path per ten minutes, so a long outage is one event and not a flood.
+func (p *DNSProxy) hardBlock(path, client string, err error) {
+	p.Stats.HardBlock.Add(1)
+	p.warnMu.Lock()
+	if p.warnAt == nil {
+		p.warnAt = map[string]time.Time{}
+	}
+	now := time.Now()
+	if t, ok := p.warnAt[path]; ok && now.Sub(t) < hardBlockWarnEvery {
+		p.warnMu.Unlock()
+		return
+	}
+	p.warnAt[path] = now
+	p.warnMu.Unlock()
+	if events == nil {
+		return
+	}
+	why := "unknown"
+	if err != nil {
+		why = err.Error()
+	}
+	who := map[string]string{"tor": "Tor devices", "mullvad": "Mullvad devices"}[path]
+	events.Add([]evt{{T: now.Unix(), Kind: "dns_hardblock", Sev: sevAttention,
+		Text:   fmt.Sprintf("Encrypted DNS is not working for %s (last asked by %s: %s). Their lookups are being refused, not sent in the clear. Nothing falls back to plain DNS for them.", who, client, why),
+		Public: "Name lookups for devices on a private path are blocked because encrypted DNS is down"}})
 }
 
 func (p *DNSProxy) Handle(q []byte) []byte {
@@ -506,6 +550,21 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	if dq.Class == qclassI {
 		if resp, ok := p.Tor.DNS(client, dq, q); ok {
 			p.Stats.Tor.Add(1)
+			if rcodeOf(resp) == 2 { // Tor is not ready or did not answer: SERVFAIL, never a public resolver
+				p.hardBlock("tor", client, errors.New("Tor did not answer"))
+			}
+			if hit, by := p.cnameBlocked(client, resp, t0); hit { // the same list rules apply to what Tor answered: a cloaked tracker is as unwelcome over Tor
+				p.Stats.Blocked.Add(1)
+				ev.List = by
+				finish("blocked")
+				return buildBlocked(q, dq, p.BlockTTL)
+			}
+			if dq.Name != "onion" && !strings.HasSuffix(dq.Name, ".onion") { // an onion name's answer is the bridge's own private range, by design
+				if _, refuse := rebindMgr.Refuse(dq.Name, resp); refuse {
+					finish("rebind")
+					return buildRcode(q, dq, 5)
+				}
+			}
 			finish("tor")
 			return resp
 		}
@@ -544,13 +603,21 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	}
 	var resp []byte
 	var via, fromURL string
-	if viaVPN {
+	switch {
+	case viaVPN:
 		resp, err = p.VPN.ResolveDNS(q)
 		via = "vpn"
-	} else {
+	case p.VPN.ExitFor(client) == "mullvad": // Mullvad's resolver is off, but this device is still a Mullvad device: encrypted DNS or nothing
+		var u string
+		resp, u, err = p.Up.ResolveStrict(q)
+		via, fromURL = "doh", u
+	default:
 		resp, via, fromURL, err = p.Up.ResolveFrom(q)
 	}
 	if err != nil {
+		if viaVPN || p.VPN.ExitFor(client) == "mullvad" {
+			p.hardBlock("mullvad", client, err)
+		}
 		p.Stats.Errors.Add(1)
 		finish("error")
 		return buildRcode(q, dq, 2) // SERVFAIL

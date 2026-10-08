@@ -463,3 +463,87 @@ func TestPrepareTorCacheFiles(t *testing.T) {
 		t.Error("a swollen journal must go alone")
 	}
 }
+
+func TestPlanTorOutKeepsTorOffTheCellularLink(t *testing.T) {
+	m, f, s := planTorOut(true, 65534)
+	for _, want := range []string{
+		"-A HS_TOROUT -m owner --uid-owner 65534 -d 127.0.0.0/8 -j RETURN",
+		"-A HS_TOROUT -m owner --uid-owner 65534 -d 192.168.1.0/24 -j RETURN",
+		"-A HS_TOROUT -m owner --uid-owner 65534 -j MARK --set-mark 0x4d",
+	} {
+		if !strings.Contains(m, want+"\n") {
+			t.Errorf("mangle is missing %q:\n%s", want, m)
+		}
+	}
+	if strings.Index(m, "-d 192.168.1.0/24 -j RETURN") > strings.Index(m, "MARK") {
+		t.Error("the loopback and LAN exemptions must come before the mark (Tor answers the LAN and talks to itself on loopback)")
+	}
+	if !strings.Contains(f, "-A HS_TORKILL -m owner --uid-owner 65534 -o rmnet_data+ -j REJECT") || !strings.Contains(s, "-A HS_TORKILL6 -m owner --uid-owner 65534 -o rmnet_data+ -j REJECT") {
+		t.Errorf("Tor must be refused on the cellular interface, v4 and v6:\n%s\n%s", f, s)
+	}
+	if strings.Contains(f, "tunnel") || strings.Contains(f, "ACCEPT") {
+		t.Error("the net under the mark must not depend on the tunnel's state, and never accepts")
+	}
+	for _, blk := range []string{m, f, s} {
+		if !strings.HasSuffix(blk, "COMMIT\n") {
+			t.Error("every block is one atomic restore")
+		}
+	}
+	// off: the chains are declared and empty, so a switch-off clears them in the same commit
+	m, f, s = planTorOut(false, 65534)
+	for _, blk := range []string{m, f, s} {
+		if strings.Contains(blk, "-A ") || !strings.Contains(blk, "COMMIT\n") {
+			t.Errorf("with Tor over VPN off the chains must be declared but empty:\n%s", blk)
+		}
+	}
+}
+
+// With Tor over VPN, Tor starts only with the tunnel up and the rules applied; without it, never on the cellular link.
+func TestTorOverVPNGate(t *testing.T) {
+	m, _, _, applied := testTor(t)
+	up := false
+	m.vpnUp = func() bool { return up }
+	torRunsAsOwnUser = func() bool { return true }
+	vpnRegistered = func() bool { return true }
+	defer func() {
+		torRunsAsOwnUser = func() bool { return torOwner() == torUID }
+		vpnRegistered = func() bool { return vpn != nil && vpn.Registered() }
+	}()
+	m.cfg.Enabled = true
+	if !m.vpnGateLocked() {
+		t.Error("with Tor over VPN off the gate is open")
+	}
+	if err := m.SetOverVPN(true); err != nil {
+		t.Fatal(err)
+	}
+	if !applied.OverVPN {
+		t.Errorf("the rules are applied with the setting: %+v", applied)
+	}
+	if m.vpnGateLocked() {
+		t.Error("tunnel down: Tor must not start")
+	}
+	up = true
+	if !m.vpnGateLocked() {
+		t.Error("tunnel up and rules in place: Tor may start")
+	}
+	m.outOK = false
+	if m.vpnGateLocked() {
+		t.Error("rules not applied (a failed restore): Tor must not start")
+	}
+	if v := m.View(); !v.OverVPN || !v.VPNWait {
+		t.Errorf("the page must say Tor is waiting: %+v", v)
+	}
+	m.outOK = true
+	torRunsAsOwnUser = func() bool { return false }
+	if err := m.SetOverVPN(false); err != nil || m.cfg.OverVPN {
+		t.Errorf("switching off is always allowed: %v", err)
+	}
+	if m.SetOverVPN(true) == nil {
+		t.Error("Tor over VPN needs Tor to run as its own user")
+	}
+	torRunsAsOwnUser = func() bool { return true }
+	vpnRegistered = func() bool { return false }
+	if m.SetOverVPN(true) == nil {
+		t.Error("Tor over VPN needs a registered Mullvad device")
+	}
+}
