@@ -48,11 +48,16 @@ button{min-height:36px}
 <div id="banner"></div>
 <div class="tools"><button type="button" onclick="ccAll(true)">Collapse all</button><button type="button" onclick="ccAll(false)">Expand all</button></div>
 <div class="card hero"><h2>Today</h2>
- <div class="row" id="modes"></div>
- <div class="row" style="margin-top:6px"><span id="pause" class="mut"></span><button onclick="post('dns/pause',{minutes:15})">Pause 15 min</button><button onclick="post('dns/resume')">Resume</button><button onclick="post('dns/update')">Update lists</button></div>
- <div id="msg" class="msg"></div>
  <div class="grid" id="counts" style="margin-top:12px"></div>
  <div id="gr" style="margin-top:8px" class="mut">collecting the first samples...</div></div>
+<div class="sec">Guard gate</div>
+<div class="card"><h2>DNS</h2>
+ <div class="row" id="modes"></div>
+ <div class="row" style="margin-top:6px"><span id="pause" class="mut"></span><button onclick="post('dns/pause',{minutes:15})">Pause 15 min</button><button onclick="post('dns/resume')">Resume</button><button onclick="post('dns/update')">Update lists</button></div>
+ <div id="msg" class="msg"></div></div>
+<div class="card"><h2>Outbound services</h2><div id="eg" class="mut">loading</div><div id="egmsg" class="msg"></div></div>
+<div class="card"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
+<div class="card"><h2>VPN (Mullvad)</h2><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div></div>
 <div class="sec">Monitoring</div>
 <div class="card"><h2>Events <span id="evbadge"></span></h2><div id="ev" class="mut">loading</div><div id="evmsg" class="msg"></div></div>
 <div class="card"><h2>Latency history <span id="lhbadge"></span></h2><div id="lh" class="mut">loading</div></div>
@@ -76,10 +81,6 @@ button{min-height:36px}
 <div class="card"><h2>Hidden router <span id="ttbadge"></span></h2><div id="tt" class="mut">loading</div><div id="ttmsg" class="msg"></div></div>
 <div class="card"><h2>Stock admin tripwire <span id="atbadge"></span></h2><div id="at" class="mut">loading</div></div>
 <div class="card"><h2>Rebinding refusal <span id="rbbadge"></span></h2><div id="rb" class="mut">loading</div><div id="rbmsg" class="msg"></div></div>
-<div class="sec">Privacy</div>
-<div class="card"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
-<div class="card"><h2>Onion door <span id="odbadge"></span></h2><div id="od" class="mut">loading</div><div id="odmsg" class="msg"></div></div>
-<div class="card"><h2>VPN (Mullvad)</h2><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div></div>
 <div class="sec">DNS</div>
 <div class="card"><h2>Block lists</h2><div class="mut" style="margin-bottom:4px">Tick to use. <b>Strict</b> (per device) applies all downloaded lists.</div><table id="lists"></table><div class="mut" id="up" style="margin-top:6px"></div></div>
 <div class="card"><h2>Always allow</h2><div class="row"><input id="allowin" placeholder="example.com (covers subdomains)"><button onclick="allow()">Add</button></div><div id="allow" style="margin-top:8px"></div></div>
@@ -106,7 +107,8 @@ button{min-height:36px}
 <div class="card"><h2>Blocked destinations</h2><div id="fwd" class="mut">loading</div><div id="gmsg" class="msg"></div></div>
 <div class="sec">System</div>
 <div class="card"><h2>Diagnostics</h2><div id="dg" class="mut">Not run yet.</div><div id="dgmsg" class="msg"></div></div>
-<div class="card"><h2>System</h2><div id="sys" class="mut">loading</div><div id="ymsg" class="msg"></div></div>
+<div class="card"><h2>Admin</h2><div id="sys" class="mut">loading</div><div id="ymsg" class="msg"></div>
+ <div style="margin-top:14px"><b>Onion door</b> <span id="odbadge"></span></div><div id="od" class="mut">loading</div><div id="odmsg" class="msg"></div></div>
 <div class="card"><h2>Cellular</h2><div id="cell" class="mut">loading</div></div>
 <div class="card"><h2>Towers (WiGLE) <span id="twbadge"></span></h2><div id="tw" class="mut">loading</div><div id="twmsg" class="msg"></div></div>
 <div class="card"><h2>Certificate</h2><div id="crt" class="mut">loading</div><div id="cmsg" class="msg"></div></div>
@@ -799,7 +801,9 @@ function yrender(force){const el=$('sys');if(!Sy||guard(el,force))return;const y
   '<div style="margin-top:12px"><b>LAN IPv6</b> '+(Sl?(Sl.off?'<b style="color:var(--ac)">switched off</b>':'<b>on</b>'):'')+'</div>'+
   '<div class="mut" style="margin:4px 0">Prevents WebRTC IPv6 leaks. Off = devices drop carrier IPv6 (IPv4 unaffected). Default off after boot. <code>ssh orbic touch /data/proxy/lanv6.on</code>.</div>'+
   '<div class="row"><button class="'+(Sl&&Sl.off?'':'on')+'" onclick="ylv6('+(Sl&&Sl.off?'false':'true')+')">'+(Sl&&Sl.off?'Switch LAN IPv6 back on':'Switch LAN IPv6 off')+'</button>'+(Sl&&Sl.off&&!Sl.rules_in_place?'<span class="err">the firewall rules are not in place yet: they are applied within 20 seconds</span>':'')+'</div>'+
-  '<div style="margin-top:14px"><b>Outbound services</b> '+(Eg?'<b style="color:var(--ac)">'+({off:'off',monitor:'watching only',enforce:'enforcing'}[Eg.mode]||Eg.mode)+'</b>':'')+'</div>'+
+  '<div class="row" style="margin-top:10px"><button onclick="yreboot()">Reboot the Orbic</button><span class="mut">Everything drops for 1–2 min. DHCP reservations restored on boot.</span></div>'}
+function egrender(force){const el=$('eg');if(!Eg||guard(el,force))return;
+el.innerHTML='<div style="margin-top:0"><b>Outbound services</b> '+(Eg?'<b style="color:var(--ac)">'+({off:'off',monitor:'watching only',enforce:'enforcing'}[Eg.mode]||Eg.mode)+'</b>':'')+'</div>'+
   '<div class="mut" style="margin:4px 0">Only listed services may connect out (DNS handled separately). <b>Watch only</b> = log without blocking. Undo: <code>ssh orbic rm /data/proxy/egress.json</code>.</div>'+
   '<div class="row">'+['off','monitor','enforce'].map(m=>'<button class="'+(Eg&&Eg.mode===m?'on':'')+'" onclick="yegm(\''+m+'\')">'+({off:'Off',monitor:'Watch only',enforce:'Enforce'}[m])+'</button>').join('')+(Eg&&!Eg.rules_in_place?'<span class="err">rules not in place yet (20 s)</span>':'')+'</div>'+
   '<div style="margin-top:8px"><b>Allowed services</b> <span class="mut">for</span> <select id="eg_scope" aria-label="Which device these ticks are for" onchange="yegs()"><option value="">everyone</option>'+((Dv&&Dv.devices)||[]).filter(d=>d.mac).map(d=>'<option value="'+esc(d.mac)+'"'+((Eg&&Eg.scope===d.mac)?' selected':'')+'>'+esc(d.label||d.name||d.hostname||d.ip||d.mac)+'</option>').join('')+'</select></div>'+
@@ -809,15 +813,14 @@ function yrender(force){const el=$('sys');if(!Sy||guard(el,force))return;const y
   '<table style="margin-top:6px">'+(Eg?(Eg.allow||[]).map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td>'+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\'\')">remove</button></td></tr>').join(''):'')+
   (Eg?Object.keys(Eg.devices||{}).map(mac=>Eg.devices[mac].map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td>only '+esc(mac)+' '+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\''+mac+'\')">remove</button></td></tr>').join('')).join(''):'')+'</table>'+
   '<div style="margin-top:6px"><b>Would be refused</b> <span class="mut">(seen since the Orbic started; allowing one removes it)</span></div><table>'+
-  (Eg&&Eg.observed&&(Eg.observed||[]).length?(Eg.observed||[]).slice(0,25).map(o=>'<tr><td>'+esc(o.ip||'?')+'</td><td>'+o.proto+' '+o.port+'</td><td>'+o.flows+' flows to '+esc((o.dsts||[]).join(', '))+'</td><td><button onclick="yega(\''+o.proto+'\','+o.port+',\'\')">allow for all</button> <button onclick="yega(\''+o.proto+'\','+o.port+',\''+o.mac+'\')">this device</button></td></tr>').join(''):'<tr><td class="mut">nothing so far</td></tr>')+'</table>'+
-  '<div class="row" style="margin-top:10px"><button onclick="yreboot()">Reboot the Orbic</button><span class="mut">Everything drops for 1–2 min. DHCP reservations restored on boot.</span></div>'}
+  (Eg&&Eg.observed&&(Eg.observed||[]).length?(Eg.observed||[]).slice(0,25).map(o=>'<tr><td>'+esc(o.ip||'?')+'</td><td>'+o.proto+' '+o.port+'</td><td>'+o.flows+' flows to '+esc((o.dsts||[]).join(', '))+'</td><td><button onclick="yega(\''+o.proto+'\','+o.port+',\'\')">allow for all</button> <button onclick="yega(\''+o.proto+'\','+o.port+',\''+o.mac+'\')">this device</button></td></tr>').join(''):'<tr><td class="mut">nothing so far</td></tr>')+'</table>'}
 let Sa=null,Sl=null,Eg=null;
-async function yload(){try{Sy=await (await api('/api/system')).json();Sa=await (await api('/api/system/stockadmin')).json();Sl=await (await api('/api/system/lanv6')).json();Eg=await (await api('/api/egress'+(($('eg_scope')||{}).value?'?mac='+encodeURIComponent($('eg_scope').value):''))).json();Eg.scope=($('eg_scope')||{}).value||'';yrender()}catch(e){}}
-async function yegs(){const sc=$('eg_scope').value;Eg=await (await api('/api/egress'+(sc?'?mac='+encodeURIComponent(sc):''))).json();Eg.scope=sc;yrender()}
-async function yegsv(id,on){const sc=($('eg_scope')||{}).value||'';const r=await apost('egress/service',{id,on,mac:sc});$('ymsg').textContent=r.j.error||r.j.status||'';yegs()}
-async function yegm(m){let c=false;if(m==='enforce'){if(!confirm('Enforce the outbound list? Any service not on it stops working for every device. Watch first if you have not.'))return;c=true}const r=await apost('egress/set',{mode:m,confirm:c});$('ymsg').textContent=r.j.error||r.j.status||'';yload()}
-async function yega(p,port,mac){const r=await apost('egress/allow',{proto:p,ports:String(port),note:'approved from the list',mac});$('ymsg').textContent=r.j.error||r.j.status||'';yload()}
-async function yegr(p,ports,mac){const r=await apost('egress/remove',{proto:p,ports,mac});$('ymsg').textContent=r.j.error||r.j.status||'';yload()}
+async function yload(){try{Sy=await (await api('/api/system')).json();Sa=await (await api('/api/system/stockadmin')).json();Sl=await (await api('/api/system/lanv6')).json();Eg=await (await api('/api/egress'+(($('eg_scope')||{}).value?'?mac='+encodeURIComponent($('eg_scope').value):''))).json();Eg.scope=($('eg_scope')||{}).value||'';yrender();egrender()}catch(e){}}
+async function yegs(){const sc=$('eg_scope').value;Eg=await (await api('/api/egress'+(sc?'?mac='+encodeURIComponent(sc):''))).json();Eg.scope=sc;egrender(true)}
+async function yegsv(id,on){const sc=($('eg_scope')||{}).value||'';const r=await apost('egress/service',{id,on,mac:sc});$('egmsg').textContent=r.j.error||r.j.status||'';yegs()}
+async function yegm(m){let c=false;if(m==='enforce'){if(!confirm('Enforce the outbound list? Any service not on it stops working for every device. Watch first if you have not.'))return;c=true}const r=await apost('egress/set',{mode:m,confirm:c});$('egmsg').textContent=r.j.error||r.j.status||'';yload()}
+async function yega(p,port,mac){const r=await apost('egress/allow',{proto:p,ports:String(port),note:'approved from the list',mac});$('egmsg').textContent=r.j.error||r.j.status||'';yload()}
+async function yegr(p,ports,mac){const r=await apost('egress/remove',{proto:p,ports,mac});$('egmsg').textContent=r.j.error||r.j.status||'';yload()}
 async function ylv6(off){if(off&&!confirm('Switch IPv6 off for the whole LAN? Devices lose their carrier IPv6 address (IPv4 keeps working). You can switch it back on here at any time.'))return;const r=await apost('system/lanv6',{off});$('ymsg').textContent=r.j.error||r.j.status||'';yload()}
 async function ysa(off){if(off&&!confirm('Switch the stock admin off for the whole network? Opening 192.168.1.1 will show this page instead. You can switch it back on here at any time.'))return;const r=await apost('system/stockadmin',{off});$('ymsg').textContent=r.j.error||r.j.status||'';yload()}
 async function yreboot(){const w=prompt('Reboot the Orbic? Every device loses Wi-Fi and the internet for 1 to 2 minutes.\n\nType  reboot  to confirm:');if(w!=='reboot'){if(w!==null)$('ymsg').textContent='Not rebooted: the word did not match.';return}
