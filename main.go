@@ -409,6 +409,7 @@ func main() {
 	linkMgr = newLinkHist(*linkFile)
 	go probeLoop()
 	startGuardWatch()
+	startRungProber()
 	go watchdogLoop()
 	if *vpnDir != "" {
 		vpn = NewVPN(*vpnDir, &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{

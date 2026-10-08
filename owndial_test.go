@@ -72,8 +72,11 @@ func TestKillTierPrereq(t *testing.T) {
 func testRouter(s *ownState) (*ownRouter, *[]string, *time.Time) {
 	now := time.Unix(1_800_000_000, 0)
 	var got []string
-	return &ownRouter{state: func() ownState { return *s }, now: func() time.Time { return now }, warnedAt: map[string]time.Time{},
-		emit: func(kind, sev, text, public string) { got = append(got, kind) }}, &got, &now
+	r := newOwnRouter(func() ownState { return *s }, func() time.Time { return now }, func(kind, sev, text, public string) { got = append(got, kind) })
+	r.load = func() float64 { return 0 }
+	// the existing tests are about the policy and the reporting, not the waiting: a rung that is up is usable at once
+	r.torG.stableFor, r.tunG.stableFor, r.torG.probesNeeded = 0, 0, 0
+	return r, &got, &now
 }
 
 // A change of route bumps the generation (so pooled connections are closed), and the owner is told about a blocked or raw route, once per ten minutes.

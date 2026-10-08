@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -130,21 +131,31 @@ type ownRouter struct {
 	started  bool
 	gen      uint64
 	warnedAt map[string]time.Time
+	torG     *rungGate // viability of Tor as a rung (rungs.go)
+	tunG     *rungGate // and of the tunnel
+	load     func() float64
 }
 
-var ownR = &ownRouter{state: liveOwnState, now: time.Now, warnedAt: map[string]time.Time{}, emit: func(kind, sev, text, public string) {
+// newOwnRouter builds a router with its rung gates; state, now and emit are replaceable for tests.
+func newOwnRouter(state func() ownState, now func() time.Time, emit func(kind, sev, text, public string)) *ownRouter {
+	tor, tun := newRungGates()
+	return &ownRouter{state: state, now: now, emit: emit, warnedAt: map[string]time.Time{}, torG: tor, tunG: tun, load: loadAvg1}
+}
+
+var ownR = newOwnRouter(liveOwnState, time.Now, func(kind, sev, text, public string) {
 	if events != nil {
 		events.Add([]evt{{T: time.Now().Unix(), Kind: kind, Sev: sev, Text: text, Public: public}})
 	}
-}}
+})
 
 const ownWarnEvery = 10 * time.Minute
 
 // Now returns the route for this moment and notes a change.
 func (o *ownRouter) Now() (ownRoute, string) {
-	r, why := decideOwnRoute(o.state())
+	raw := o.state()
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	r, why := decideOwnRoute(o.gated(raw))
 	if !o.started {
 		o.started, o.last, o.lastWhy = true, r, why
 		o.noteLocked(r, why)
@@ -152,11 +163,39 @@ func (o *ownRouter) Now() (ownRoute, string) {
 	}
 	if r != o.last {
 		o.gen++
+		log.Printf("own traffic: %v -> %v %s", o.last, r, why)
 		o.last = r
 		o.noteLocked(r, why)
 	}
 	o.lastWhy = why
 	return r, why
+}
+
+// gated turns the raw state into the usable one: a rung counts as up only when its gate says so (rungs.go). The tunnel is judged first, then Tor, which steps up without delay only when
+// no tunnel is serving. The caller holds o.mu.
+func (o *ownRouter) gated(s ownState) ownState {
+	now := o.now()
+	loadOK := o.load == nil || o.load() < stepUpLoadLimit
+	tunRaw := s.MullvadWanted && s.TunnelUp
+	torRaw := s.TorEnabled && s.TorReady
+	tun := o.tunG.step(now, tunRaw, !torRaw || !o.torG.up, loadOK) // a tunnel with no Tor serving needs no waiting; with Tor serving it waits like any step up
+	tor := o.torG.step(now, torRaw, !tun, loadOK)
+	s.TunnelUp = tun
+	s.TorReady = tor
+	return s
+}
+
+// reportTor records a probe, or a real dial, through Tor.
+func (o *ownRouter) reportTor(ok bool) {
+	o.mu.Lock()
+	o.torG.report(ok)
+	o.mu.Unlock()
+}
+
+func (o *ownRouter) torUp() bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.torG.up
 }
 
 // noteLocked reports the routes that are worth the owner's attention: blocked, and raw with a private path configured but unavailable. At most one event per kind every ten minutes.
@@ -218,7 +257,9 @@ func ownDial(ctx context.Context, network, addr string) (net.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-		return socksConnect(onionSocksAddr, host, port, 15*time.Second)
+		c, err := socksConnect(onionSocksAddr, host, port, 15*time.Second)
+		ownR.reportTor(err == nil) // a Tor that is "ready" but cannot carry this is given up (rungs.go)
+		return c, err
 	case routeBlock:
 		return nil, fmt.Errorf("%w: %s", errOwnBlocked, why)
 	}
