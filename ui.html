@@ -51,14 +51,14 @@ button{min-height:36px}
  <div id="gr" style="margin-top:8px" class="mut">collecting the first samples...</div></div>
 <div class="tools"><button type="button" onclick="ccAll(true)">Collapse all</button><button type="button" onclick="ccAll(false)">Expand all</button></div>
 <div class="sec">Bridge control</div>
-<div class="card"><h2>Ad block</h2>
+<div class="card"><h2>Ad block and tracking</h2>
  <div class="row" id="dpath"></div>
  <div class="row" id="modes"></div>
- <div class="row" style="margin-top:6px"><span id="pause" class="mut"></span><button onclick="post('dns/pause',{minutes:15})">Pause 15 min</button><button onclick="post('dns/resume')">Resume</button><button onclick="post('dns/update')">Update lists</button></div>
+ <div class="row" style="margin-top:6px"><span id="pause" class="mut"></span><button onclick="post('dns/pause',{minutes:15})">Pause</button><button onclick="post('dns/resume')">Resume</button><button onclick="post('dns/update')">Update lists</button></div>
  <div id="msg" class="msg"></div></div>
 <div class="card"><h2>Outbound services</h2><div id="eg" class="mut">loading</div><div id="egmsg" class="msg"></div></div>
 <div class="card"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
-<div class="card"><h2>VPN (Mullvad)</h2><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div></div>
+<div class="card"><h2>VPN <span id="vpnbadge"></span></h2><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div></div>
 <div class="sec">Monitoring</div>
 <div class="card"><h2>Events <span id="evbadge"></span></h2><div id="ev" class="mut">loading</div><div id="evmsg" class="msg"></div></div>
 <div class="card"><h2>Latency history <span id="lhbadge"></span></h2><div id="lh" class="mut">loading</div></div>
@@ -197,6 +197,7 @@ async function tierpick(t){const o=V&&V.own;
  if(t==='tor_over_mullvad'&&!(o&&o.top_ready)&&!confirm('Tor through Mullvad is not serving yet ('+((o&&o.top_why)||'unknown')+').\n\nIn this tier the router blocks every device\'s new name lookups until it is. Cached names keep working. Switch anyway?')){return}
  vpost('tier',{tier:t})}
 function vrender(d,force){
+ $('vpnbadge').innerHTML=d&&d.available!==false&&d.up?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; ready</span>':'';
  const el=$('vpn');if(!force&&el.contains(document.activeElement)&&document.activeElement!==el)return;if(!d||d.available===false){el.textContent='The VPN is not enabled on this build.';return}
  if(!d.registered){
   el.innerHTML='<p>Register as a Mullvad device (<b>uses 1 of 5 slots</b>). Account number sent once, <b>not stored</b>.</p>'+
