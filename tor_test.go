@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
 	"errors"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -464,86 +467,101 @@ func TestPrepareTorCacheFiles(t *testing.T) {
 	}
 }
 
-func TestPlanTorOutKeepsTorOffTheCellularLink(t *testing.T) {
-	m, f, s := planTorOut(true, 65534)
-	for _, want := range []string{
-		"-A HS_TOROUT -m owner --uid-owner 65534 -d 127.0.0.0/8 -j RETURN",
-		"-A HS_TOROUT -m owner --uid-owner 65534 -d 192.168.1.0/24 -j RETURN",
-		"-A HS_TOROUT -m owner --uid-owner 65534 -j MARK --set-mark 0x4d",
-	} {
-		if !strings.Contains(m, want+"\n") {
-			t.Errorf("mangle is missing %q:\n%s", want, m)
-		}
-	}
-	if strings.Index(m, "-d 192.168.1.0/24 -j RETURN") > strings.Index(m, "MARK") {
-		t.Error("the loopback and LAN exemptions must come before the mark (Tor answers the LAN and talks to itself on loopback)")
-	}
-	if !strings.Contains(f, "-A HS_TORKILL -m owner --uid-owner 65534 -o rmnet_data+ -j REJECT") || !strings.Contains(s, "-A HS_TORKILL6 -m owner --uid-owner 65534 -o rmnet_data+ -j REJECT") {
-		t.Errorf("Tor must be refused on the cellular interface, v4 and v6:\n%s\n%s", f, s)
-	}
-	if strings.Contains(f, "tunnel") || strings.Contains(f, "ACCEPT") {
-		t.Error("the net under the mark must not depend on the tunnel's state, and never accepts")
-	}
-	for _, blk := range []string{m, f, s} {
-		if !strings.HasSuffix(blk, "COMMIT\n") {
-			t.Error("every block is one atomic restore")
-		}
-	}
-	// off: the chains are declared and empty, so a switch-off clears them in the same commit
-	m, f, s = planTorOut(false, 65534)
-	for _, blk := range []string{m, f, s} {
-		if strings.Contains(blk, "-A ") || !strings.Contains(blk, "COMMIT\n") {
-			t.Errorf("with Tor over VPN off the chains must be declared but empty:\n%s", blk)
-		}
-	}
-}
-
-// With Tor over VPN, Tor starts only with the tunnel up and the rules applied; without it, never on the cellular link.
+// With Tor over VPN, Tor starts only with the tunnel up; the setting needs a registered Mullvad device and restarts Tor.
 func TestTorOverVPNGate(t *testing.T) {
-	m, _, _, applied := testTor(t)
+	m, _, _, _ := testTor(t)
 	up := false
 	m.vpnUp = func() bool { return up }
-	torRunsAsOwnUser = func() bool { return true }
 	vpnRegistered = func() bool { return true }
-	defer func() {
-		torRunsAsOwnUser = func() bool { return torOwner() == torUID }
-		vpnRegistered = func() bool { return vpn != nil && vpn.Registered() }
-	}()
+	defer func() { vpnRegistered = func() bool { return vpn != nil && vpn.Registered() } }()
 	m.cfg.Enabled = true
 	if !m.vpnGateLocked() {
 		t.Error("with Tor over VPN off the gate is open")
 	}
-	if err := m.SetOverVPN(true); err != nil {
-		t.Fatal(err)
-	}
-	if !applied.OverVPN {
-		t.Errorf("the rules are applied with the setting: %+v", applied)
+	if err := m.SetOverVPN(true); err != nil || !m.cfg.OverVPN {
+		t.Fatalf("%v", err)
 	}
 	if m.vpnGateLocked() {
 		t.Error("tunnel down: Tor must not start")
 	}
-	up = true
-	if !m.vpnGateLocked() {
-		t.Error("tunnel up and rules in place: Tor may start")
-	}
-	m.outOK = false
-	if m.vpnGateLocked() {
-		t.Error("rules not applied (a failed restore): Tor must not start")
-	}
 	if v := m.View(); !v.OverVPN || !v.VPNWait {
 		t.Errorf("the page must say Tor is waiting: %+v", v)
 	}
-	m.outOK = true
-	torRunsAsOwnUser = func() bool { return false }
+	up = true
+	if !m.vpnGateLocked() || m.View().VPNWait {
+		t.Error("tunnel up: Tor may start")
+	}
+	if b, _ := os.ReadFile(m.path); !strings.Contains(string(b), `"over_vpn":true`) {
+		t.Errorf("saved: %s", b)
+	}
 	if err := m.SetOverVPN(false); err != nil || m.cfg.OverVPN {
 		t.Errorf("switching off is always allowed: %v", err)
 	}
-	if m.SetOverVPN(true) == nil {
-		t.Error("Tor over VPN needs Tor to run as its own user")
-	}
-	torRunsAsOwnUser = func() bool { return true }
 	vpnRegistered = func() bool { return false }
-	if m.SetOverVPN(true) == nil {
-		t.Error("Tor over VPN needs a registered Mullvad device")
+	if m.SetOverVPN(true) == nil || m.cfg.OverVPN {
+		t.Error("Tor over VPN needs a registered Mullvad device, and a refusal leaves the setting off")
+	}
+}
+
+// Tor is told to make every connection through tinyfwd's proxy, with a secret; with the setting off none of that is in the torrc.
+func TestTorrcOverVPN(t *testing.T) {
+	if got := torVPNTorrcLines(false, "k"); len(got) != 0 {
+		t.Errorf("off: %v", got)
+	}
+	if got := torVPNTorrcLines(true, ""); len(got) != 0 {
+		t.Errorf("no secret, no lines (Tor must not be started half-configured): %v", got)
+	}
+	rc := torrcFor("/d", "/l", torVPNTorrcLines(true, "s3cret")...)
+	for _, want := range []string{"HTTPSProxy 127.0.0.1:3128", "HTTPSProxyAuthenticator tor:s3cret"} {
+		if !strings.Contains(rc, want+"\n") {
+			t.Errorf("missing %q:\n%s", want, rc)
+		}
+	}
+	if k1, k2 := newTorProxyKey(), newTorProxyKey(); k1 == k2 || len(k1) < 32 {
+		t.Errorf("each run gets its own long secret: %q %q", k1, k2)
+	}
+}
+
+func TestTorProxyAllowed(t *testing.T) {
+	m, _, _, _ := testTor(t)
+	up := true
+	m.vpnUp = func() bool { return up }
+	m.cfg.OverVPN, m.proxyKey = true, "s3cret"
+	req := func(remote, user, pass string) *http.Request {
+		r := httptest.NewRequest(http.MethodConnect, "http://203.0.113.5:9001", nil)
+		r.RemoteAddr = remote
+		if user != "" {
+			r.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(user+":"+pass)))
+		}
+		return r
+	}
+	if isTor, err := m.torProxyAllowed(req("127.0.0.1:50000", "tor", "s3cret")); !isTor || err != nil {
+		t.Errorf("Tor with its secret, tunnel up: %v %v", isTor, err)
+	}
+	if isTor, _ := m.torProxyAllowed(req("127.0.0.1:50000", "", "")); isTor {
+		t.Error("an ordinary request is not Tor's")
+	}
+	if isTor, _ := m.torProxyAllowed(req("192.168.1.50:50000", "tor", "s3cret")); isTor {
+		t.Error("the secret from a LAN address does not make a request Tor's (and must not get the tunnel-only treatment either)")
+	}
+	if isTor, err := m.torProxyAllowed(req("127.0.0.1:50000", "tor", "wrong")); !isTor || err == nil {
+		t.Errorf("the wrong secret from loopback is refused: %v %v", isTor, err)
+	}
+	up = false
+	if isTor, err := m.torProxyAllowed(req("127.0.0.1:50000", "tor", "s3cret")); !isTor || err == nil {
+		t.Errorf("tunnel down: refused, not sent another way: %v %v", isTor, err)
+	}
+	up = true
+	m.cfg.OverVPN = false
+	if isTor, err := m.torProxyAllowed(req("127.0.0.1:50000", "tor", "s3cret")); !isTor || err == nil {
+		t.Errorf("setting off: refused: %v %v", isTor, err)
+	}
+	m.cfg.OverVPN, m.proxyKey = true, ""
+	if _, err := m.torProxyAllowed(req("127.0.0.1:50000", "tor", "")); err == nil {
+		t.Error("an empty secret never matches")
+	}
+	var nilMgr *torMgr
+	if isTor, _ := nilMgr.torProxyAllowed(req("127.0.0.1:1", "tor", "x")); isTor {
+		t.Error("no manager, nothing is Tor's")
 	}
 }

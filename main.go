@@ -203,7 +203,17 @@ func allowed(remote string) bool {
 }
 
 func handleConnect(w http.ResponseWriter, r *http.Request) {
-	dst, err := vpn.DialFor(r.Context(), clientIP(r.RemoteAddr), "tcp", r.Host)
+	var dst net.Conn
+	var err error
+	if isTor, terr := torMgrG.torProxyAllowed(r); isTor { // Tor over Mullvad (torvpn.go): the tunnel or nothing
+		if terr != nil {
+			http.Error(w, terr.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		dst, err = dialTor(r.Context(), r.Host)
+	} else {
+		dst, err = vpn.DialFor(r.Context(), clientIP(r.RemoteAddr), "tcp", r.Host)
+	}
 	if err != nil {
 		log.Printf("CONNECT dial error for %s: %v", r.Host, err)
 		http.Error(w, err.Error(), http.StatusBadGateway)

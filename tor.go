@@ -14,8 +14,9 @@ package main
 //     DNS    its lookups still reach the DNS stub (blocklists apply), which answers them through Tor's DNS port, or SERVFAIL when Tor is not ready: never from a public resolver.
 //   The device assignment is separate from the daemon switch ON PURPOSE: switching Tor off leaves an assigned device blocked, not suddenly direct; unassign it to give it back its direct line.
 //   A Tor device is not also sent through Mullvad: a device has ONE mode (devmode.go), changed make-before-break, and while it is in both the Tor rules come first.
-//   Tor's own connections leave the Orbic by the cellular link, unless "Tor over Mullvad" is on (OverVPN): then planTorOut marks them into the tunnel, refuses them on the cellular
-//   link whatever the tunnel is doing, and Tor is started only with the tunnel up and those rules in place.
+//   Tor's own connections leave the Orbic by the cellular link, unless "Tor over Mullvad" is on (OverVPN, torvpn.go): then Tor is configured to make every connection through tinyfwd's
+//   CONNECT proxy, which dials only through the tunnel (bound to mullvad0), and Tor is started only with the tunnel up. (The Orbic's kernel has no iptables owner match, so Tor's traffic
+//   cannot be picked out in the firewall; routing it through a proxy that only knows the tunnel is what keeps it off the cellular link.)
 //   DNS rules: a Tor device's lookups go through the list filter first, Tor's answer then gets the CNAME-cloaking and rebind checks, and a failure is a refused lookup (SERVFAIL) with a
 //   dns_hardblock event, never another resolver (dnsproxy.go).
 //
@@ -89,36 +90,6 @@ func torrcFor(dataDir, logPath string, extra ...string) string {
 type torRulePlan struct {
 	Devices []string
 	Onion   bool
-	OverVPN bool // Tor's own connections are marked into the tunnel, and refused on the cellular link
-}
-
-// torUID is the unprivileged id Tor runs as (startTorProc). The owner match below keys on it, so nothing else on the box may run as this id.
-const torUID = 65534
-
-// planTorOut renders the chains that make Tor's own connections leave through the Mullvad tunnel ("Tor over VPN"), as three restore blocks (each chain is declared even when off, so a
-// switch-off empties it in the same commit):
-//
-//	mangle HS_TOROUT   : Tor's packets (except to this box and the LAN) get the tunnel's mark, and `ip rule fwmark` sends them out mullvad0 (vpn_tunnel.go);
-//	filter HS_TORKILL  : whatever Tor sends that would still leave by the cellular interface is REFUSED, so a down tunnel, a missing route table or a failed mark blocks instead of leaking.
-//	                      The rule does not look at the tunnel's state: it is the net under the mark, not part of it.
-//	ip6    HS_TORKILL6 : the same for IPv6 (Tor is told not to use it; this is the net under that).
-func planTorOut(overVPN bool, uid int) (mangle, filter, v6 string) {
-	var m, f, s strings.Builder
-	m.WriteString("*mangle\n:HS_TOROUT - [0:0]\n")
-	f.WriteString("*filter\n:HS_TORKILL - [0:0]\n")
-	s.WriteString("*filter\n:HS_TORKILL6 - [0:0]\n")
-	if overVPN {
-		o := "-m owner --uid-owner " + strconv.Itoa(uid)
-		fmt.Fprintf(&m, "-A HS_TOROUT %s -d 127.0.0.0/8 -j RETURN\n", o)
-		fmt.Fprintf(&m, "-A HS_TOROUT %s -d %s -j RETURN\n", o, lanCIDR)
-		fmt.Fprintf(&m, "-A HS_TOROUT %s -j MARK --set-mark %s\n", o, vpnMark)
-		fmt.Fprintf(&f, "-A HS_TORKILL %s -o rmnet_data+ -j REJECT --reject-with icmp-port-unreachable\n", o)
-		fmt.Fprintf(&s, "-A HS_TORKILL6 %s -o rmnet_data+ -j REJECT --reject-with icmp6-port-unreachable\n", o)
-	}
-	m.WriteString("COMMIT\n")
-	f.WriteString("COMMIT\n")
-	s.WriteString("COMMIT\n")
-	return m.String(), f.String(), s.String()
 }
 
 func (p torRulePlan) active() bool { return len(p.Devices) > 0 }
@@ -227,7 +198,7 @@ type torMgr struct {
 	resolve    func(q []byte) ([]byte, error)
 	onions     *onionMap
 	vpnUp      func() bool // is the Mullvad tunnel up (Tor over VPN starts only then)
-	outOK      bool        // the last firewall apply succeeded: with Tor over VPN, Tor is never started on rules that are not in place
+	proxyKey   string      // the secret Tor presents to tinyfwd's CONNECT proxy for this run (Tor over VPN); empty when not in use
 }
 
 func newTorMgr() *torMgr {
@@ -281,7 +252,7 @@ func (m *torMgr) save() {
 }
 
 func (m *torMgr) plan() torRulePlan {
-	return torRulePlan{Devices: append([]string(nil), m.cfg.Devices...), Onion: m.cfg.Onion, OverVPN: m.cfg.OverVPN}
+	return torRulePlan{Devices: append([]string(nil), m.cfg.Devices...), Onion: m.cfg.Onion}
 }
 
 // Active says whether any device is forced through Tor (the Qualcomm fast path must then stay unloaded, as for Mullvad).
@@ -359,6 +330,10 @@ func startTorProc(m *torMgr) (*exec.Cmd, error) {
 	prepareTorCache(m.dataDir)
 	if err := syncOnionDir(m.onionDir(), m.cfg.Door, torOwner()); err != nil { // the caller (Tick) holds m.mu
 		return nil, err
+	}
+	m.proxyKey = ""
+	if m.cfg.OverVPN {
+		m.proxyKey = newTorProxyKey() // a fresh secret for every run of Tor: only this Tor knows it
 	}
 	if err := os.WriteFile(m.torrc, []byte(m.renderTorrc()), 0o600); err != nil {
 		return nil, err
@@ -474,9 +449,10 @@ func (m *torMgr) Tick() {
 	}
 }
 
-// vpnGateLocked: with Tor over VPN, Tor runs only while the tunnel is up and the rules that send it through are in place. Anything else would let it out on the cellular link.
+// vpnGateLocked: with Tor over VPN, Tor runs only while the tunnel is up. (The proxy it connects through refuses everything while the tunnel is down as well; this just stops a Tor that
+// could do nothing from sitting there retrying.)
 func (m *torMgr) vpnGateLocked() bool {
-	return !m.cfg.OverVPN || (m.outOK && m.vpnUp != nil && m.vpnUp())
+	return !m.cfg.OverVPN || (m.vpnUp != nil && m.vpnUp())
 }
 
 // Reconcile applies the firewall plan. Always applied, whether or not the daemon runs: an assigned device stays blocked (fail closed) while Tor is off.
@@ -484,11 +460,7 @@ func (m *torMgr) Reconcile() error {
 	m.mu.Lock()
 	p := m.plan()
 	m.mu.Unlock()
-	err := m.applyRules(p)
-	m.mu.Lock()
-	m.outOK = err == nil
-	m.mu.Unlock()
-	return err
+	return m.applyRules(p)
 }
 
 // torSFEOff records that Tor devices are why the fast path is unloaded (see manageSFE): it is loaded back only when no Tor device is left and the VPN does not need it off either.
@@ -509,9 +481,7 @@ func applyTorRules(p torRulePlan) error {
 	}
 	ensureTorHooks()
 	nat, f, s := planTorRules(p)
-	om, of, os6 := planTorOut(p.OverVPN, torUID)
-	// the kill chains first when switching on and the mark chain first when switching off would each be wrong in one direction, so the order is: net (refuse on cellular), then the mark, then the rest
-	for _, r := range []struct{ cmd, rules string }{{"iptables-restore", of}, {"ip6tables-restore", os6}, {"iptables-restore", om}, {"iptables-restore", nat}, {"iptables-restore", f}, {"ip6tables-restore", s}} {
+	for _, r := range []struct{ cmd, rules string }{{"iptables-restore", nat}, {"iptables-restore", f}, {"ip6tables-restore", s}} {
 		if err := restore(r.cmd, r.rules); err != nil {
 			return err
 		}
@@ -526,9 +496,6 @@ func ensureTorHooks() {
 		{"iptables", "nat", "PREROUTING", "-i bridge0 -j HS_TOR", "HS_TOR"},
 		{"iptables", "filter", "FORWARD", "-j HS_TORFW", "HS_TORFW"},
 		{"ip6tables", "filter", "FORWARD", "-j HS_TOR6", "HS_TOR6"},
-		{"iptables", "mangle", "OUTPUT", "-j HS_TOROUT", "HS_TOROUT"},
-		{"iptables", "filter", "OUTPUT", "-j HS_TORKILL", "HS_TORKILL"},
-		{"ip6tables", "filter", "OUTPUT", "-j HS_TORKILL6", "HS_TORKILL6"},
 	} {
 		// the chain must exist before it can be hooked (iptables-restore declares it, but the first hook can come before the first restore)
 		run("sh", "-c", fmt.Sprintf("%s -t %s -N %s 2>/dev/null", x.cmd, x.table, x.target))
@@ -555,6 +522,7 @@ func (m *torMgr) killStray() {
 }
 
 func (m *torMgr) Run() {
+	removeLegacyTorOut()
 	m.killStray()
 	m.mu.Lock()
 	if err := m.applyDoorLocked(); err != nil { // after a boot: the authorized_clients files and the SSH flag match the settings again
@@ -701,36 +669,24 @@ func (m *torMgr) Set(enabled, onion bool) error {
 }
 
 // replaceable for tests
-var (
-	torRunsAsOwnUser = func() bool { return torOwner() == torUID }
-	vpnRegistered    = func() bool { return vpn != nil && vpn.Registered() }
-)
+var vpnRegistered = func() bool { return vpn != nil && vpn.Registered() }
 
-// SetOverVPN sends Tor's own connections through the Mullvad tunnel (or back to the cellular link). Tor is restarted either way: a connection it already holds would otherwise be
-// re-marked in the middle of a flow (its source address is the old path's) and die, and the circuits built over one path should not quietly carry on over the other.
+// SetOverVPN sends Tor's own connections through the Mullvad tunnel (or back to the cellular link). Tor reaches the network only through tinyfwd's CONNECT proxy while this is on (see
+// torProxyAllowed), and the proxy dials through the tunnel only. Tor is restarted either way: its torrc changes, and circuits built over one path should not quietly carry on over the other.
 func (m *torMgr) SetOverVPN(on bool) error {
-	if on {
-		if !torRunsAsOwnUser() {
-			return errors.New("Tor over VPN needs Tor to run as its own unprivileged user, which it does only when the router runs as root")
-		}
-		if !vpnRegistered() {
-			return errors.New("register this Orbic with your Mullvad account first")
-		}
+	if on && !vpnRegistered() {
+		return errors.New("register this Orbic with your Mullvad account first")
 	}
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.cfg.OverVPN == on {
-		m.mu.Unlock()
 		return nil
 	}
-	m.cfg.OverVPN, m.outOK = on, false // not trusted until the rules for the new setting are applied
+	m.cfg.OverVPN = on
 	m.save()
-	m.mu.Unlock()
-	err := m.Reconcile() // the net and the mark first: Tor is only stopped and started after this
-	m.mu.Lock()
 	m.stopProc()
 	m.nextTry, m.boot = time.Time{}, -1
-	m.mu.Unlock()
-	return err
+	return nil
 }
 
 func (m *torMgr) SetDevice(mac string, on bool) error {
