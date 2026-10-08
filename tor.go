@@ -145,7 +145,7 @@ type torObs struct {
 const (
 	torRSSLimitKB     = 90 * 1024
 	torYieldBelowKB   = 20 * 1024 // stop Tor when the box has less than this available
-	torResumeAboveKB  = 60 * 1024 // and only start it again with at least this much
+	torResumeAboveKB  = 50 * 1024 // and only start it again with at least this much (was 60; lowered 2026-10-08 to let Tor start on a router sitting near 58 MB)
 	torYieldPause     = 10 * time.Minute
 	torMinRestartWait = 15 * time.Second
 	torMaxRestartWait = 5 * time.Minute
