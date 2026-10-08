@@ -92,7 +92,7 @@ func newDNSCanaryWatch() *dnsCanaryWatch {
 			return ""
 		},
 		doh: func() bool {
-			return dnsProxy != nil && dnsProxy.Up != nil && !dnsProxy.Up.inFallback()
+			return dnsProxy != nil && dnsProxy.Up != nil && !dnsProxy.Up.Failing()
 		},
 	}
 	w.st.Enabled = true

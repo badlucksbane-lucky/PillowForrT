@@ -138,11 +138,11 @@ function tbl(id,rows){$(id).innerHTML=rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td
 function render(d){
  if(!d.enabled){$('banner').innerHTML='<div class="banner">DNS filter is not running.</div>';return}
  const u=d.upstream;
- $('banner').innerHTML=u.mode!=='doh'?'<div class="banner">Encrypted DNS is down: using plain carrier DNS. '+esc(u.warning||'')+'</div>':'';
+ $('banner').innerHTML=u.mode!=='doh'?'<div class="banner">Encrypted DNS is down: name lookups are being refused, none go out in the clear. '+esc(u.warning||'')+'</div>':'';
  $('modes').innerHTML=[['off','Off'],['on','On']].map(m=>'<button class="'+(d.mode===m[0]?'on':'')+'" onclick="post(\'dns/mode\',{mode:\''+m[0]+'\'})">'+m[1]+'</button>').join('');
  $('pause').textContent=d.paused_until?'Paused until '+new Date(d.paused_until).toLocaleTimeString():'';
  const s=d.stats;
- const sc=[['Queries',s.Queries,'--ax'],['Blocked',s.Blocked,'--s2'],['Cached',s.Cached,'--ax'],['Encrypted',s.DoH,'--okc'],['Plain',s.Plain,'--warn'],['Via VPN',s.VPN||0,'--s1'],['Errors',s.Errors,'--bad']];
+ const sc=[['Queries',s.Queries,'--ax'],['Blocked',s.Blocked,'--s2'],['Cached',s.Cached,'--ax'],['Encrypted',s.DoH,'--okc'],['Via VPN',s.VPN||0,'--s1'],['Errors',s.Errors,'--bad']];
  $('counts').innerHTML=sc.map(c=>{const clr=c[1]&&c[2]!=='--ax';return '<div><div class="n"'+(clr?' style="color:var('+c[2]+')"':'')+'>'+fmt(c[1])+'</div><div class="mut">'+c[0]+'</div><div class="stat-bar" style="background:var('+c[2]+')"></div></div>'}).join('');
  const nm={};(s.Clients||[]).forEach(c=>nm[c.ip]=c.name||c.ip);
  DnsC=s.Clients||[];devrender();

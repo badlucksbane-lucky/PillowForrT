@@ -131,8 +131,7 @@ func TestRebindGuard(t *testing.T) {
 // The stub refuses a rebinding answer on the way out: a cached private answer for a public name comes back REFUSED, and the detector still saw it.
 func TestStubRefusesRebindingAnswer(t *testing.T) {
 	doh, pool := newFakeDoH(t)
-	plain, _ := fakePlain(t)
-	p := testProxy(t, doh, pool, plain)
+	p := testProxy(t, doh, pool)
 	old, oldM := rebindMgr, dnsMITMMgr
 	defer func() { rebindMgr, dnsMITMMgr = old, oldM }()
 	rebindMgr = newRebindGuard("")

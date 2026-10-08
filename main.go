@@ -49,9 +49,9 @@ var (
 	dnsListen       = flag.String("dns-listen", "", "address for the DNS filter stub, e.g. 127.0.0.1:5354 (empty = DNS filter off)")
 	dnsDir          = flag.String("dns-dir", "/data/dnsfilter", "directory for the filter's lists, allow-list and state")
 	dnsGuardOn      = flag.Bool("dns-guard", true, "install and watch the DNS guard's firewall rules (redirect of devices' DNS to the filter; no plain DNS or DoT out of the cellular side); off leaves them to wpad-guard.sh")
-	dnsPlainAfter   = flag.Duration("dns-plain-after", -1*time.Second, "how long encrypted DNS must keep failing before queries may go out as plain DNS (SERVFAIL meanwhile); 0 = at the first failure, negative = never (the default; the install script passes it too). Tor and Mullvad devices are never answered in the clear whatever this says")
+	_               = flag.Duration("dns-plain-after", 0, "ignored: there is no plain-DNS fallback any more (the flag stays so an older init script still starts)")
 	dnsDoH          = flag.String("dns-doh", "https://9.9.9.9/dns-query,https://1.1.1.1/dns-query,https://149.112.112.112/dns-query", "comma-separated DoH endpoints (IP literals, no bootstrap DNS)")
-	dnsResolv       = flag.String("dns-resolv", "/etc/resolv.conf", "file with the carrier's plain resolvers, the fallback when DoH is down")
+	dnsResolv       = flag.String("dns-resolv", "/etc/resolv.conf", "file with the carrier's resolvers: shown on the cellular card and watched for link changes (never used to resolve anything)")
 	leasesFile      = flag.String("leases", "/data/dnsmasq.leases", "dnsmasq lease file (device names for the web page)")
 	dhcpHostsFile   = flag.String("dhcp-hosts", "/data/dhcp_hosts", "dnsmasq reservations file (device names for the web page)")
 	macBlockFile    = flag.String("mac-block", "/data/proxy/macblock.list", "the Wi-Fi block list (one MAC per line)")
@@ -392,7 +392,7 @@ func main() {
 		flt := NewFilter(*dnsDir)
 		flt.Load()
 		debug.FreeOSMemory() // hand the lists' parse garbage back to the OS now, not whenever the scavenger gets to it
-		up := newUpstream(upstreamConfig{DoHURLs: strings.Split(*dnsDoH, ","), Roots: rootPool(), Plain: carrierResolvers(*dnsResolv), PlainAfter: *dnsPlainAfter, Dial: dialUpstream})
+		up := newUpstream(upstreamConfig{DoHURLs: strings.Split(*dnsDoH, ","), Roots: rootPool(), Dial: dialUpstream})
 		dnsProxy = &DNSProxy{Filter: flt, Up: up, Cache: newDNSCache(2000), Stats: NewDNSStats(), BlockTTL: 60, Neigh: newNeighbours()}
 		dnsUpdater = newListUpdater(flt)
 		if err := serveDNS(dnsProxy, *dnsListen); err != nil {

@@ -66,7 +66,7 @@ func TestDiagThresholds(t *testing.T) {
 		{"dns slow", "dns.local", "warn", func(in *diagInputs) { in.DNSMS = 2000 }},
 		{"ad not blocked", "dns.filter", "warn", func(in *diagInputs) { in.BlockAns = []string{"142.250.1.1"} }},
 		{"filter off", "dns.filter", "info", func(in *diagInputs) { in.FilterMode = "off" }},
-		{"doh failing", "dns.upstream", "warn", func(in *diagInputs) { in.Upstream.Mode = "plain-fallback" }},
+		{"doh failing", "dns.upstream", "warn", func(in *diagInputs) { in.Upstream.Mode = "failing" }},
 		{"clock off 10 min", "time.clock", "warn", drift(10 * time.Minute)},
 		{"clock off 3 h", "time.clock", "fail", drift(-3 * time.Hour)},
 		{"clock unknown", "time.clock", "info", func(in *diagInputs) { in.ClockDrift = nil; in.ClockErr = "no answer" }},

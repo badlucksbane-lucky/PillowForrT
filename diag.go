@@ -154,8 +154,8 @@ func evaluate(in diagInputs) []diagCheck {
 	default:
 		add(ck("dns.filter", "DNS", "Ad and tracker blocking", "warn", "a known ad domain was NOT blocked", "The lists may not be loaded yet: see the lists on the DNS filter card."))
 	}
-	if in.Upstream.Mode == "plain-fallback" {
-		add(ck("dns.upstream", "DNS", "Encrypted DNS", "warn", "DoH is failing: lookups are leaving as plain DNS", "Usually clears when the uplink recovers; if it does not, check that port 443 is reachable."))
+	if in.Upstream.Mode == "failing" {
+		add(ck("dns.upstream", "DNS", "Encrypted DNS", "warn", "DoH is failing: name lookups are being refused (nothing is sent in the clear)", "Usually clears when the uplink recovers; if it does not, check that port 443 is reachable."))
 	} else {
 		add(ck("dns.upstream", "DNS", "Encrypted DNS", "ok", "lookups go out over DoH", ""))
 	}

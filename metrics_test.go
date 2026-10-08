@@ -26,7 +26,7 @@ func richInput() metricsIn {
 				{Name: "stock admin (goahead, port 81/444)", State: "running"}, {Name: "carrier updates (upgrade)", State: "held"}, {Name: "dropbear (ssh)", State: "not running"}}},
 		UsageDown: 7e9, UsageUp: 8e8, UsageSet: true, ProxyConnsTot: 97, ProxyConnsAct: 3, ProxyUp: 1000, ProxyDown: 5000,
 		Wifi24Up: &t, Wifi5Up: &f, Wifi24Clients: 4, Wifi5Clients: 1, Leases: 6, PoolSize: 101, Reservations: 5, BlockedDevices: 1, BlockedDests: 2, Schedules: 1, PausedDevices: 0,
-		DNS: &dnsM{Queries: 200, Blocked: 20, Cached: 90, DoH: 100, Plain: 0, Errors: 1, CacheEntries: 40, Mode: "both", Lists: []listData{{Name: "oisd", Entries: 1000, Updated: now.Add(-time.Hour)}, {Name: "stevenblack", Entries: 0}}},
+		DNS: &dnsM{Queries: 200, Blocked: 20, Cached: 90, DoH: 100, Errors: 1, CacheEntries: 40, Mode: "both", Lists: []listData{{Name: "oisd", Entries: 1000, Updated: now.Add(-time.Hour)}, {Name: "stevenblack", Entries: 0}}},
 		VPN: &vpnStatus{Registered: true, Enabled: false}, CertNotAfter: 1850000000, CertDaysLeft: 799, SSHLogins: 300, SSHFailed: 2, EventsUnseen: 0, StockAdminOff: &t, GraphSamples: 360}
 }
 

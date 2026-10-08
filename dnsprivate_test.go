@@ -29,34 +29,25 @@ func mullvadClientVPN(t *testing.T, ip string, dnsViaVPN bool) *VPN {
 	return v
 }
 
-// A Mullvad device is never answered in the clear, even when the rest of the house may be: encrypted DNS or a refused lookup, and the owner is told.
-func TestMullvadDeviceNeverGetsPlainDNS(t *testing.T) {
+// A Mullvad device with Mullvad's resolver off still gets encrypted DNS or a refusal, never anything else; the refusal is counted and reported as a hard block.
+func TestMullvadDeviceGetsEncryptedDNSOrNothing(t *testing.T) {
 	doh, pool := newFakeDoH(t)
-	plain, plainHits := fakePlain(t)
-	p := testProxyGrace(t, []string{doh.URL}, pool, plain, 0) // 0: plain DNS allowed at the first failure, for ordinary devices
+	p := testProxyURLs(t, []string{doh.URL}, pool)
 	p.VPN = mullvadClientVPN(t, "192.168.1.40", false)
 	doh.fail.Store(true)
 
 	r := askAs(p, "192.168.1.40", "m1.example.net", 1)
-	if rcodeOf(r) != 2 || plainHits.Load() != 0 {
-		t.Fatalf("a Mullvad device must be refused, not answered in the clear: rcode=%d plainHits=%d", rcodeOf(r), plainHits.Load())
+	if rcodeOf(r) != 2 {
+		t.Fatalf("a Mullvad device must be refused when encrypted DNS is down: rcode=%d", rcodeOf(r))
 	}
 	if p.Stats.HardBlock.Load() == 0 {
 		t.Error("the refusal must be counted as a hard block")
 	}
-	if p.Up.State().Mode != "doh" {
-		t.Error("a Mullvad device's failure must not push the other devices into the shared fallback")
+	// an ordinary device is refused too (there is no plain fallback for anyone), but that is not a hard block of a private path
+	hb := p.Stats.HardBlock.Load()
+	if rcodeOf(askAs(p, "192.168.1.60", "m2.example.net", 2)) != 2 || p.Stats.HardBlock.Load() != hb {
+		t.Error("an ordinary device is refused as well, without counting as a private-path block")
 	}
-	// an ordinary device in the same state is allowed to fall back (the policy says so) and gets an answer
-	if addrOf(askAs(p, "192.168.1.60", "m2.example.net", 2)) != "93.184.216.34" || plainHits.Load() == 0 {
-		t.Error("the plain-fallback policy still applies to ordinary devices")
-	}
-	// the Mullvad device again, now that the shared fallback is on: still refused
-	hits := plainHits.Load()
-	if rcodeOf(askAs(p, "192.168.1.40", "m3.example.net", 3)) != 2 || plainHits.Load() != hits {
-		t.Error("a Mullvad device stays off plain DNS while the house is in fallback")
-	}
-	// DoH recovers: the Mullvad device is answered, encrypted
 	doh.fail.Store(false)
 	if addrOf(askAs(p, "192.168.1.40", "m4.example.net", 4)) != "93.184.216.34" {
 		t.Error("a Mullvad device resolves again once encrypted DNS is back")
@@ -66,8 +57,7 @@ func TestMullvadDeviceNeverGetsPlainDNS(t *testing.T) {
 // Through the tunnel: Mullvad's encrypted resolver only. If it fails the lookup is refused: no plain DNS, no direct DoH from the cellular link.
 func TestMullvadTunnelDNSFailsClosed(t *testing.T) {
 	doh, pool := newFakeDoH(t)
-	plain, plainHits := fakePlain(t)
-	p := testProxyGrace(t, []string{doh.URL}, pool, plain, 0)
+	p := testProxyURLs(t, []string{doh.URL}, pool)
 	p.VPN = mullvadClientVPN(t, "192.168.1.40", true)
 	var fail bool
 	p.VPN.dohHook = func(q []byte) ([]byte, error) {
@@ -81,8 +71,8 @@ func TestMullvadTunnelDNSFailsClosed(t *testing.T) {
 	}
 	fail = true
 	r := askAs(p, "192.168.1.40", "t2.example.net", 2)
-	if rcodeOf(r) != 2 || plainHits.Load() != 0 || doh.hits.Load() != 0 {
-		t.Fatalf("a failing tunnel resolver means a refused lookup, nothing else: rcode=%d plain=%d doh=%d", rcodeOf(r), plainHits.Load(), doh.hits.Load())
+	if rcodeOf(r) != 2 || doh.hits.Load() != 0 {
+		t.Fatalf("a failing tunnel resolver means a refused lookup, nothing else (no direct DoH either): rcode=%d doh=%d", rcodeOf(r), doh.hits.Load())
 	}
 	if p.Stats.HardBlock.Load() == 0 {
 		t.Error("counted as a hard block")
@@ -92,8 +82,7 @@ func TestMullvadTunnelDNSFailsClosed(t *testing.T) {
 // The list rules reach Tor devices' answers too: a tracker behind a harmless name (CNAME cloaking) is refused over Tor as it is anywhere else.
 func TestTorDeviceAnswersGetTheListRules(t *testing.T) {
 	doh, pool := newFakeDoH(t)
-	plain, plainHits := fakePlain(t)
-	p := testProxyGrace(t, []string{doh.URL}, pool, plain, 0)
+	p := testProxyURLs(t, []string{doh.URL}, pool)
 	m, _, _, _ := testTor(t)
 	m.cfg.Devices = []string{torMAC}
 	m.cmd = exec.Command("sleep", "30")
@@ -123,7 +112,7 @@ func TestTorDeviceAnswersGetTheListRules(t *testing.T) {
 	}
 	// Tor down: refused, counted, and nothing in the clear
 	m.boot = -1
-	if rcodeOf(askAs(p, "192.168.1.50", "down.example.net", 3)) != 2 || p.Stats.HardBlock.Load() == 0 || plainHits.Load() != 0 || doh.hits.Load() != 0 {
+	if rcodeOf(askAs(p, "192.168.1.50", "down.example.net", 3)) != 2 || p.Stats.HardBlock.Load() == 0 || doh.hits.Load() != 0 {
 		t.Error("Tor down is a hard block, with no other resolver asked")
 	}
 }

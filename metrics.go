@@ -108,11 +108,11 @@ type metricsIn struct {
 }
 
 type dnsM struct {
-	Queries, Blocked, Cached, DoH, Plain, Errors uint64
-	CacheEntries                                 int
-	Fallback                                     bool
-	Lists                                        []listData
-	Mode                                         string
+	Queries, Blocked, Cached, DoH, Errors uint64
+	CacheEntries                          int
+	Fallback                              bool
+	Lists                                 []listData
+	Mode                                  string
 }
 
 func buildMetrics(in metricsIn) string {
@@ -194,10 +194,9 @@ func buildMetrics(in metricsIn) string {
 		m.metric("orbic_dns_blocked_total", "counter", "DNS queries blocked by the filter.", float64(d.Blocked))
 		m.metric("orbic_dns_cached_total", "counter", "DNS queries answered from the cache.", float64(d.Cached))
 		m.metric("orbic_dns_upstream_doh_total", "counter", "Queries sent upstream over DoH.", float64(d.DoH))
-		m.metric("orbic_dns_upstream_plain_total", "counter", "Queries sent upstream as plain DNS (the fallback).", float64(d.Plain))
 		m.metric("orbic_dns_errors_total", "counter", "DNS errors.", float64(d.Errors))
 		m.metric("orbic_dns_cache_entries", "gauge", "Entries in the DNS cache.", float64(d.CacheEntries))
-		m.metric("orbic_dns_upstream_fallback", "gauge", "1 if encrypted DNS is failing and queries leave as plain DNS.", b2f(d.Fallback))
+		m.metric("orbic_dns_upstream_failing", "gauge", "1 if encrypted DNS is failing and lookups are being refused (nothing is ever sent as plain DNS).", b2f(d.Fallback))
 		m.metric("orbic_dns_filter_enabled", "gauge", "1 if the DNS filter is on (any mode but off).", b2f(d.Mode != "off" && d.Mode != ""))
 		for _, l := range d.Lists {
 			m.metric("orbic_dns_list_entries", "gauge", "Entries in a block list.", float64(l.Entries), "list", l.Name)
@@ -349,7 +348,7 @@ func gatherMetrics() metricsIn {
 	}
 	if dnsProxy != nil {
 		in.DNS = &dnsM{Queries: dnsProxy.Stats.Queries.Load(), Blocked: dnsProxy.Stats.Blocked.Load(), Cached: dnsProxy.Stats.Cached.Load(), DoH: dnsProxy.Stats.DoH.Load(),
-			Plain: dnsProxy.Stats.Plain.Load(), Errors: dnsProxy.Stats.Errors.Load(), CacheEntries: dnsProxy.Cache.Len(), Fallback: dnsProxy.Up.State().Mode == "plain-fallback",
+			Errors: dnsProxy.Stats.Errors.Load(), CacheEntries: dnsProxy.Cache.Len(), Fallback: dnsProxy.Up.Failing(),
 			Lists: dnsProxy.Filter.Lists(), Mode: dnsProxy.Filter.Mode()}
 	}
 	if vpn != nil {

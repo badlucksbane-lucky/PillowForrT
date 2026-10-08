@@ -371,13 +371,12 @@ func TestKillSwitchBlocksProxyAndDNS(t *testing.T) {
 	}
 	// DNS: a VPN device's lookup with the tunnel down fails closed and never reaches Quad9
 	doh, pool := newFakeDoH(t)
-	plain, plainHits := fakePlain(t)
-	p := testProxy(t, doh, pool, plain)
+	p := testProxy(t, doh, pool)
 	p.VPN = v
 	ecs := opt(8, 0, 1, 32, 0, 192, 168, 1, 40)
 	r := p.Handle(queryWithOpt("example.org", ecs))
-	if rcodeOf(r) != 2 || doh.hits.Load() != 0 || plainHits.Load() != 0 {
-		t.Errorf("rcode %d, upstream hits doh=%d plain=%d (a VPN device's DNS leaked)", rcodeOf(r), doh.hits.Load(), plainHits.Load())
+	if rcodeOf(r) != 2 || doh.hits.Load() != 0 {
+		t.Errorf("rcode %d, upstream hits doh=%d (a VPN device's DNS leaked)", rcodeOf(r), doh.hits.Load())
 	}
 	other := opt(8, 0, 1, 32, 0, 192, 168, 1, 2)
 	v.SetDeviceExit("192.168.1.2", "direct")
