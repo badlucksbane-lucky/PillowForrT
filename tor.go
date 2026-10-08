@@ -719,6 +719,16 @@ func (m *torMgr) SetDevice(mac string, on bool) error {
 	return m.Reconcile()
 }
 
+// Switches reports whether the Tor daemon is switched on and whether it is set to run over Mullvad.
+func (m *torMgr) Switches() (enabled, overVPN bool) {
+	if m == nil {
+		return false, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cfg.Enabled, m.cfg.OverVPN
+}
+
 // HasDevice says whether a MAC is assigned to Tor.
 func (m *torMgr) HasDevice(mac string) bool {
 	if m == nil {

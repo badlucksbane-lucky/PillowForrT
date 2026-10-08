@@ -11,25 +11,60 @@ import (
 
 func TestDecideOwnRoute(t *testing.T) {
 	for _, c := range []struct {
-		name    string
-		s       ownState
-		want    ownRoute
-		whyHas  string
-		whyNone bool
+		name   string
+		s      ownState
+		want   ownRoute
+		whyHas string // "" = no reason expected
 	}{
-		{"tunnel up", ownState{MullvadWanted: true, TunnelUp: true, KillSwitch: true}, routeTunnel, "", true},
-		{"tunnel up beats Tor", ownState{MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorReady: true}, routeTunnel, "", true},
-		{"tunnel down, kill switch on: blocked", ownState{MullvadWanted: true, KillSwitch: true}, routeBlock, "kill switch is on", false},
-		{"tunnel down, kill switch on, Tor ready: still blocked (one setting)", ownState{MullvadWanted: true, KillSwitch: true, TorEnabled: true, TorReady: true}, routeBlock, "kill switch is on", false},
-		{"tunnel down, kill switch off, Tor ready: Tor", ownState{MullvadWanted: true, TorEnabled: true, TorReady: true}, routeTor, "", true},
-		{"tunnel down, kill switch off, no Tor: raw, warned", ownState{MullvadWanted: true}, routeDirect, "kill switch is off", false},
-		{"Mullvad not configured, Tor ready", ownState{TorEnabled: true, TorReady: true, KillSwitch: true}, routeTor, "", true},
-		{"Tor only, not ready: raw with a warning, never blocked", ownState{TorEnabled: true, KillSwitch: true}, routeDirect, "Tor is not ready", false},
-		{"nothing configured: raw, no warning", ownState{KillSwitch: true}, routeDirect, "", true},
+		// direct tier: nothing is ever blocked; the best private path that is up, else the cellular link
+		{"direct: tunnel up", ownState{Tier: tierDirect, MullvadWanted: true, TunnelUp: true}, routeTunnel, ""},
+		{"direct: Tor through Mullvad up: rung 1 goes first", ownState{Tier: tierDirect, MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorReady: true, TorOverVPN: true}, routeTor, ""},
+		{"direct: tunnel down, Tor ready", ownState{Tier: tierDirect, MullvadWanted: true, TorEnabled: true, TorReady: true}, routeTor, ""},
+		{"direct: tunnel down, nothing else: raw with a reason", ownState{Tier: tierDirect, MullvadWanted: true}, routeDirect, "set to direct"},
+		{"direct: Tor on but not ready: raw with a reason, never blocked", ownState{Tier: tierDirect, TorEnabled: true}, routeDirect, "Tor is not ready"},
+		{"direct: nothing configured: raw, no warning", ownState{Tier: tierDirect}, routeDirect, ""},
+		// middle tier: the tunnel or Tor, blocked when neither is up
+		{"middle: tunnel up", ownState{Tier: tierPrivate, MullvadWanted: true, TunnelUp: true}, routeTunnel, ""},
+		{"middle: tunnel up beats Tor that is not over Mullvad", ownState{Tier: tierPrivate, MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorReady: true}, routeTunnel, ""},
+		{"middle: Tor through Mullvad up: rung 1 goes first", ownState{Tier: tierPrivate, MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorReady: true, TorOverVPN: true}, routeTor, ""},
+		{"middle: Tor over Mullvad configured but not ready: the tunnel alone carries it", ownState{Tier: tierPrivate, MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorOverVPN: true}, routeTunnel, ""},
+		{"middle: tunnel down, Tor ready: Tor", ownState{Tier: tierPrivate, MullvadWanted: true, TorEnabled: true, TorReady: true}, routeTor, ""},
+		{"middle: Tor only, ready", ownState{Tier: tierPrivate, TorEnabled: true, TorReady: true}, routeTor, ""},
+		{"middle: tunnel down, Tor not ready: blocked", ownState{Tier: tierPrivate, MullvadWanted: true, TorEnabled: true}, routeBlock, "middle kill-switch tier"},
+		{"middle: Tor only, not ready: blocked", ownState{Tier: tierPrivate, TorEnabled: true}, routeBlock, "middle kill-switch tier"},
+		{"middle: nothing switched on: raw with a reason, not a house-wide block", ownState{Tier: tierPrivate}, routeDirect, "neither is"},
+		// top tier: Tor running over the tunnel, or nothing
+		{"top: Tor through Mullvad up", ownState{Tier: tierTorMullvad, MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorReady: true, TorOverVPN: true}, routeTor, ""},
+		{"top: tunnel up but Tor not ready: blocked (not the tunnel alone)", ownState{Tier: tierTorMullvad, MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorOverVPN: true}, routeBlock, "top kill-switch tier"},
+		{"top: tunnel down: blocked", ownState{Tier: tierTorMullvad, MullvadWanted: true, TorEnabled: true, TorReady: true, TorOverVPN: true}, routeBlock, "top kill-switch tier"},
+		{"top: Tor ready but not over Mullvad: raw with a reason (mis-set tier cannot black out the house)", ownState{Tier: tierTorMullvad, MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorReady: true}, routeDirect, "top kill-switch tier needs"},
+		{"top: Mullvad off: raw with a reason", ownState{Tier: tierTorMullvad, TorEnabled: true, TorReady: true, TorOverVPN: true}, routeDirect, "top kill-switch tier needs"},
+		{"no tier set behaves as direct", ownState{MullvadWanted: true}, routeDirect, "set to direct"},
 	} {
 		got, why := decideOwnRoute(c.s)
-		if got != c.want || (c.whyNone && why != "") || (!c.whyNone && !strings.Contains(why, c.whyHas)) {
+		if got != c.want || (c.whyHas == "" && why != "") || (c.whyHas != "" && !strings.Contains(why, c.whyHas)) {
 			t.Errorf("%s: got %v %q", c.name, got, why)
+		}
+	}
+}
+
+func TestKillTierPrereq(t *testing.T) {
+	for _, c := range []struct {
+		tier                  string
+		mullvad, torOn, torVP bool
+		ok                    bool
+	}{
+		{tierDirect, false, false, false, true},
+		{tierPrivate, true, false, false, true},
+		{tierPrivate, false, true, false, true},
+		{tierPrivate, false, false, false, false},
+		{tierTorMullvad, true, true, true, true},
+		{tierTorMullvad, true, true, false, false},
+		{tierTorMullvad, true, false, true, false},
+		{tierTorMullvad, false, true, true, false},
+	} {
+		if err := killTierPrereq(c.tier, c.mullvad, c.torOn, c.torVP); (err == nil) != c.ok {
+			t.Errorf("%+v: %v", c, err)
 		}
 	}
 }
@@ -43,7 +78,7 @@ func testRouter(s *ownState) (*ownRouter, *[]string, *time.Time) {
 
 // A change of route bumps the generation (so pooled connections are closed), and the owner is told about a blocked or raw route, once per ten minutes.
 func TestOwnRouterGenerationAndWarnings(t *testing.T) {
-	s := ownState{MullvadWanted: true, TunnelUp: true, KillSwitch: true}
+	s := ownState{Tier: tierPrivate, MullvadWanted: true, TunnelUp: true}
 	r, ev, now := testRouter(&s)
 	g0 := r.Gen()
 	if r.Gen() != g0 || len(*ev) != 0 {
@@ -66,7 +101,7 @@ func TestOwnRouterGenerationAndWarnings(t *testing.T) {
 		t.Errorf("rate limited: %v", *ev)
 	}
 	*now = now.Add(11 * time.Minute)
-	s.TunnelUp, s.KillSwitch = true, true
+	s.TunnelUp = true
 	r.Gen()
 	s.TunnelUp = false
 	r.Gen()
@@ -74,7 +109,7 @@ func TestOwnRouterGenerationAndWarnings(t *testing.T) {
 		t.Errorf("after the window it is reported again: %v", *ev)
 	}
 	// raw with a private path configured but down is reported; raw with nothing configured is not
-	s2 := ownState{TorEnabled: true}
+	s2 := ownState{Tier: tierDirect, TorEnabled: true}
 	r2, ev2, _ := testRouter(&s2)
 	r2.Gen()
 	if len(*ev2) != 1 || (*ev2)[0] != "own_traffic_raw" {
@@ -91,7 +126,7 @@ func TestOwnRouterGenerationAndWarnings(t *testing.T) {
 func TestOwnDialBlockedNeverDials(t *testing.T) {
 	old := ownR
 	defer func() { ownR = old }()
-	s := ownState{MullvadWanted: true, KillSwitch: true}
+	s := ownState{Tier: tierPrivate, MullvadWanted: true}
 	ownR, _, _ = testRouter(&s)
 	c, err := ownDial(nil, "tcp", "9.9.9.9:443")
 	if c != nil || !errors.Is(err, errOwnBlocked) {
@@ -138,7 +173,7 @@ func TestUpstreamClosesPooledConnectionsWhenTheRouteChanges(t *testing.T) {
 func TestBootstrapLookupWhileBlocked(t *testing.T) {
 	old := ownR
 	defer func() { ownR = old }()
-	s := ownState{MullvadWanted: true, KillSwitch: true}
+	s := ownState{Tier: tierPrivate, MullvadWanted: true}
 	ownR, _, _ = testRouter(&s)
 	doh, pool := newFakeDoH(t)
 	p := testProxyURLs(t, []string{doh.URL}, pool)

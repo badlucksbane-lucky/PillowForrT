@@ -95,8 +95,8 @@ func handleVPNAPI(w http.ResponseWriter, r *http.Request, path string) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 4096)
 	var b struct {
-		Account, Country, City, Exit, IP string
-		On                               bool
+		Account, Country, City, Exit, IP, Tier string
+		On                                     bool
 	}
 	json.NewDecoder(r.Body).Decode(&b)
 	var err error
@@ -119,6 +119,12 @@ func handleVPNAPI(w http.ResponseWriter, r *http.Request, path string) {
 		}
 	case "killswitch":
 		vpn.SetKillSwitch(b.On)
+	case "tier":
+		err = vpn.SetKillTier(b.Tier, func(t string) error {
+			wanted, _, _ := vpn.OwnState()
+			torOn, torVPN := torMgrG.Switches()
+			return killTierPrereq(t, wanted, torOn, torVPN)
+		})
 	case "dnsvpn":
 		vpn.SetDNSViaVPN(b.On)
 	case "panic":

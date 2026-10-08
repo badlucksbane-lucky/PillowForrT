@@ -536,6 +536,11 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	}
 	key := cacheKey(dq)
 	viaVPN := p.VPN.UseVPNDNS(client)
+	if viaVPN { // Mullvad's own resolver is rung 2 (the tunnel): when rung 1 (Tor through Mullvad) is up it goes first, and when the allowed rungs are all down the lookup is refused below
+		if r, _ := ownRouteNow(); r != routeTunnel {
+			viaVPN = false
+		}
+	}
 	if viaVPN {
 		key = "vpn|" + key // another resolver, another answer set
 	}

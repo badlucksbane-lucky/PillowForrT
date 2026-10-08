@@ -1,13 +1,15 @@
 package main
 
-// tinyfwd's own traffic: how it leaves the box. The devices' traffic follows each device's mode (direct, Mullvad, Tor); this is the traffic tinyfwd makes for itself, which used to go out
-// of the cellular link raw whatever the state of the private paths: the encrypted-DNS lookups (DoH), list downloads, notification pushes. One function decides, from the state:
+// tinyfwd's own traffic: how it leaves the box. The devices' traffic follows each device's mode (direct, Mullvad, Tor); this is the traffic tinyfwd makes for itself (the encrypted-DNS
+// lookups for every device, list downloads, notification pushes), which used to go out of the cellular link raw whatever the state of the private paths.
 //
-//   Mullvad configured and the tunnel up   -> through the tunnel only (marked and bound to mullvad0, as Tor's proxy connections are);
-//   Mullvad configured, tunnel down        -> BLOCKED if the kill switch is on (one setting for devices and for this); otherwise as if Mullvad were not configured;
-//   Tor on and ready                       -> through Tor (its SOCKS port);
-//   Tor on but not ready, or neither       -> the cellular link, with a warning event when a private path is configured but not available. Tor alone never blocks: a memory pause
-//                                             of Tor must not take the house's name lookups with it.
+// It follows a ladder, always trying the top rung first:
+//   1  Tor through Mullvad   (Tor running over the tunnel, torvpn.go)
+//   2  Mullvad or Tor        (the tunnel if it is up, else Tor)
+//   3  direct                (the cellular link)
+// The kill-switch tier (vpn.go) is the lowest rung that is allowed: top = rung 1 only, middle = rungs 1 and 2, direct = all three. When no allowed rung is up the traffic is BLOCKED
+// (top, middle) or goes out the cellular link with a warning event when a private path was configured but is down (direct).
+// A tier whose rungs are not switched on at all (nothing to wait for) is treated as direct, with a warning, so a mis-set tier cannot take the house's name lookups down by itself.
 //
 // Declared exceptions, which stay on the cellular link by design: the WireGuard handshake itself, the Mullvad API (registration and the relay list), the uplink probe, speed tests and
 // diagnostics (they measure the cellular link), and the lookup of api.mullvad.net while the route is blocked (without it a restarted tinyfwd could never fetch the relay list, and the
@@ -40,48 +42,77 @@ func (r ownRoute) String() string {
 type ownState struct {
 	MullvadWanted bool // registered and switched on
 	TunnelUp      bool
-	KillSwitch    bool
+	Tier          string // the kill-switch tier
 	TorEnabled    bool
 	TorReady      bool
+	TorOverVPN    bool // Tor is set to run over Mullvad
 }
 
-// decideOwnRoute is the whole policy, as a pure function. reason says why when the route is not a private one.
+// decideOwnRoute is the whole policy, as a pure function. reason says why when the route is blocked, or is not a private one although a private path was asked for.
 func decideOwnRoute(s ownState) (ownRoute, string) {
-	if s.MullvadWanted {
-		if s.TunnelUp {
-			return routeTunnel, ""
-		}
-		if s.KillSwitch {
-			return routeBlock, "the Mullvad tunnel is down and the kill switch is on"
-		}
-	}
-	if s.TorEnabled && s.TorReady {
+	tunnel := s.MullvadWanted && s.TunnelUp
+	tor := s.TorEnabled && s.TorReady
+	if tunnel && tor && s.TorOverVPN { // rung 1: Tor through Mullvad (the Tor gate keeps Tor from running over the tunnel while the tunnel is down)
 		return routeTor, ""
 	}
-	switch {
+	if s.Tier == tierTorMullvad {
+		if !s.MullvadWanted || !s.TorEnabled || !s.TorOverVPN {
+			return routeDirect, "the top kill-switch tier needs Mullvad, Tor and Tor over Mullvad all switched on, and they are not"
+		}
+		return routeBlock, "Tor through Mullvad is not up (the top kill-switch tier)"
+	}
+	switch { // rung 2: Mullvad or Tor
+	case tunnel:
+		return routeTunnel, ""
+	case tor:
+		return routeTor, ""
+	}
+	if s.Tier == tierPrivate {
+		if !s.MullvadWanted && !s.TorEnabled {
+			return routeDirect, "the middle kill-switch tier needs Mullvad or Tor switched on, and neither is"
+		}
+		return routeBlock, "neither the Mullvad tunnel nor Tor is up (the middle kill-switch tier)"
+	}
+	switch { // rung 3: direct, which is never a block
 	case s.MullvadWanted:
-		return routeDirect, "the Mullvad tunnel is down and the kill switch is off"
+		return routeDirect, "the Mullvad tunnel is down and the kill switch is set to direct"
 	case s.TorEnabled:
 		return routeDirect, "Tor is not ready yet"
 	}
 	return routeDirect, ""
 }
 
+// killTierPrereq says whether a tier can be set now: a tier that nothing can satisfy would block everything the moment it is chosen.
+func killTierPrereq(tier string, mullvadWanted, torOn, torOverVPN bool) error {
+	switch tier {
+	case tierTorMullvad:
+		if !mullvadWanted || !torOn || !torOverVPN {
+			return errors.New("the top tier needs Mullvad switched on, Tor switched on and Tor over Mullvad ticked first")
+		}
+	case tierPrivate:
+		if !mullvadWanted && !torOn {
+			return errors.New("the middle tier needs Mullvad or Tor switched on first")
+		}
+	}
+	return nil
+}
+
 // torSeen is the last Tor state read: the Tor manager holds its lock for seconds while it starts or stops a process, and a name lookup must not wait behind that.
-var torSeen struct{ enabled, ready atomic.Bool }
+var torSeen struct{ enabled, ready, overVPN atomic.Bool }
 
 func liveOwnState() ownState {
 	var s ownState
 	if vpn != nil {
-		s.MullvadWanted, s.TunnelUp, s.KillSwitch = vpn.OwnState()
+		s.MullvadWanted, s.TunnelUp, s.Tier = vpn.OwnState()
 	}
 	if m := torMgrG; m != nil {
 		if m.mu.TryLock() {
 			torSeen.enabled.Store(m.cfg.Enabled)
+			torSeen.overVPN.Store(m.cfg.OverVPN)
 			torSeen.ready.Store(m.running() && m.boot >= 100)
 			m.mu.Unlock()
 		}
-		s.TorEnabled, s.TorReady = torSeen.enabled.Load(), torSeen.ready.Load()
+		s.TorEnabled, s.TorReady, s.TorOverVPN = torSeen.enabled.Load(), torSeen.ready.Load(), torSeen.overVPN.Load()
 	}
 	return s
 }

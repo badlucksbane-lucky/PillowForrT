@@ -83,7 +83,9 @@ func (v *VPN) TransportFor(client string) (*http.Transport, error) {
 	return vpnTransport, nil
 }
 
-// UseVPNDNS: should this client's DNS go to Mullvad's resolver through the tunnel?
+// UseVPNDNS: is this a Mullvad device whose lookups may go to Mullvad's resolver through the tunnel (the setting is on and the tunnel is up)? Whether they do is decided by the ladder
+// (owndial.go, used in DNSProxy.Handle): Mullvad's resolver is rung 2, so Tor through Mullvad goes first when it is up, and when no allowed rung is up the lookup takes the house's
+// encrypted-DNS path, which blocks or goes direct as the kill-switch tier says. Nothing is ever answered in the clear.
 func (v *VPN) UseVPNDNS(client string) bool {
 	if v == nil {
 		return false
@@ -91,7 +93,15 @@ func (v *VPN) UseVPNDNS(client string) bool {
 	v.mu.Lock()
 	on := v.cfg.DNSViaVPN
 	v.mu.Unlock()
-	return on && v.ExitFor(client) == "mullvad"
+	return on && v.ExitFor(client) == "mullvad" && v.tunnelUp()
+}
+
+// tunnelUp is the tunnel's state (a test can stand in for it).
+func (v *VPN) tunnelUp() bool {
+	if v.upFn != nil {
+		return v.upFn()
+	}
+	return v.tun.isUp()
 }
 
 // Mullvad's public encrypted DNS (https://mullvad.net/en/help/dns-over-https-and-dns-over-tls): an IP literal, so there is no lookup to bootstrap it, and the certificate is checked
@@ -127,7 +137,7 @@ func (v *VPN) ResolveDNS(q []byte) ([]byte, error) {
 	if v.dohHook != nil { // tests
 		return v.dohHook(q)
 	}
-	if !v.tun.isUp() {
+	if !v.tunnelUp() {
 		return nil, errKillSwitch
 	}
 	body := append([]byte(nil), q...)

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os/exec"
@@ -59,6 +60,11 @@ func TestMullvadTunnelDNSFailsClosed(t *testing.T) {
 	doh, pool := newFakeDoH(t)
 	p := testProxyURLs(t, []string{doh.URL}, pool)
 	p.VPN = mullvadClientVPN(t, "192.168.1.40", true)
+	p.VPN.upFn = func() bool { return true }
+	oldR := ownR
+	defer func() { ownR = oldR }()
+	tun := ownState{Tier: tierPrivate, MullvadWanted: true, TunnelUp: true}
+	ownR, _, _ = testRouter(&tun)
 	var fail bool
 	p.VPN.dohHook = func(q []byte) ([]byte, error) {
 		if fail {
@@ -128,5 +134,56 @@ func TestHardBlockWarnsOncePerWindow(t *testing.T) {
 	}
 	if len(p.warnAt) != 2 || time.Since(p.warnAt["tor"]) > time.Minute {
 		t.Errorf("one warning window per path: %v", p.warnAt)
+	}
+}
+
+// A Mullvad device's lookups climb the same ladder as the house's: Tor through Mullvad first, then Mullvad's own resolver through the tunnel (or Tor), then direct, and never below the tier.
+func TestMullvadDeviceDNSFollowsTheLadder(t *testing.T) {
+	old := ownR
+	defer func() { ownR = old }()
+	doh, pool := newFakeDoH(t)
+	var st ownState
+	ownR, _, _ = testRouter(&st)
+	p := testProxyURLs(t, []string{doh.URL}, pool)
+	p.Up.client.Transport.(*http.Transport).DialContext = ownDial // the real tier-aware dialler (a raw dial goes to the local test server)
+	p.Up.cfg.RouteGen = ownRouteGen                               // as in main.go: a change of route closes pooled connections
+	up := false
+	p.VPN = mullvadClientVPN(t, "192.168.1.40", true)
+	p.VPN.upFn = func() bool { return up }
+	tunnelHits := 0
+	p.VPN.dohHook = func(q []byte) ([]byte, error) { tunnelHits++; return answerFor(q, 60, false), nil }
+	n := uint16(0)
+	lookup := func() []byte { n++; return askAs(p, "192.168.1.40", fmt.Sprintf("tier%d.example.net", n), n) }
+	set := func(s ownState) { st = s; up = s.TunnelUp }
+
+	// rung 2: tunnel up, Tor not over Mullvad: Mullvad's resolver through the tunnel
+	set(ownState{Tier: tierPrivate, MullvadWanted: true, TunnelUp: true})
+	if addrOf(lookup()) != "93.184.216.34" || tunnelHits != 1 || doh.hits.Load() != 0 {
+		t.Errorf("rung 2: tunnel hits %d, house DoH hits %d", tunnelHits, doh.hits.Load())
+	}
+	// rung 1 up as well: Tor through Mullvad goes first, so Mullvad's resolver is not asked (the lookup takes the house path, whose route is Tor; there is no Tor here, so it is refused
+	// and nothing else answers it)
+	set(ownState{Tier: tierPrivate, MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorReady: true, TorOverVPN: true})
+	th := tunnelHits
+	lookup()
+	if tunnelHits != th {
+		t.Error("with Tor through Mullvad up the tunnel's own resolver must not be used")
+	}
+	// middle tier, nothing up: refused and counted, nothing goes out any other way
+	set(ownState{Tier: tierPrivate, MullvadWanted: true, TorEnabled: true})
+	hb, h0 := p.Stats.HardBlock.Load(), doh.hits.Load()
+	if rcodeOf(lookup()) != 2 || doh.hits.Load() != h0 || tunnelHits != th || p.Stats.HardBlock.Load() != hb+1 {
+		t.Errorf("middle, nothing up: must be refused and counted")
+	}
+	// direct tier, tunnel down: never blocked, the last rung (here the plain dial to the test server)
+	set(ownState{Tier: tierDirect, MullvadWanted: true})
+	if addrOf(lookup()) != "93.184.216.34" || doh.hits.Load() != h0+1 {
+		t.Errorf("direct tier must still answer: doh hits %d", doh.hits.Load())
+	}
+	// top tier, tunnel up, Tor not ready: refused, and Mullvad's resolver is not a way round it
+	set(ownState{Tier: tierTorMullvad, MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorOverVPN: true})
+	h1, t1 := doh.hits.Load(), tunnelHits
+	if rcodeOf(lookup()) != 2 || doh.hits.Load() != h1 || tunnelHits != t1 {
+		t.Error("top tier without Tor through Mullvad must refuse, not use the tunnel's resolver")
 	}
 }

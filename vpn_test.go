@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -359,6 +360,7 @@ func TestKillSwitchBlocksProxyAndDNS(t *testing.T) {
 	f := newFakeMullvad(t)
 	v, _ := testVPN(t, f)
 	v.Register(testAccount)
+	v.SetEnabled(true)          // Mullvad is switched on (the own-traffic router waits for a tunnel only when it is)
 	v.SetDefaultExit("mullvad") // tunnel is not up in a test
 	if _, err := v.DialFor(context.Background(), "192.168.1.40", "tcp", "example.com:443"); err != errKillSwitch {
 		t.Errorf("dial with the tunnel down: %v", err)
@@ -373,6 +375,15 @@ func TestKillSwitchBlocksProxyAndDNS(t *testing.T) {
 	doh, pool := newFakeDoH(t)
 	p := testProxy(t, doh, pool)
 	p.VPN = v
+	oldR := ownR // the house's own lookups follow the router's state, which here is this VPN's (the default tier is the middle one)
+	defer func() { ownR = oldR }()
+	ownR, _, _ = testRouter(new(ownState))
+	ownR.state = func() ownState {
+		w, up, tier := v.OwnState()
+		return ownState{MullvadWanted: w, TunnelUp: up, Tier: tier}
+	}
+	p.Up.cfg.RouteGen = ownRouteGen
+	p.Up.client.Transport.(*http.Transport).DialContext = ownDial
 	ecs := opt(8, 0, 1, 32, 0, 192, 168, 1, 40)
 	r := p.Handle(queryWithOpt("example.org", ecs))
 	if rcodeOf(r) != 2 || doh.hits.Load() != 0 {
@@ -380,7 +391,62 @@ func TestKillSwitchBlocksProxyAndDNS(t *testing.T) {
 	}
 	other := opt(8, 0, 1, 32, 0, 192, 168, 1, 2)
 	v.SetDeviceExit("192.168.1.2", "direct")
+	if r := p.Handle(queryWithOpt("example.org", other)); rcodeOf(r) != 2 || doh.hits.Load() != 0 {
+		t.Error("in the middle tier the house's lookups are blocked for a direct device too, while no private path is up (the tier, not the device, decides)")
+	}
+	v.SetKillTier(tierDirect, nil) // the direct tier never blocks: the best path left
+	p.Cache = newDNSCache(100)
 	if r := p.Handle(queryWithOpt("example.org", other)); rcodeOf(r) != 0 || doh.hits.Load() != 1 {
-		t.Error("a direct device's DNS must still use the normal path")
+		t.Errorf("direct tier: a direct device's DNS still uses the normal path (rcode %d, hits %d)", rcodeOf(r), doh.hits.Load())
+	}
+}
+
+func TestKillTierMigrationAndCoupling(t *testing.T) {
+	// a config from before tiers: the old switch decides
+	on, off := vpnConfig{KillSwitch: true}, vpnConfig{KillSwitch: false}
+	if on.tier() != tierPrivate || off.tier() != tierDirect {
+		t.Errorf("old on/off map to middle/direct: %s %s", on.tier(), off.tier())
+	}
+	if (vpnConfig{KillTier: "bogus", KillSwitch: true}).tier() != tierPrivate {
+		t.Error("an unknown stored tier falls back to the old switch")
+	}
+	v := NewVPN(filepath.Join(t.TempDir(), "vpn"), http.DefaultClient)
+	v.applyFn = func(exitPlan) error { return nil }
+	if v.KillTier() != tierPrivate || !v.cfg.KillSwitch {
+		t.Fatalf("the default is the middle tier: %s", v.KillTier())
+	}
+	if v.SetKillTier("bogus", nil) == nil {
+		t.Error("an unknown tier is refused")
+	}
+	refuse := func(string) error { return errors.New("not set up") }
+	if v.SetKillTier(tierTorMullvad, refuse) == nil || v.KillTier() != tierPrivate {
+		t.Error("a tier whose prerequisites are missing is refused and changes nothing")
+	}
+	if err := v.SetKillTier(tierTorMullvad, nil); err != nil || v.KillTier() != tierTorMullvad || !v.cfg.KillSwitch {
+		t.Errorf("top tier keeps the device kill rules on: %v %s %v", err, v.KillTier(), v.cfg.KillSwitch)
+	}
+	if err := v.SetKillTier(tierDirect, nil); err != nil || v.cfg.KillSwitch {
+		t.Errorf("direct turns the device kill rules off: %v %v", err, v.cfg.KillSwitch)
+	}
+	v.SetKillSwitch(true) // the old switch on from direct: the middle tier
+	if v.KillTier() != tierPrivate || !v.cfg.KillSwitch {
+		t.Errorf("old switch on from direct = middle: %s", v.KillTier())
+	}
+	v.SetKillTier(tierTorMullvad, nil)
+	v.SetKillSwitch(true)
+	if v.KillTier() != tierTorMullvad {
+		t.Error("turning the old switch 'on' must not lower a higher tier")
+	}
+	v.SetKillSwitch(false)
+	if v.KillTier() != tierDirect || v.cfg.KillSwitch {
+		t.Error("the old switch off is the direct tier")
+	}
+	if st := v.Status(); st.KillTier != tierDirect || st.KillSwitch {
+		t.Errorf("the page sees it: %+v", st)
+	}
+	w := NewVPN(v.dir, http.DefaultClient) // survives a restart
+	w.Load()
+	if w.KillTier() != tierDirect {
+		t.Errorf("persisted: %s", w.KillTier())
 	}
 }
