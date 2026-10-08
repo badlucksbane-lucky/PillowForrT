@@ -691,6 +691,7 @@ type egressView struct {
 	Services []egressSvcView         `json:"services"`
 	Allow    []egressRule            `json:"allow"`
 	Devices  map[string][]egressRule `json:"devices"`
+	DevSvc   map[string][]string     `json:"dev_services"` // extra services ticked for one device (lower-case MAC)
 	Observed []egressSeen            `json:"observed"`
 	RulesIn  bool                    `json:"rules_in_place"`
 	Error    string                  `json:"error,omitempty"`
@@ -797,6 +798,10 @@ func (m *egressMgr) ViewFor(mac string) egressView {
 			p += r.Proto + " " + r.Ports + "; "
 		}
 		v.Services = append(v.Services, egressSvcView{ID: sv.ID, Name: sv.Name, Desc: sv.Desc, Ports: strings.TrimSuffix(p, "; "), On: on[sv.ID], Extra: ex[sv.ID]})
+	}
+	v.DevSvc = map[string][]string{}
+	for mac, ids := range m.cfg.DevSvc {
+		v.DevSvc[mac] = append([]string{}, ids...)
 	}
 	for _, s := range m.seen {
 		v.Observed = append(v.Observed, *s)
