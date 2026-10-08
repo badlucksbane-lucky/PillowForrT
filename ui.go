@@ -285,7 +285,7 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 		writeJSON(w, 200, map[string]any{"status": msg, "state": lanV6Mgr.View()})
 	case path == "egress" && r.Method == http.MethodGet:
 		writeJSON(w, 200, egressM.ViewFor(r.URL.Query().Get("mac")))
-	case (path == "egress/set" || path == "egress/allow" || path == "egress/remove" || path == "egress/service") && r.Method == http.MethodPost:
+	case (path == "egress/set" || path == "egress/allow" || path == "egress/remove" || path == "egress/service" || path == "egress/httpupgrade") && r.Method == http.MethodPost:
 		var b struct {
 			Mode, Proto, Ports, Note, MAC, ID string
 			Confirm, On                       bool
@@ -304,6 +304,8 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 			err = egressM.SetMode(b.Mode)
 		case "egress/service":
 			err = egressM.SetService(b.ID, b.On, b.MAC)
+		case "egress/httpupgrade":
+			err = egressM.SetHTTPUpgrade(b.On, b.MAC)
 		case "egress/allow":
 			err = egressM.Allow(egressRule{Proto: b.Proto, Ports: b.Ports, Note: b.Note}, b.MAC)
 		default:
@@ -1053,7 +1055,7 @@ func handleBackup(w http.ResponseWriter, r *http.Request, path string) {
 var settingsPaths = map[string]bool{
 	"wifi": true, "dhcp": true, "cell": true, "diag": true, "diag/run": true, "diag/report": true, "cert": true, "cert/renew": true, "cert/download": true,
 	"ssh": true, "ssh/add": true, "ssh/delete": true, "sms": true, "devices": true, "devices/note": true, "graphs": true, "linkhist": true, "canary": true, "rogue-dhcp": true, "rogue-dhcp/allow": true, "arp": true, "tor": true, "tor/set": true, "tor/device": true, "tor/test": true, "speed": true, "speed/set": true, "speed/run": true, "canary/set": true, "canary/ignore": true, "actions": true, "actions/set": true, "actions/delete": true, "actions/run": true, "events": true, "events/seen": true, "events/clear": true, "notify/set": true, "notify/clear": true, "notify/test": true, "devices/wake": true, "devices/watch": true,
-	"system": true, "system/reboot": true, "system/stockadmin": true, "system/lanv6": true, "egress": true, "egress/set": true, "egress/allow": true, "egress/remove": true, "egress/service": true,
+	"system": true, "system/reboot": true, "system/stockadmin": true, "system/lanv6": true, "egress": true, "egress/set": true, "egress/allow": true, "egress/remove": true, "egress/service": true, "egress/httpupgrade": true,
 	"dnscanary": true, "dnscanary/set": true, "macchurn": true, "torbypass": true, "beacon": true, "beacon/ignore": true, "dganxdomain": true, "tlssni": true, "tlscert": true, "lanannounce": true, "dnsxcheck": true, "dnsmitm": true, "dhcpfp": true, "ttl": true, "ttl/ignore": true, "admintrip": true, "steer": true, "steer/allow": true, "rebind": true, "rebind/set": true, "rebind/allow": true,
 }
 
