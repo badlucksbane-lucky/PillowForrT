@@ -22,6 +22,7 @@ import (
 	"log"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -226,6 +227,73 @@ func (o *ownRouter) Gen() uint64 {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return o.gen
+}
+
+// ownView is what the page shows: which rung is serving the router's own traffic right now, and, when the top rung (Tor through Mullvad) is not serving, why not.
+type ownView struct {
+	Route    string `json:"route"`  // tunnel | tor | direct | blocked
+	Reason   string `json:"reason"` // why it is blocked, or raw although a private path was asked for
+	Rung     int    `json:"rung"`   // 1 Tor through Mullvad, 2 Mullvad or Tor, 3 direct, 0 blocked
+	TopReady bool   `json:"top_ready"`
+	TopWhy   string `json:"top_why,omitempty"` // why Tor through Mullvad is not serving
+}
+
+func (o *ownRouter) View() ownView {
+	r, why := o.Now()
+	raw := o.state()
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	v := ownView{Route: r.String(), Reason: why}
+	top := r == routeTor && raw.TorOverVPN && raw.MullvadWanted && raw.TunnelUp
+	switch {
+	case top:
+		v.Rung = 1
+	case r == routeTunnel || r == routeTor:
+		v.Rung = 2
+	case r == routeDirect:
+		v.Rung = 3
+	}
+	v.TopReady = top
+	if !top {
+		v.TopWhy = o.topWhyLocked(raw)
+	}
+	return v
+}
+
+// topWhyLocked says in a sentence why Tor through Mullvad is not serving: the first thing that is missing, or, when Tor itself is ready, what the step-up is still waiting for.
+func (o *ownRouter) topWhyLocked(raw ownState) string {
+	switch {
+	case !raw.MullvadWanted:
+		return "Mullvad is not switched on"
+	case !raw.TorEnabled:
+		return "Tor is switched off"
+	case !raw.TorOverVPN:
+		return "Tor over Mullvad is not ticked"
+	case !raw.TunnelUp:
+		return "the Mullvad tunnel is down"
+	case !raw.TorReady:
+		return "Tor is still starting"
+	}
+	g, now := o.torG, o.now()
+	var wait []string
+	if now.Before(g.holdUntil) {
+		wait = append(wait, fmt.Sprintf("held down after a failure for %d more s", int(g.holdUntil.Sub(now).Seconds())+1))
+	}
+	if !g.since.IsZero() && now.Sub(g.since) < g.stableFor {
+		wait = append(wait, fmt.Sprintf("%d s of settling", int((g.stableFor-now.Sub(g.since)).Seconds())+1))
+	}
+	if g.okRun < g.probesNeeded {
+		wait = append(wait, fmt.Sprintf("%d of %d test connections through Tor", g.okRun, g.probesNeeded))
+	}
+	if o.load != nil {
+		if l := o.load(); l >= stepUpLoadLimit {
+			wait = append(wait, fmt.Sprintf("the router to be less busy (load %.1f, needs under %.1f)", l, stepUpLoadLimit))
+		}
+	}
+	if len(wait) == 0 {
+		return "Tor is ready and is about to take over"
+	}
+	return "Tor is ready but has not yet proved itself: waiting for " + strings.Join(wait, "; ")
 }
 
 func ownRouteNow() (ownRoute, string) { return ownR.Now() }

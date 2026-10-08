@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -150,5 +151,48 @@ func TestRouterFollowsViabilityOfTor(t *testing.T) {
 	s.TunnelUp = true
 	if rt, _ := r.Now(); rt != routeTunnel {
 		t.Errorf("tunnel back with nothing serving: at once, got %v", rt)
+	}
+}
+
+// The page's view: which rung serves, and why Tor through Mullvad is not serving when it is not.
+func TestOwnViewRungAndWhy(t *testing.T) {
+	s := ownState{Tier: tierPrivate, MullvadWanted: true, TunnelUp: true}
+	r, _, now := testRouter(&s)
+	r.torG.stableFor, r.torG.probesNeeded = torStepUpAfter, 2 // the real waiting for Tor
+	want := func(label string, rung int, route string, top bool, whyHas string) ownView {
+		t.Helper()
+		v := r.View()
+		if v.Rung != rung || v.Route != route || v.TopReady != top || (whyHas == "" && v.TopWhy != "") || (whyHas != "" && !strings.Contains(v.TopWhy, whyHas)) {
+			t.Errorf("%s: %+v", label, v)
+		}
+		return v
+	}
+	want("Tor off", 2, "tunnel", false, "Tor is switched off")
+	s.TorEnabled = true
+	want("Tor on, not over Mullvad", 2, "tunnel", false, "not ticked")
+	s.TorOverVPN = true
+	want("Tor not ready", 2, "tunnel", false, "still starting")
+	s.TorReady = true
+	v := want("Tor ready, not proved", 2, "tunnel", false, "not yet proved itself")
+	if !strings.Contains(v.TopWhy, "0 of 2 test connections") || !strings.Contains(v.TopWhy, "of settling") {
+		t.Errorf("it should say what it is waiting for: %q", v.TopWhy)
+	}
+	*now = now.Add(torStepUpAfter + time.Second)
+	r.reportTor(true)
+	r.reportTor(true)
+	want("proved", 1, "tor", true, "")
+	s.TunnelUp, s.TorReady = false, false // Tor over Mullvad stops with the tunnel
+	want("tunnel down, Tor gone with it", 0, "blocked", false, "tunnel is down")
+	s.Tier = tierDirect
+	v = want("direct tier, nothing up", 3, "direct", false, "tunnel is down")
+	if v.Reason == "" {
+		t.Error("a raw route with a private path configured says why")
+	}
+	r.load = func() float64 { return 3.2 }
+	s.TunnelUp, s.TorReady = true, true
+	*now = now.Add(time.Hour)
+	r.torG.up = false
+	if v := r.View(); !strings.Contains(v.TopWhy, "less busy") {
+		t.Errorf("a busy box is named as the wait: %q", v.TopWhy)
 	}
 }

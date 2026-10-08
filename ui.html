@@ -179,6 +179,17 @@ const fmtB=n=>n>=1e9?(n/1e9).toFixed(2)+' GB':n>=1e6?(n/1e6).toFixed(1)+' MB':n>
 let vsel={};
 function pickCountry(c){vsel.country=c;vrender(V)}
 function pickCity(c){vsel.city=c}
+const RUNGS=[['1','Tor through Mullvad'],['2','Mullvad or Tor'],['3','Direct']];
+function rungRow(d){const o=d.own;if(!o)return '';
+ const chips=RUNGS.map(r=>'<span class="'+(o.rung===+r[0]?'on':'mut')+'" style="padding:2px 8px;border:1px solid currentColor;border-radius:10px;margin-right:6px'+(o.rung===+r[0]?';font-weight:600':'')+'">'+r[0]+' '+r[1]+'</span>').join('');
+ const state=o.route==='blocked'?'<b class="err">BLOCKED</b>':'<b>'+esc({tunnel:'through the Mullvad tunnel',tor:o.rung===1?'through Tor over Mullvad':'through Tor',direct:'direct, over the cellular link'}[o.route]||o.route)+'</b>';
+ return '<div class="row" style="margin-top:8px"><span class="mut">The router\'s own traffic (name lookups for every device, lists, notifications) is going</span>'+state+'</div>'+
+  '<div class="row">'+chips+'</div>'+
+  (o.reason?'<div class="'+(o.route==='blocked'?'err':'mut')+'">'+esc(o.reason)+'</div>':'')+
+  (o.top_ready?'':'<div class="mut">Tor through Mullvad is not serving: '+esc(o.top_why||'')+'.</div>')}
+async function tierpick(t){const o=V&&V.own;
+ if(t==='tor_over_mullvad'&&!(o&&o.top_ready)&&!confirm('Tor through Mullvad is not serving yet ('+((o&&o.top_why)||'unknown')+').\n\nIn this tier the router blocks every device\'s new name lookups until it is. Cached names keep working. Switch anyway?')){return}
+ vpost('tier',{tier:t})}
 function vrender(d,force){
  const el=$('vpn');if(!force&&el.contains(document.activeElement)&&document.activeElement!==el)return;if(!d||d.available===false){el.textContent='The VPN is not enabled on this build.';return}
  if(!d.registered){
@@ -195,7 +206,8 @@ function vrender(d,force){
   '<select onchange="pickCity(this.value)">'+cities.map(c=>'<option value="'+c.code+'"'+(c.code===cy?' selected':'')+'>'+esc(c.name)+' ('+c.relays+')</option>').join('')+'</select>'+
   '<button onclick="vpost(\'relay\',{country:\''+(country?country.code:'')+'\',city:vsel.city||\''+(cy||'')+'\'})">Use this location</button></div>'+
   '<div class="row" style="margin-top:8px"><span class="mut">Everyone\'s exit:</span>'+btn(1,'Direct',d.default_exit==='direct','vpost(\'default\',{exit:\'direct\'})')+btn(1,'Mullvad',d.default_exit==='mullvad','vpost(\'default\',{exit:\'mullvad\'})')+'<span class="mut">(each device below can override)</span></div>'+
-  '<div class="row" style="margin-top:8px"><span class="mut">Kill switch (what must be private before anything is allowed out):</span>'+btn(1,'Direct',d.kill_tier==='direct','vpost(\'tier\',{tier:\'direct\'})')+btn(1,'Mullvad or Tor',d.kill_tier==='mullvad_or_tor','vpost(\'tier\',{tier:\'mullvad_or_tor\'})')+btn(1,'Tor through Mullvad',d.kill_tier==='tor_over_mullvad','vpost(\'tier\',{tier:\'tor_over_mullvad\'})')+'</div>'+
+  rungRow(d)+
+  '<div class="row" style="margin-top:8px"><span class="mut">Kill switch (what must be private before anything is allowed out):</span>'+btn(1,'Direct',d.kill_tier==='direct','vpost(\'tier\',{tier:\'direct\'})')+btn(1,'Mullvad or Tor',d.kill_tier==='mullvad_or_tor','vpost(\'tier\',{tier:\'mullvad_or_tor\'})')+btn(1,'Tor through Mullvad',d.kill_tier==='tor_over_mullvad','tierpick(\'tor_over_mullvad\')')+'</div>'+
   '<div class="mut">The router\'s own traffic (encrypted name lookups for every device, list downloads, notifications) tries Tor through Mullvad first, then Mullvad or Tor, then direct. This sets the lowest step allowed: Direct falls all the way back (with a warning); Mullvad or Tor blocks if neither is up; Tor through Mullvad blocks unless that is up. Blocking also cuts off devices set to Mullvad. Tor through Mullvad ties every device\'s new name lookups to Tor: they wait a few minutes after a restart, and stop for about 10 minutes whenever the router pauses Tor to protect its memory (cached names still work). Watch the Tor card for "paused" events before relying on it.</div>'+
   '<div class="row"><label><input type="checkbox" '+(d.dns_via_vpn?'checked':'')+' onchange="vpost(\'dnsvpn\',{on:this.checked})"> Use Mullvad DNS for devices that exit via Mullvad</label></div>'+
   '<div class="row" style="margin-top:8px"><button onclick="vpost(\'panic\')">Panic: everything direct</button><button onclick="const a=prompt(\'Account number, to remove this device from your Mullvad account:\');if(a!==null)vpost(\'remove\',{account:a})">Remove device</button></div>'}
