@@ -58,8 +58,9 @@ button{min-height:36px}
  <div class="row" style="margin-top:6px"><span id="pause" class="mut"></span><button onclick="post('dns/pause',{minutes:15})">Pause</button><button onclick="post('dns/resume')">Resume</button><button onclick="post('dns/update')">Update lists</button></div>
  <div id="msg" class="msg"></div></div>
 <div class="card"><h2>Outbound services</h2><div id="eg" class="mut">loading</div><div id="egmsg" class="msg"></div></div>
-<div class="card"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
-<div class="card"><h2>VPN <span id="vpnbadge"></span></h2><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div></div>
+<div class="card"><h2>Proxy</h2><div id="pxpol"></div>
+ <div class="row" style="margin-top:10px"><b>Mullvad</b> <span id="vpnbadge"></span></div><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div>
+ <div class="row" style="margin-top:10px"><b>Tor</b> <span id="torbadge"></span></div><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
 <div class="sec">Monitoring</div>
 <div class="card"><h2>Events <span id="evbadge"></span></h2><div id="ev" class="mut">loading</div><div id="evmsg" class="msg"></div></div>
 <div class="card"><h2>Latency history <span id="lhbadge"></span></h2><div id="lh" class="mut">loading</div></div>
@@ -174,7 +175,7 @@ function node(j){const s=j.system||{},p=j.proxy||{},us=j.usage||{},b=j.budget||{
 
 let V=null;
 const exitSel=ip=>{if(!V||!V.registered)return '<span class="mut">-</span>';const tor=((Tr&&Tr.devices)||[]).some(d=>d.ip===ip);const cur=tor?'tor':((V.device_exit||{})[ip]||'');return '<select title="exit" onchange="devmode(\''+esc(ip)+'\',this.value)">'+[['','Exit: default'],['direct','Exit: direct'],['mullvad','Exit: Mullvad'],['tor','Exit: Tor']].map(o=>'<option value="'+o[0]+'"'+(cur===o[0]?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>'};
-async function devmode(ip,mode){if(mode==='tor'&&!confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.')){try{V=await (await api('/api/vpn')).json();vrender(V,true)}catch(e){}return}const r=await apost('device/mode',{ip,mode:mode||'default'});$('vmsg').textContent=r.j.error||'';try{V=await (await api('/api/vpn')).json();vrender(V,true)}catch(e){}trload()}
+async function devmode(ip,mode){if(mode==='tor'&&!confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.')){try{V=await (await api('/api/vpn')).json();vrender(V,true)}catch(e){}return}const r=await apost('device/mode',{ip,mode:mode||'default'});$('egmsg').textContent=r.j.error||'';try{V=await (await api('/api/vpn')).json();vrender(V,true)}catch(e){}trload()}
 async function vpost(p,b){const r=await api('/api/vpn/'+p,{method:'POST',headers:hdr(),body:JSON.stringify(b||{})});const j=await r.json();if(r.status===403){await session();$('vmsg').textContent=j.error||'';return}
  $('vmsg').textContent=j.error||'';if(!j.error){V=j;vrender(j,true)}}
 const fmtB=n=>n>=1e9?(n/1e9).toFixed(2)+' GB':n>=1e6?(n/1e6).toFixed(1)+' MB':n>=1e3?(n/1e3).toFixed(0)+' kB':n+' B';
@@ -199,26 +200,27 @@ async function tierpick(t){const o=V&&V.own;
  vpost('tier',{tier:t})}
 function vrender(d,force){
  $('vpnbadge').innerHTML=d&&d.available!==false&&d.up?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; ready</span>':'';
- const el=$('vpn');if(!force&&el.contains(document.activeElement)&&document.activeElement!==el)return;if(!d||d.available===false){el.textContent='The VPN is not enabled on this build.';return}
+ const el=$('vpn');if(!force&&el.contains(document.activeElement)&&document.activeElement!==el)return;if(!d||d.available===false){$('pxpol').innerHTML='';el.textContent='The VPN is not enabled on this build.';return}
  if(!d.registered){
-  el.innerHTML='<p>Register as a Mullvad device (<b>uses 1 of 5 slots</b>). Account number sent once, <b>not stored</b>.</p>'+
+  $('pxpol').innerHTML='';el.innerHTML='<p>Register as a Mullvad device (<b>uses 1 of 5 slots</b>). Account number sent once, <b>not stored</b>.</p>'+
    '<div class="row"><input id="acct" type="password" inputmode="numeric" autocomplete="off" placeholder="16-digit Mullvad account number"><button onclick="const a=$(\'acct\').value;$(\'acct\').value=\'\';vpost(\'register\',{account:a})">Register</button></div>';return}
  const loc=d.locations||[];const rp=d.relay_pick||{};
  const cc=vsel.country||rp.country||'us';const country=loc.find(c=>c.code===cc)||loc[0];
  const cities=country?country.cities:[];const cy=vsel.city||(rp.country===cc?rp.city:'')||(cities[0]&&cities[0].code);
  const st=d.up?'<b style="color:var(--ac)">Up</b> via '+esc(d.relay)+' - handshake '+d.handshake_age_s+' s ago, down '+fmtB(d.rx_bytes)+', up '+fmtB(d.tx_bytes):(d.enabled?'<b class="err">Connecting...</b>':'Down (disconnected)');
  const btn=(v,l,on,cb)=>'<button class="'+(on?'on':'')+'" onclick="'+cb+'">'+l+'</button>';
+ $('pxpol').innerHTML='<div class="row" style="margin-top:8px"><span class="mut">Everyone\'s exit:</span>'+btn(1,'Direct',d.default_exit==='direct','vpost(\'default\',{exit:\'direct\'})')+btn(1,'Mullvad',d.default_exit==='mullvad','vpost(\'default\',{exit:\'mullvad\'})')+'<span class="mut">(each device overrides this on its card under Outbound services)</span></div>'+
+  rungRow(d)+
+  '<div class="row" style="margin-top:8px"><span class="mut">Kill switch (what must be private before anything is allowed out):</span>'+btn(1,'Direct',d.kill_tier==='direct','vpost(\'tier\',{tier:\'direct\'})')+btn(1,'Mullvad or Tor',d.kill_tier==='mullvad_or_tor','vpost(\'tier\',{tier:\'mullvad_or_tor\'})')+btn(1,'Tor through Mullvad',d.kill_tier==='tor_over_mullvad','tierpick(\'tor_over_mullvad\')')+'</div>'+
+  '<div class="mut">The router\'s own traffic (encrypted name lookups for every device, list downloads, notifications) tries Tor through Mullvad first, then Mullvad or Tor, then direct. This sets the lowest step allowed: Direct falls all the way back (with a warning); Mullvad or Tor blocks if neither is up; Tor through Mullvad blocks unless that is up. Blocking also cuts off devices set to Mullvad. Tor through Mullvad ties every device\'s new name lookups to Tor: they wait a few minutes after a restart, and stop for about 10 minutes whenever the router pauses Tor to protect its memory (cached names still work). Watch the Tor section below for "paused" events before relying on it.</div>'+
+  '<div class="row" style="margin-top:8px"><button onclick="vpost(\'panic\')">Panic: everything direct</button></div>';
  el.innerHTML='<div>'+st+'</div><div class="mut">device '+esc(d.device_name||'')+' - '+esc(d.address||'')+'</div>'+(d.error?'<div class="err">'+esc(d.error)+'</div>':'')+
   '<div class="row" style="margin-top:8px">'+btn(1,d.enabled?'Disconnect':'Connect',d.enabled,'vpost(\'enable\',{on:'+(!d.enabled)+'})')+
   '<select onchange="pickCountry(this.value)">'+loc.map(c=>'<option value="'+c.code+'"'+(country&&c.code===country.code?' selected':'')+'>'+esc(c.name)+'</option>').join('')+'</select>'+
   '<select onchange="pickCity(this.value)">'+cities.map(c=>'<option value="'+c.code+'"'+(c.code===cy?' selected':'')+'>'+esc(c.name)+' ('+c.relays+')</option>').join('')+'</select>'+
   '<button onclick="vpost(\'relay\',{country:\''+(country?country.code:'')+'\',city:vsel.city||\''+(cy||'')+'\'})">Use this location</button></div>'+
-  '<div class="row" style="margin-top:8px"><span class="mut">Everyone\'s exit:</span>'+btn(1,'Direct',d.default_exit==='direct','vpost(\'default\',{exit:\'direct\'})')+btn(1,'Mullvad',d.default_exit==='mullvad','vpost(\'default\',{exit:\'mullvad\'})')+'<span class="mut">(each device below can override)</span></div>'+
-  rungRow(d)+
-  '<div class="row" style="margin-top:8px"><span class="mut">Kill switch (what must be private before anything is allowed out):</span>'+btn(1,'Direct',d.kill_tier==='direct','vpost(\'tier\',{tier:\'direct\'})')+btn(1,'Mullvad or Tor',d.kill_tier==='mullvad_or_tor','vpost(\'tier\',{tier:\'mullvad_or_tor\'})')+btn(1,'Tor through Mullvad',d.kill_tier==='tor_over_mullvad','tierpick(\'tor_over_mullvad\')')+'</div>'+
-  '<div class="mut">The router\'s own traffic (encrypted name lookups for every device, list downloads, notifications) tries Tor through Mullvad first, then Mullvad or Tor, then direct. This sets the lowest step allowed: Direct falls all the way back (with a warning); Mullvad or Tor blocks if neither is up; Tor through Mullvad blocks unless that is up. Blocking also cuts off devices set to Mullvad. Tor through Mullvad ties every device\'s new name lookups to Tor: they wait a few minutes after a restart, and stop for about 10 minutes whenever the router pauses Tor to protect its memory (cached names still work). Watch the Tor card for "paused" events before relying on it.</div>'+
   '<div class="row"><label><input type="checkbox" '+(d.dns_via_vpn?'checked':'')+' onchange="vpost(\'dnsvpn\',{on:this.checked})"> Use Mullvad DNS for devices that exit via Mullvad</label></div>'+
-  '<div class="row" style="margin-top:8px"><button onclick="vpost(\'panic\')">Panic: everything direct</button><button onclick="const a=prompt(\'Account number, to remove this device from your Mullvad account:\');if(a!==null)vpost(\'remove\',{account:a})">Remove device</button></div>'}
+  '<div class="row" style="margin-top:8px"><button onclick="const a=prompt(\'Account number, to remove this device from your Mullvad account:\');if(a!==null)vpost(\'remove\',{account:a})">Remove device</button></div>'}
 
 async function apost(p,b){const r=await api('/api/'+p,{method:'POST',headers:hdr(),body:JSON.stringify(b||{})});const j=await r.json();if(r.status===403){await session()}return {ok:r.ok,j}}
 const dur=s=>s>=86400?Math.floor(s/86400)+' d':s>=3600?Math.floor(s/3600)+' h':s>=60?Math.floor(s/60)+' min':s+' s';
@@ -286,17 +288,15 @@ function trstate(){if(!Tr.installed)return '<b class="err">not installed</b>';if
 function trrender(force){const el=$('tor');if(!Tr||guard(el,force))return;
  if(Tr.available===false){el.textContent='Tor is not available on this build.';return}
  $('torbadge').innerHTML=Tr.blocked?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+Tr.devices.length+' device'+(Tr.devices.length===1?'':'s')+' waiting for Tor</span>':Tr.ready?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; ready</span>':'';
- const devs=(Tr.devices||[]).map(d=>'<tr><td><b>'+esc(d.name||d.mac)+'</b><div class="mut">'+esc(d.mac)+(d.ip?' &middot; '+esc(d.ip):' &middot; not on the network now')+'</div></td><td class="mut">all internet traffic goes through Tor</td><td><button onclick="trdev(\''+d.mac+'\',false)">Give back its direct line</button></td></tr>').join('')||'<tr><td class="mut">no device is sent through Tor</td></tr>';
+ const nd=(Tr.devices||[]).length;
  el.innerHTML='<div class="row"><span>'+trstate()+(Tr.running?' <span class="mut">'+(Tr.rss_mb?Tr.rss_mb.toFixed(0)+' MB used, ':'')+Tr.avail_mb.toFixed(0)+' MB free on the router'+(Tr.restarts?', '+Tr.restarts+' restart'+(Tr.restarts===1?'':'s'):'')+'</span>':'')+'</span><span><button class="'+(Tr.enabled?'':'on')+'" onclick="trset('+(!Tr.enabled)+','+Tr.onion+')">'+(Tr.enabled?'Switch off':'Switch on')+'</button></span></div>'+
   (Tr.error?'<div class="err" style="margin-top:4px">'+esc(Tr.error)+'</div>':'')+
-  '<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.onion?'checked ':'')+'onchange="trset('+Tr.enabled+',this.checked)"> <b>.onion for the whole house</b></label><span class="mut">any device can open a .onion address with no setup; browsers using the proxy file also get a SOCKS rule</span></div>'+
   '<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.over_vpn?'checked ':'')+'onchange="trovervpn(this.checked)"> <b>Tor over Mullvad</b></label><span class="mut">Tor\'s own connections go only through the Mullvad tunnel, so the carrier sees the tunnel and not Tor. Tor waits for the tunnel and has no other way out.'+(Tr.vpn_wait?' <b class="err">Waiting for the tunnel.</b>':'')+'</span></div>'+
-  '<div class="mut" style="margin:8px 0 4px"><b>Send a device through Tor</b>: all traffic forced through Tor (TCP only; UDP, ICMP, IPv6 are blocked). No internet while Tor is not ready.</div>'+
-  '<table>'+devs+'</table>'+
-  '<div class="row" style="margin-top:6px"><select id="tor_dev">'+devopts('Choose a device...')+'</select><button onclick="trdevpick()">Send through Tor</button><button onclick="trtest()">Test Tor from the router</button></div>'+
+  '<div class="mut" style="margin-top:8px">'+(nd?nd+' device'+(nd===1?'':'s')+' sent through Tor: '+(Tr.devices||[]).map(d=>esc(d.name||d.mac)).join(', '):'No device is sent through Tor')+'. Set per device under Outbound services.</div>'+
+  '<div class="row" style="margin-top:6px"><button onclick="trtest()">Test Tor from the router</button></div>'+
   '<div id="trtestout" class="mut" style="margin-top:4px"></div>'+
   '<div class="mut" style="margin-top:6px">Verify on the device: <code>check.torproject.org</code>. Client only; never relays.</div>'}
-async function trload(){try{Tr=await (await api('/api/tor')).json();trrender()}catch(e){}odload()}
+async function trload(){try{Tr=await (await api('/api/tor')).json();trrender();if(typeof Eg!=='undefined'&&Eg)egrender()}catch(e){}odload()}
 let Od=null;
 function odrender(force){const el=$('od');if(!Od||guard(el,force))return;
  if(Od.available===false){el.textContent='The onion door is not available on this build.';return}
@@ -320,8 +320,7 @@ async function odadd(){const r=await apost('tor/onion/client',{name:$('od_name')
 async function odrm(name){if(!confirm('Remove '+name+'? It can no longer find the door (a connection it already holds may continue until it closes).'))return;const r=await apost('tor/onion/client/remove',{name});$('odmsg').textContent=r.j.error||'';odload()}
 async function trovervpn(on){const r=await apost('tor/overvpn',{on});$('tormsg').textContent=r.j.error||'';trload()}
 async function trset(en,on){const r=await apost('tor/set',{enabled:en,onion:on});$('tormsg').textContent=r.j.error||'';trload()}
-async function trdev(mac,on){if(!on&&!confirm('Give this device its direct internet line back? Its traffic will no longer go through Tor.'))return;const r=await apost('tor/device',{mac,on});$('tormsg').textContent=r.j.error||'';trload()}
-function trdevpick(){const v=$('tor_dev').value;if(!v){$('tormsg').textContent='Choose a device first';return}if(confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.'))trdev(v,true)}
+async function trdev(mac,on){if(on?!confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.'):!confirm('Give this device its direct internet line back? Its traffic will no longer go through Tor.'))return;const r=await apost('tor/device',{mac,on});$('egmsg').textContent=r.j.error||'';trload()}
 async function trtest(){const o=$('trtestout');o.textContent='asking check.torproject.org through Tor (this can take a minute)...';const r=await apost('tor/test',{});o.textContent=r.ok?(r.j.IsTor?'Tor works: the router reached the internet through Tor, as '+r.j.IP:'The request did not come from Tor ('+r.j.IP+')'):('Test failed: '+(r.j.error||'?'))}
 let Lh=null,LhH=168;
 const LH_DEFS=[{id:'lha',title:'Connect time',axis:()=>({u:'ms',div:1}),fmt:v=>Math.round(v)+' ms',series:[{k:'avg',name:'Average',c:'--s1',m:1},{k:'max',name:'Worst',c:'--s2',m:1}]},
@@ -777,7 +776,7 @@ function devrender(force){const el=$('devs');if(!Dv||guard(el,force))return;
    !d.online?'<button onclick="dvwake(\''+d.mac+'\')" title="Sends a wake-on-LAN packet: wired devices and ones set up for wake-on-wireless wake; most Wi-Fi devices ignore it">Wake</button>':'',
    !d.reserved&&d.ip?'<button onclick="dvreserve(\''+d.mac+'\',\''+esc(d.ip)+'\',\''+esc(d.hostname||'')+'\')">Reserve address</button>':''].filter(Boolean).join(' ');
   return '<tr><td><b>'+esc(nm)+'</b>'+(d.label&&orig?' <span class="mut">('+esc(orig)+')</span>':'')+'<div class="mut">'+esc(d.mac)+'</div>'+(d.note?'<div class="mut" style="white-space:pre-wrap">'+esc(d.note)+'</div>':'')+'</td><td>'+ip+'</td><td>'+conn+'</td><td>'+(flags||'<span class="mut">-</span>')+'</td><td>'+(c.queries!=null?fmt(c.queries)+' asked, '+fmt(c.blocked)+' blocked<div class="mut">'+ago(c.last)+'</div>':'<span class="mut">no DNS lately</span>')+'</td></tr>'+
-   '<tr><td colspan="5" style="border-top:0;padding-top:0"><div class="row">'+(d.ip?modeSel(d.ip)+exitSel(d.ip):'')+btns+'</div></td></tr>'}).join('')||'<tr><td class="mut">no devices</td></tr>';
+   '<tr><td colspan="5" style="border-top:0;padding-top:0"><div class="row">'+(d.ip?modeSel(d.ip):'')+btns+'</div></td></tr>'}).join('')||'<tr><td class="mut">no devices</td></tr>';
  el.innerHTML='<table><tr><th>Device</th><th>Address</th><th>Connection</th><th>State</th><th>DNS</th></tr>'+rows+'</table><div class="mut" style="margin-top:6px">Connected first, then DHCP-known. Pause = 30 min internet cut (LAN stays). Schedules on the Internet schedules card.</div>'}
 async function dvload(){try{Dv=await (await api('/api/devices')).json();devrender()}catch(e){}}
 async function dvact(p,b){const r=await apost(p,b);$('devmsg').textContent=r.j.error||'';setTimeout(()=>{dvload();bload();fload()},1200)}
@@ -825,9 +824,9 @@ function egdevs(){const m={},add=(mac,o)=>{mac=(mac||'').toLowerCase();if(!mac)r
  ((Dv&&Dv.devices)||[]).forEach(d=>add(d.mac,{known:true,name:d.label||d.name||d.hostname||(d.random_mac?'private-MAC device':'unknown device'),ip:d.ip,online:d.online}));
  if(Eg){Object.keys(Eg.devices||{}).forEach(k=>add(k,{}));Object.keys(Eg.dev_services||{}).forEach(k=>add(k,{}));(Eg.http_upgrade_skip||[]).forEach(k=>add(k,{}));(Eg.observed||[]).forEach(o=>add(o.mac,{ip:o.ip}))}
  return Object.keys(m).map(k=>{const d=m[k];d.pend=((Eg&&Eg.observed)||[]).filter(o=>(o.mac||'').toLowerCase()===k);d.name=d.name||d.ip||k;return d}).sort((x,y)=>(y.pend.length>0)-(x.pend.length>0)||(!!y.online)-(!!x.online)||x.name.localeCompare(y.name))}
-function egcard(d){const mac=d.mac,ex=(Eg.dev_services||{})[mac]||[],rules=(Eg.devices||{})[mac]||[],skip=(Eg.http_upgrade_skip||[]).indexOf(mac)>=0;
+function egcard(d){const mac=d.mac,ex=(Eg.dev_services||{})[mac]||[],rules=(Eg.devices||{})[mac]||[],skip=(Eg.http_upgrade_skip||[]).indexOf(mac)>=0,viaTor=!!(Tr&&(Tr.devices||[]).some(x=>(x.mac||'').toLowerCase()===mac)),xit=viaTor?'tor':((V&&V.device_exit||{})[d.ip]||'');
  const open=mac in EgTog?EgTog[mac]:(d.pend.length>0&&Eg.mode==='monitor');
- const badge=(d.pend.length?'<b class="err">'+d.pend.length+' would be refused</b>':'<span style="color:var(--ac)">all clear</span>')+(ex.length+rules.length?' <span class="mut">&middot; '+(ex.length+rules.length)+' of its own</span>':'')+(skip?' <span class="mut">&middot; left out of HTTP upgrade</span>':'');
+ const badge=(d.pend.length?'<b class="err">'+d.pend.length+' would be refused</b>':'<span style="color:var(--ac)">all clear</span>')+(ex.length+rules.length?' <span class="mut">&middot; '+(ex.length+rules.length)+' of its own</span>':'')+(xit?' <span class="mut">&middot; exit: '+({tor:'Tor',mullvad:'Mullvad',direct:'direct'}[xit]||xit)+'</span>':'')+(skip?' <span class="mut">&middot; left out of HTTP upgrade</span>':'');
  let h='<div class="dcard"><div class="dhead" role="button" tabindex="0" aria-expanded="'+open+'" onclick="egtog(\''+esc(mac)+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();egtog(\''+esc(mac)+'\')}"><span class="dcar">'+(open?'&#9662;':'&#9656;')+'</span><b>'+esc(d.name)+'</b><span class="mut">'+esc(d.ip||'')+(d.known?(d.online?'':' &middot; offline'):' &middot; not in the device list')+'</span><span class="dbad">'+badge+'</span></div>';
  if(!open)return h+'</div>';
  h+='<div class="dbody">';
@@ -835,15 +834,18 @@ function egcard(d){const mac=d.mac,ex=(Eg.dev_services||{})[mac]||[],rules=(Eg.d
  h+='<div style="margin-top:6px"><b>Services</b> <span class="mut">ticked for everyone show fixed; tick another to allow it for this device only</span></div><table>'+Eg.services.map(s=>{const on=s.on||ex.indexOf(s.id)>=0;return '<tr><td style="width:28px"><input type="checkbox" aria-label="Allow '+esc(s.name)+' for '+esc(d.name)+'"'+(on?' checked':'')+(s.on?' disabled':'')+' onchange="yegsv(\''+s.id+'\',this.checked,\''+esc(mac)+'\')"></td><td><b>'+esc(s.name)+'</b>'+(s.on?' <span class="mut">(everyone)</span>':'')+'<br><span class="mut">'+esc(s.desc)+'</span></td><td class="mut">'+esc(s.ports)+'</td></tr>'}).join('')+'</table>';
  if(rules.length)h+='<div><b>Its own ports</b></div><table>'+rules.map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td class="mut">'+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\''+esc(mac)+'\')">remove</button></td></tr>').join('')+'</table>';
  h+='<div class="row" style="margin-top:6px"><button class="'+(skip?'':'on')+'" onclick="yhup('+skip+',\''+esc(mac)+'\')">'+(skip?'Upgrade this device again':'Leave this device out of HTTP upgrade')+'</button><span class="mut">'+(skip?'plain HTTP is left alone for it':'port 80 is sent to https:// first')+'</span></div>';
+ if(d.ip&&V&&V.registered)h+='<div class="row" style="margin-top:6px">'+exitSel(d.ip)+'<span class="mut">where this device\'s traffic leaves: Mullvad, Tor, or straight out. Tor forces all its traffic through Tor (TCP only) and it has no internet while Tor is not ready.</span></div>';
+ else if(Tr&&Tr.available!==false)h+='<div class="row" style="margin-top:6px"><button class="'+(viaTor?'on':'')+'" onclick="trdev(\''+esc(mac)+'\','+!viaTor+')">'+(viaTor?'Give it its direct line back':'Send this device through Tor')+'</button><span class="mut">'+(viaTor?'all its internet traffic goes through Tor':'needs the device online to pick Mullvad')+'</span></div>';
  return h+'</div></div>'}
 function egrender(force){const el=$('eg');if(!Eg||guard(el,force))return;
 const devs=egdevs();
 el.innerHTML='<div style="margin-top:0"><b>Outbound services</b> <b style="color:var(--ac)">'+({off:'off',monitor:'watching only',enforce:'enforcing'}[Eg.mode]||Eg.mode)+'</b></div>'+
   '<div class="mut" style="margin:4px 0">Only listed services may connect out (DNS handled separately). <b>Watch only</b> = log without blocking. Undo: <code>ssh orbic rm /data/proxy/egress.json</code>.</div>'+
   '<div class="row">'+['off','monitor','enforce'].map(m=>'<button class="'+(Eg.mode===m?'on':'')+'" onclick="yegm(\''+m+'\')">'+({off:'Off',monitor:'Watch only',enforce:'Enforce'}[m])+'</button>').join('')+(Eg.rules_in_place?'':'<span class="err">rules not in place yet (20 s)</span>')+'</div>'+
-  '<details style="margin-top:8px"'+(EgTog._g?' open':'')+' ontoggle="EgTog._g=this.open"><summary><b>For everyone</b> <span class="mut">services, other ports, HTTP upgrade</span></summary>'+
+  '<details style="margin-top:8px"'+(EgTog._g?' open':'')+' ontoggle="EgTog._g=this.open"><summary><b>For everyone</b> <span class="mut">services, other ports, HTTP upgrade, .onion</span></summary>'+
   '<table>'+Eg.services.map(s=>'<tr><td style="width:28px"><input type="checkbox" aria-label="Allow '+esc(s.name)+' for everyone"'+(s.on?' checked':'')+' onchange="yegsv(\''+s.id+'\',this.checked,\'\')"></td><td><b>'+esc(s.name)+'</b><br><span class="mut">'+esc(s.desc)+'</span></td><td class="mut">'+esc(s.ports)+'</td></tr>').join('')+'</table>'+
   '<div style="margin-top:8px"><b>Other allowed ports</b></div><table style="margin-top:6px">'+(Eg.allow||[]).map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td>'+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\'\')">remove</button></td></tr>').join('')+(Eg.allow&&Eg.allow.length?'':'<tr><td class="mut">none</td></tr>')+'</table>'+
+  (Tr&&Tr.available!==false?'<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.onion?'checked ':'')+'onchange="trset('+Tr.enabled+',this.checked)"> <b>.onion for the whole house</b></label><span class="mut">any device can open a .onion address with no setup; browsers using the proxy file also get a SOCKS rule</span></div>':'')+
   '<div style="margin-top:8px"><b>Upgrade plain HTTP to HTTPS</b> <b style="color:var(--ac)">'+(Eg.http_upgrade?'on':'off')+'</b></div>'+
   '<div class="mut" style="margin:4px 0">Port 80 stays open, but a page asked for over plain HTTP is first sent to its https:// address. If the same device comes back for the same site within 2 minutes and no HTTPS connection exists, it <b>fell back</b>: that is noted and the plain request is let through. A device that cannot follow redirects (curl without -L, some gadgets, firmware updaters) will not work: leave it out on its card. Served '+Eg.http_upgraded+', fell back '+Eg.http_fell_back+' since start.</div>'+
   '<div class="row"><button class="'+(Eg.http_upgrade?'on':'')+'" onclick="yhup('+!Eg.http_upgrade+',\'\')">'+(Eg.http_upgrade?'Turn the upgrade off':'Turn the upgrade on')+'</button>'+((Eg.http_upgrade_skip||[]).length?'<span class="mut">'+Eg.http_upgrade_skip.length+' device(s) left out</span>':'')+'</div></details>'+
