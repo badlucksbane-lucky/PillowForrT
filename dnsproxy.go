@@ -207,6 +207,11 @@ type upstreamConfig struct {
 	DoHTimeout time.Duration
 	ProbeEvery time.Duration
 	Dial       func(ctx context.Context, network, addr string) (net.Conn, error)
+	// optional: the timeout to use now (a slower route needs longer), and a number that changes when the route does, so connections opened under the old route are closed
+	TimeoutFor func() time.Duration
+	RouteGen   func() uint64
+	// optional: dials for the one bootstrap lookup that is allowed while the route is blocked (ResolveBootstrap)
+	BootDial func(ctx context.Context, network, addr string) (net.Conn, error)
 }
 
 // upstreamDownAfter is how many lookups in a row must fail (every resolver tried each time) before encrypted DNS is reported as down.
@@ -225,6 +230,9 @@ type Upstream struct {
 	DoHOK     atomic.Uint64
 	DoHFail   atomic.Uint64
 	lastMS    atomic.Int64
+	gen       uint64
+	bootOnce  sync.Once
+	bootCl    *http.Client
 }
 
 func newUpstream(cfg upstreamConfig) *Upstream {
@@ -243,6 +251,9 @@ func newUpstream(cfg upstreamConfig) *Upstream {
 		IdleConnTimeout:       2 * time.Minute,
 		TLSHandshakeTimeout:   cfg.DoHTimeout,
 		ResponseHeaderTimeout: cfg.DoHTimeout,
+	}
+	if cfg.TimeoutFor != nil { // the per-request context sets the real limit; the transport's own must not cut a slower route short
+		tr.TLSHandshakeTimeout, tr.ResponseHeaderTimeout = 20*time.Second, 20*time.Second
 	}
 	return &Upstream{cfg: cfg, client: &http.Client{Transport: tr}}
 }
@@ -277,6 +288,16 @@ func (u *Upstream) Failing() bool {
 }
 
 func (u *Upstream) doh(q []byte) ([]byte, string, error) {
+	if u.cfg.RouteGen != nil { // the route changed (tunnel up or down, Tor ready): a pooled connection opened under the old one must not be reused
+		g := u.cfg.RouteGen()
+		u.mu.Lock()
+		changed := g != u.gen
+		u.gen = g
+		u.mu.Unlock()
+		if changed {
+			u.client.CloseIdleConnections()
+		}
+	}
 	var last error
 	for _, url := range u.cfg.DoHURLs {
 		b, err := u.dohOne(url, q)
@@ -292,7 +313,11 @@ func (u *Upstream) doh(q []byte) ([]byte, string, error) {
 func (u *Upstream) dohOne(url string, q []byte) ([]byte, error) {
 	body := append([]byte(nil), q...)
 	setID(body, 0) // RFC 8484: id 0 makes the request cache-friendly; the caller restores the client's id
-	ctx, cancel := context.WithTimeout(context.Background(), u.cfg.DoHTimeout)
+	to := u.cfg.DoHTimeout
+	if u.cfg.TimeoutFor != nil {
+		to = u.cfg.TimeoutFor()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), to)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/dns-message")
@@ -374,6 +399,41 @@ func (u *Upstream) ResolveFrom(q []byte) ([]byte, string, string, error) {
 	return b, "doh", url, nil
 }
 
+// ResolveBootstrap answers one query over DoH on the cellular link, bypassing the route (owndial.go: the lookup of api.mullvad.net while the route is blocked, so the tunnel can come back).
+func (u *Upstream) ResolveBootstrap(q []byte) ([]byte, string, error) {
+	u.bootOnce.Do(func() {
+		dial := u.cfg.BootDial
+		if dial == nil {
+			dial = u.cfg.Dial
+		}
+		u.bootCl = &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: u.cfg.Roots, MinVersion: tls.VersionTLS12}, ForceAttemptHTTP2: true, DialContext: dial,
+			MaxIdleConns: 1, IdleConnTimeout: 30 * time.Second, TLSHandshakeTimeout: 10 * time.Second, ResponseHeaderTimeout: 10 * time.Second}}
+	})
+	var last error
+	for _, url := range u.cfg.DoHURLs {
+		body := append([]byte(nil), q...)
+		setID(body, 0)
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/dns-message")
+		req.Header.Set("Accept", "application/dns-message")
+		resp, err := u.bootCl.Do(req)
+		if err != nil {
+			cancel()
+			last = err
+			continue
+		}
+		b, rerr := io.ReadAll(io.LimitReader(resp.Body, 65536))
+		resp.Body.Close()
+		cancel()
+		if rerr == nil && resp.StatusCode == 200 && len(b) >= 12 && b[2]&0x80 != 0 {
+			return b, url, nil
+		}
+		last = fmt.Errorf("%s: bad answer", url)
+	}
+	return nil, "", last
+}
+
 // ---------- the pipeline ----------
 
 type DNSProxy struct {
@@ -393,6 +453,8 @@ const hardBlockWarnEvery = 10 * time.Minute
 
 // hardBlock records that a Tor or Mullvad device's lookup was refused because the encrypted path for it is not working. Nothing is sent in the clear instead (the device gets SERVFAIL),
 // and the owner is told once per path per ten minutes, so a long outage is one event and not a flood.
+func ownBlocked() bool { r, _ := ownRouteNow(); return r == routeBlock }
+
 func (p *DNSProxy) hardBlock(path, client string, err error) {
 	p.Stats.HardBlock.Add(1)
 	p.warnMu.Lock()
@@ -507,6 +569,9 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	case viaVPN:
 		resp, err = p.VPN.ResolveDNS(q)
 		via = "vpn"
+	case ownBootstrapName(dq.Name) && ownBlocked():
+		resp, fromURL, err = p.Up.ResolveBootstrap(q)
+		via = "doh"
 	default:
 		resp, via, fromURL, err = p.Up.ResolveFrom(q)
 	}

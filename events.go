@@ -9,7 +9,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
@@ -607,9 +606,9 @@ func (s *eventStore) Test() error {
 	return s.post(u, "Orbic", "A test notification from the Orbic", 3)
 }
 
-// postNtfy sends one notification the way ntfy expects: the body is the message, headers carry the title and priority. It goes out through our own dialler and root set.
+// postNtfy sends one notification the way ntfy expects: the body is the message, headers carry the title and priority. It goes out through ownDial (the tunnel, Tor or the cellular link as the state says: owndial.go) and our own root set.
 func postNtfy(u, title, body string, prio int) error {
-	c := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: rootPool(), MinVersion: tls.VersionTLS12}, DialContext: func(ctx context.Context, n, a string) (net.Conn, error) { return dialUpstream(ctx, n, a) }}}
+	c := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: rootPool(), MinVersion: tls.VersionTLS12}, DialContext: ownDial, DisableKeepAlives: true}}
 	req, err := http.NewRequest("POST", u, bytes.NewReader([]byte(body)))
 	if err != nil {
 		return errors.New("bad address")

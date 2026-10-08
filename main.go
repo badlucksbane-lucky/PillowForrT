@@ -392,7 +392,7 @@ func main() {
 		flt := NewFilter(*dnsDir)
 		flt.Load()
 		debug.FreeOSMemory() // hand the lists' parse garbage back to the OS now, not whenever the scavenger gets to it
-		up := newUpstream(upstreamConfig{DoHURLs: strings.Split(*dnsDoH, ","), Roots: rootPool(), Dial: dialUpstream})
+		up := newUpstream(upstreamConfig{DoHURLs: strings.Split(*dnsDoH, ","), Roots: rootPool(), Dial: ownDial, TimeoutFor: ownTimeout, RouteGen: ownRouteGen, BootDial: dialUpstream})
 		dnsProxy = &DNSProxy{Filter: flt, Up: up, Cache: newDNSCache(2000), Stats: NewDNSStats(), BlockTTL: 60, Neigh: newNeighbours()}
 		dnsUpdater = newListUpdater(flt)
 		if err := serveDNS(dnsProxy, *dnsListen); err != nil {

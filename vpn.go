@@ -360,6 +360,14 @@ func (v *VPN) ExitFor(client string) string {
 	return v.cfg.DefaultExit
 }
 
+// OwnState is what tinyfwd's own traffic needs to know: is Mullvad wanted (registered and on), is the tunnel up, and is the kill switch on.
+func (v *VPN) OwnState() (wanted, up, killSwitch bool) {
+	v.mu.Lock()
+	wanted, killSwitch = v.cfg.Registered && v.cfg.Enabled, v.cfg.KillSwitch
+	v.mu.Unlock()
+	return wanted, v.tun.isUp(), killSwitch
+}
+
 // Registered says whether this Orbic holds a Mullvad device slot (the tunnel can be used at all).
 func (v *VPN) Registered() bool {
 	v.mu.Lock()

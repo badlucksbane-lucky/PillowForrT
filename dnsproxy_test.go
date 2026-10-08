@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,12 +39,14 @@ type fakeDoH struct {
 	nx    atomic.Bool
 	delay atomic.Int64
 	last  atomic.Value // the last query body the upstream received
+	conns sync.Map     // the distinct client addresses (= connections) that have asked
 }
 
 func newFakeDoH(t *testing.T) (*fakeDoH, *x509.CertPool) {
 	f := &fakeDoH{ttl: 120}
 	f.Server = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.hits.Add(1)
+		f.conns.Store(r.RemoteAddr, true)
 		if d := f.delay.Load(); d > 0 {
 			time.Sleep(time.Duration(d))
 		}
