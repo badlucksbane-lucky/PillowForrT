@@ -48,6 +48,7 @@ var (
 	eventHook       = flag.String("on-event", "", "executable run as `hook silent` / `hook recover` when the heartbeat stops / returns")
 	dnsListen       = flag.String("dns-listen", "", "address for the DNS filter stub, e.g. 127.0.0.1:5354 (empty = DNS filter off)")
 	dnsDir          = flag.String("dns-dir", "/data/dnsfilter", "directory for the filter's lists, allow-list and state")
+	dnsGuardOn      = flag.Bool("dns-guard", true, "install and watch the DNS guard's firewall rules (redirect of devices' DNS to the filter; no plain DNS or DoT out of the cellular side); off leaves them to wpad-guard.sh")
 	dnsPlainAfter   = flag.Duration("dns-plain-after", -1*time.Second, "how long encrypted DNS must keep failing before queries may go out as plain DNS (SERVFAIL meanwhile); 0 = at the first failure, negative = never (the default; the install script passes it too). Tor and Mullvad devices are never answered in the clear whatever this says")
 	dnsDoH          = flag.String("dns-doh", "https://9.9.9.9/dns-query,https://1.1.1.1/dns-query,https://149.112.112.112/dns-query", "comma-separated DoH endpoints (IP literals, no bootstrap DNS)")
 	dnsResolv       = flag.String("dns-resolv", "/etc/resolv.conf", "file with the carrier's plain resolvers, the fallback when DoH is down")
@@ -381,6 +382,9 @@ func main() {
 		WriteTimeout: 0,
 	}
 	loadState()
+	if *dnsGuardOn && *dnsListen != "" {
+		startDNSGuard() // before anything else is up: the redirect and the refusals are in place from the first second
+	}
 	debug.SetMemoryLimit(48 << 20)
 	debug.SetGCPercent(40) // the live heap is small, so a tighter target costs little CPU and keeps resident memory near the live size (default 100 let it sit at twice that)
 	if *dnsListen != "" {

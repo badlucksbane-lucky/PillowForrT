@@ -9,7 +9,9 @@ add_rule() {
   cmd=$1; tbl=$2; chain=$3; shift 3
   $cmd -t $tbl -C $chain "$@" 2>/dev/null || $cmd -t $tbl -I $chain 1 "$@"
 }
-pass() {
+# The DNS rules. tinyfwd owns them (dnsguard.go: one chain per table, applied atomically, checked by hash) and says so by writing /var/volatile/dnsguard.on once they are in; until then (after a boot,
+# or with tinyfwd started with -dns-guard=false) this function installs the same protection the old way, and tinyfwd deletes these loose rules when it takes over.
+legacy_dns() {
   # every DNS query a device sends to anyone else (8.8.8.8, a router's own resolver...) comes to the Orbic instead, so the filter cannot be bypassed;
   # the client address is untouched, so the per-device view still works. Encrypted DNS (DoT, port 853) is refused so devices fall back to plain DNS.
   # (iptables 1.4 takes one -d per rule: the Orbic's own addresses are exempted first with RETURN rules, which end up above the REDIRECT)
@@ -24,13 +26,6 @@ pass() {
   add_rule ip6tables filter FORWARD -i bridge0 -p udp --dport 53 -j REJECT --reject-with icmp6-port-unreachable
   add_rule ip6tables filter FORWARD -i bridge0 -p tcp --dport 53 -j REJECT --reject-with tcp-reset
   add_rule ip6tables filter FORWARD -i bridge0 -p tcp --dport 853 -j REJECT --reject-with tcp-reset
-  # IPv6 firewall on the cellular side. The stock firmware leaves ip6tables INPUT and FORWARD at ACCEPT with no rules, while devices hold global IPv6 addresses (the companion computer
-  # listens on SMB, NFS, rpcbind and ssh over IPv6), so nothing but the carrier stood between them and the internet. Now: unsolicited NEW connections arriving from the cellular
-  # interfaces are DROPPED silently (stealth: no reset, no ICMP) both to the Orbic itself and to the LAN; replies to our own traffic and related ICMP errors pass, and the
-  # ICMPv6 types IPv6 cannot work without (errors 1-4, neighbour/router discovery 133-137) are allowed. Echo requests from outside get no answer.
-  add_rule ip6tables filter INPUT -i rmnet_data+ -m state --state NEW -j DROP
-  for t in 1 2 3 4 133 134 135 136 137; do add_rule ip6tables filter INPUT -i rmnet_data+ -p icmpv6 --icmpv6-type $t -j ACCEPT; done
-  add_rule ip6tables filter FORWARD -i rmnet_data+ -o bridge0 -m state --state NEW -j DROP
   # No plain DNS leaves over the cellular side, from the Orbic itself or from anyone behind it (): DNS is encrypted (DoH from tinyfwd), carried by the Mullvad tunnel
   # (10.64.0.1 inside it, so never on rmnet) or by Tor. tinyfwd runs with -dns-plain-after -1, so nothing needs the old plain fallback; measured 0 packets before this was added.
   # The redirect above still sends devices' DNS to the Orbic; these rules are the net under it (REJECT, so a stray resolver fails fast instead of hanging).
@@ -42,6 +37,16 @@ pass() {
       done
     done
   done
+}
+pass() {
+  [ -e /var/volatile/dnsguard.on ] || legacy_dns
+  # IPv6 firewall on the cellular side. The stock firmware leaves ip6tables INPUT and FORWARD at ACCEPT with no rules, while devices hold global IPv6 addresses (the companion computer
+  # listens on SMB, NFS, rpcbind and ssh over IPv6), so nothing but the carrier stood between them and the internet. Now: unsolicited NEW connections arriving from the cellular
+  # interfaces are DROPPED silently (stealth: no reset, no ICMP) both to the Orbic itself and to the LAN; replies to our own traffic and related ICMP errors pass, and the
+  # ICMPv6 types IPv6 cannot work without (errors 1-4, neighbour/router discovery 133-137) are allowed. Echo requests from outside get no answer.
+  add_rule ip6tables filter INPUT -i rmnet_data+ -m state --state NEW -j DROP
+  for t in 1 2 3 4 133 134 135 136 137; do add_rule ip6tables filter INPUT -i rmnet_data+ -p icmpv6 --icmpv6-type $t -j ACCEPT; done
+  add_rule ip6tables filter FORWARD -i rmnet_data+ -o bridge0 -m state --state NEW -j DROP
   # FOTA (the carrier's firmware-over-the-air engine, `upgrade`): its config already has autocheck/autodown/autoinstall = 0 and no server, and this keeps the
   # process itself suspended so it can never fetch or install anything (suspended, not killed: cpe_daemon would respawn a dead one). Undo: kill -CONT $(pidof upgrade).
   for p in $(pidof upgrade); do grep -q '^State:.*stopped' /proc/$p/status || kill -STOP $p; done

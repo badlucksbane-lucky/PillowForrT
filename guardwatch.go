@@ -5,9 +5,10 @@ package main
 // resolver would have gone out in the clear. This watcher closes that window two ways:
 //   - the cellular interface's state and addresses, and the carrier resolver file, are compared every 2 seconds; a change runs the guard at once, and again 5 and 20 seconds later
 //     (the firmware rebuilds a moment after the link settles, not always at the instant the address changes);
-//   - three of the guard's rules (the port-53 redirect, the IPv4 and IPv6 DNS rejects) are checked every 10 seconds, so a rebuild that is not a link change is caught as well. A run that
+//   - the DNS guard's rules are checked every 10 seconds (three table dumps, compared by hash), so a rebuild that is not a link change is caught as well. A run that
 //     finds a rule missing is recorded as an event, because the rules really were absent for a while.
-// The guard is run with `once` (one pass, no loop); it is idempotent. Runs are at least 3 seconds apart.
+// A run is: the DNS guard re-applied from here (dnsguard.go, one atomic restore per table), then the shell guard with `once` (one pass, no loop; idempotent). Runs are at least 3 seconds apart.
+// With the DNS guard on, "the rules are in place" is its hash check; without it, the three spot checks below.
 
 import (
 	"context"
@@ -147,6 +148,9 @@ func liveGuardWatch() *guardWatch {
 		now: time.Now,
 		sig: func() string { return linkSignature(guardCellIface, *dnsResolv) },
 		canaryOK: func() bool {
+			if dnsGuardG != nil {
+				return dnsGuardG.Verify() // the whole guard, by hash (dnsguard.go)
+			}
 			for _, c := range guardCanaries {
 				if _, err := run(c[0], c[1:]...); err != nil {
 					return false
@@ -155,6 +159,14 @@ func liveGuardWatch() *guardWatch {
 			return true
 		},
 		runGuard: func() {
+			if dnsGuardG != nil { // the DNS rules first, from here; the script does the rest of the guard's work (services address, SSH, firmware-update suspension, IPv6 firewall)
+				if err := dnsGuardG.Apply(); err != nil {
+					log.Printf("%v", err)
+				}
+			}
+			if _, err := os.Stat(*guardScript); err != nil {
+				return
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if out, err := exec.CommandContext(ctx, *guardScript, "once").CombinedOutput(); err != nil {
@@ -170,10 +182,10 @@ func liveGuardWatch() *guardWatch {
 }
 
 func startGuardWatch() {
-	if *guardScript == "" {
+	if *guardScript == "" && dnsGuardG == nil {
 		return
 	}
-	if _, err := os.Stat(*guardScript); err != nil {
+	if _, err := os.Stat(*guardScript); err != nil && dnsGuardG == nil {
 		log.Printf("guard watch off: %v", err)
 		return
 	}

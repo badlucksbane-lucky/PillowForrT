@@ -174,7 +174,7 @@ func TestHTTPUpgradeNat(t *testing.T) {
 	}
 }
 
-func TestEgressRulesCarryNatAndDNSRefusal(t *testing.T) {
+func TestEgressRulesCarryNatAndLeaveDNSToTheGuard(t *testing.T) {
 	c := defaultEgress()
 	v4, v6 := egressRules(c, false), egressRules(c, true)
 	if !strings.Contains(v4, "*nat\n:HS_HTTPUP") || strings.Contains(v6, "*nat") {
@@ -183,17 +183,15 @@ func TestEgressRulesCarryNatAndDNSRefusal(t *testing.T) {
 	if !strings.Contains(v4, "-A HS_EGRESS -p tcp -m multiport --dports 80,443 -j RETURN") {
 		t.Error("port 80 stays allowed")
 	}
-	i, j := strings.Index(v4, "--dports 53,853 -j REJECT"), strings.Index(v4, "--dports 80,443")
-	if i < 0 || j < 0 || i > j || !strings.Contains(v6, "-p udp -m multiport --dports 53,853 -j REJECT --reject-with icmp6-port-unreachable") {
-		t.Errorf("DNS and DoT must be refused ahead of the allow-list:\n%s", v4)
-	}
+	// DNS and DoT are refused in one place, the DNS guard (dnsguard.go), whatever mode or allow-list this chain has
 	c.Allow = append(c.Allow, egressRule{"udp", "53", "oops"})
-	if v := egressRules(c, false); strings.Index(v, "--dports 53,853 -j REJECT") > strings.Index(v, "-p udp -m multiport --dports 53 -j RETURN") {
-		t.Error("an allow rule for 53 must not get ahead of the refusal")
-	}
-	c.Mode = "monitor"
-	if strings.Contains(egressRules(c, false), "--dports 53,853") {
-		t.Error("watch-only mode refuses nothing; the guard does that")
+	for _, mode := range []string{"enforce", "monitor"} {
+		c.Mode = mode
+		for _, v := range []string{egressRules(c, false), egressRules(c, true)} {
+			if strings.Contains(v, "--dports 53,853") {
+				t.Errorf("%s: the egress chain must not carry its own copy of the DNS refusal:\n%s", mode, v)
+			}
+		}
 	}
 }
 
