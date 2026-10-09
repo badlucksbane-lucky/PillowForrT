@@ -44,7 +44,7 @@ const (
 	btDialWait   = 8 * time.Second
 	btAllowTTL   = 30 * time.Minute
 	btAllowMax   = 3000
-	wsMaxMessage = 512 << 10
+	wsMaxMessage = 128 << 10 // a BitTorrent message is a 16 KB block plus a few bytes; this leaves room for large extension messages
 )
 
 // ---- the peers this box handed out ----
@@ -194,73 +194,94 @@ func wsAccept(w http.ResponseWriter, r *http.Request) (net.Conn, *bufio.ReadWrit
 	return c, rw, nil
 }
 
-// wsRead returns the next data message (binary or text, fragments joined), answering pings itself. io.EOF means the peer closed.
-func wsRead(br *bufio.Reader, c net.Conn, wmu *sync.Mutex) ([]byte, error) {
-	var msg []byte
+// wsRead returns the next data message (binary or text, fragments joined), answering pings itself. io.EOF means the peer closed. The message is built in buf's memory
+// (grown only when a message is bigger than any before it), so the result is valid until the next call; callers keep the returned slice as the next buf.
+func wsRead(br *bufio.Reader, c net.Conn, wmu *sync.Mutex, buf []byte) ([]byte, error) {
+	msg := buf[:0]
 	for {
 		var h [2]byte
 		if _, err := io.ReadFull(br, h[:]); err != nil {
-			return nil, err
+			return msg, err
 		}
 		fin, op, masked, n := h[0]&0x80 != 0, h[0]&0x0f, h[1]&0x80 != 0, uint64(h[1]&0x7f)
 		switch n {
 		case 126:
 			var e [2]byte
 			if _, err := io.ReadFull(br, e[:]); err != nil {
-				return nil, err
+				return msg, err
 			}
 			n = uint64(binary.BigEndian.Uint16(e[:]))
 		case 127:
 			var e [8]byte
 			if _, err := io.ReadFull(br, e[:]); err != nil {
-				return nil, err
+				return msg, err
 			}
 			n = binary.BigEndian.Uint64(e[:])
 		}
-		if !masked || n > wsMaxMessage || uint64(len(msg))+n > wsMaxMessage { // a browser always masks; anything else, or anything huge, is not one
-			return nil, errors.New("bad WebSocket frame")
+		if !masked || n > wsMaxMessage || uint64(len(msg))+n > wsMaxMessage || (op >= 0x8 && n > 125) { // a browser always masks; anything else, or anything huge, is not one
+			return msg, errors.New("bad WebSocket frame")
 		}
 		var key [4]byte
 		if _, err := io.ReadFull(br, key[:]); err != nil {
-			return nil, err
+			return msg, err
 		}
-		p := make([]byte, n)
+		at := len(msg)
+		if need := at + int(n); need > cap(msg) {
+			grown := make([]byte, at, need)
+			copy(grown, msg)
+			msg = grown
+		}
+		p := msg[at : at+int(n)]
 		if _, err := io.ReadFull(br, p); err != nil {
-			return nil, err
+			return msg, err
 		}
 		for i := range p {
 			p[i] ^= key[i&3]
 		}
 		switch op {
 		case 0x8:
-			return nil, io.EOF
+			return msg[:at], io.EOF
 		case 0x9:
 			wmu.Lock()
-			wsWrite(c, 0xA, p)
+			wsWrite(c, 0xA, append([]byte(nil), p...))
 			wmu.Unlock()
+			msg = msg[:at]
 		case 0xA:
+			msg = msg[:at]
 		case 0x0, 0x1, 0x2:
-			msg = append(msg, p...)
+			msg = msg[:at+int(n)]
 			if fin {
 				return msg, nil
 			}
 		default:
-			return nil, errors.New("bad WebSocket opcode")
+			return msg, errors.New("bad WebSocket opcode")
 		}
 	}
 }
 
-func wsWrite(w io.Writer, op byte, p []byte) error {
-	h := []byte{0x80 | op}
+// wsHeader writes the frame header for an n-byte payload into the end of dst (which must be at least wsMaxHeader long) and returns the header's length;
+// the header then ends where the payload starts, so the caller reads the payload straight after it and sends header and payload in one Write.
+func wsHeader(dst []byte, op byte, n int) int {
 	switch {
-	case len(p) < 126:
-		h = append(h, byte(len(p)))
-	case len(p) < 1<<16:
-		h = append(h, 126, byte(len(p)>>8), byte(len(p)))
-	default:
-		h = append(h, 127, 0, 0, 0, 0, byte(len(p)>>24), byte(len(p)>>16), byte(len(p)>>8), byte(len(p)))
+	case n < 126:
+		dst[len(dst)-2], dst[len(dst)-1] = 0x80|op, byte(n)
+		return 2
+	case n < 1<<16:
+		copy(dst[len(dst)-4:], []byte{0x80 | op, 126, byte(n >> 8), byte(n)})
+		return 4
 	}
-	_, err := w.Write(append(h, p...))
+	copy(dst[len(dst)-10:], []byte{0x80 | op, 127, 0, 0, 0, 0, byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)})
+	return 10
+}
+
+const wsMaxHeader = 10
+
+// wsWrite sends one small frame (close, pong, error). The data path does not use it: it builds the frame in place (see conn).
+func wsWrite(w io.Writer, op byte, p []byte) error {
+	buf := make([]byte, wsMaxHeader+len(p))
+	hl := wsHeader(buf[:wsMaxHeader], op, len(p))
+	copy(buf[wsMaxHeader:], p)
+	_, err := w.Write(buf[wsMaxHeader-hl:])
 	return err
 }
 
@@ -312,13 +333,14 @@ func (m *btMgr) conn(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tc.Close()
 	go func() { // peer -> page
-		buf := make([]byte, 16<<10)
+		buf := make([]byte, wsMaxHeader+16<<10) // the frame header is built in the first bytes, so each chunk goes out in one Write with no copy
 		for {
 			tc.SetReadDeadline(time.Now().Add(btIdle))
-			n, err := tc.Read(buf)
+			n, err := tc.Read(buf[wsMaxHeader:])
 			if n > 0 {
+				hl := wsHeader(buf[:wsMaxHeader], 0x2, n)
 				wmu.Lock()
-				werr := wsWrite(c, 0x2, buf[:n])
+				_, werr := c.Write(buf[wsMaxHeader-hl : wsMaxHeader+n])
 				wmu.Unlock()
 				if werr != nil {
 					break
@@ -333,9 +355,11 @@ func (m *btMgr) conn(w http.ResponseWriter, r *http.Request) {
 		wmu.Unlock()
 		c.Close()
 	}()
-	for { // page -> peer
+	var in []byte // the page's messages are read into this one buffer
+	for {         // page -> peer
 		c.SetReadDeadline(time.Now().Add(btIdle))
-		msg, err := wsRead(rw.Reader, c, &wmu)
+		msg, err := wsRead(rw.Reader, c, &wmu, in)
+		in = msg
 		if err != nil {
 			return
 		}
