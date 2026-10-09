@@ -11,7 +11,7 @@
 
 ## Audit and fixes (2026-10-09)
 
-Eight commits, all deployed to the box and pushed (`origin/main` at `55289d9`). The binary on the box is the build of `30dab50`, sha256 starting `5772f759f08848795fd11cef8d9f19261e763b3e66f48ed9100ad41b507f3129` (full hash in `./build.sh` output).
+Nine code commits (`2b94e26` to `dc8dbb3`), all deployed to the box and pushed. The binary on the box is the build of `dc8dbb3`, sha256 `50434458d53f25c3ab75178cf5ce1c0980e54892d889bf2285a22413caa0cca0` (`./build.sh` prints it; the build is reproducible).
 
 | Commit | What | Measured effect |
 |---|---|---|
@@ -23,6 +23,7 @@ Eight commits, all deployed to the box and pushed (`origin/main` at `55289d9`). 
 | `92f4eb4` | DNS: next DoH resolver asked after 400 ms or at once on failure (hedged); identical in-flight lookups share one request; a failed lookup is remembered 5 s per route | unit tests only |
 | `f7feed9` | firewall: rules loaded only when they changed or the hooks are gone (a read-only check every 15 s, full re-assert every 5 min) instead of replacing both tables every 15 s | pause on a fake MAC applied and expired correctly; a deleted hook came back within 10 s |
 | `30dab50` | log: rotates at 512 KB (one `.1` copy), client aborts not logged, repeated proxy and TLS-handshake errors said once per 10 min or per minute with a count | old 3.8 MB log moved to `tinyfwd.log.1` (still world-writable, delete it when no longer needed) |
+| `dc8dbb3` | `scanProcs` reads `stat` and `cmdline` with bare syscalls and skips kernel threads; the conntrack parser walks the text in place and its strings no longer pin the whole table (before, anything stored from a parsed flow kept the whole dump alive) | on the Pi: `scanProcs` 25.7 to 6.6 ms and 5,655 to 893 allocations (1.2 MB to 47 KB); conntrack, 3,000 lines, 27.6 to 13.9 ms and 14,724 to 2,729 allocations (3.7 to 1.5 MB). On the box: service table and egress view verified, no errors |
 
 ### What the audit measured
 
@@ -39,12 +40,11 @@ Eight commits, all deployed to the box and pushed (`origin/main` at `55289d9`). 
 - **Filter fails open while the lists load:** for the first 9 s after a restart, names on the block lists are not blocked (the allow-list and your own rules apply at once). `Filter.LoadBase` and `LoadLists` in `filter.go`; the list updater waits for `LoadLists` before it checks for missing lists.
 - **Tunables** (variables, easy to change): `btRate` 2.5e6, `btBurst`, `btLoadLimit` 4.0, `btLookups` capacity 2, `btCacheTTL` 90 s (`btbridge.go`); `proxyMaxConns` 256, `proxyMaxPerClient` 128 (`proxylimit.go`); `HedgeAfter` 400 ms, `dnsFailTTL` 5 s (`dnsproxy.go`); `fwReassertEvery` 5 min (`fwrules.go`); `logMax` 512 KB (`lograte.go`). If a stream stutters while the CPU has room, the bridge cap is the first suspect.
 - **Failed lookups are remembered 5 s per route**, so a name that failed stays refused up to 5 s after the upstream recovers. The memory is keyed by route generation, so a route change (tunnel up, kill tier moved) clears its meaning.
+- **Oracle tests and benchmarks:** `oracle_test.go` keeps the original `parseConntrack` and `scanProcs` and checks the fast versions against them (the scan on a snapshot of the real `/proc`, since the live one changes between two reads); `perf_bench_test.go` re-measures both (`go test -run '^$' -bench 'ParseConntrack3000|ScanProcsRealProc' .`). If either function changes again, keep the oracles passing.
 - **A blocked name still makes some apps retry** through the proxy (the stub answers 0.0.0.0, the proxy refuses it); the log now says it once per 10 minutes.
 
 ### Still open from the audit
 
-- `scanProcs` (`system.go`) reads three files per process every 20 s; one read of `/proc/PID/stat` would do.
-- `egress.Sample` re-parses the whole conntrack table every 10 s with a map per line (`egress.go`); allocation heavy when flows are many.
 - 13 filter lists are searched one after another per DNS query (up to about 4 suffix levels each, binary search over 0.5M hashes); one merged hash table would be one lookup.
 - Event store rewrites its whole file on every batch; `macfilter` runs a long shell pipeline every 20 s (read-mostly, but still about 8 launches).
 - The race detector does not run on the Pi (its 39-bit address range is unsupported), so the concurrent code added this session (hedging, coalescing, the limiters) is tested but not race-checked.
@@ -56,7 +56,7 @@ All times below are the **box's clock (EDT)**; the Pi's clock (CDT, `~/freeze-wa
 - The daemon was deployed at **07:45:34** (commit `5e7fd15`, the bridge write path). Vitals were healthy until **07:49:38** (CPU 11 %, load 1.29, 61.7 MB available, 109 goroutines).
 - Then the box restarted at **07:50:28, 07:51:26, 07:53:52, 07:58:00, 08:05:41 and 08:06:43**. Before each, the last vitals line was healthy (CPU 6 to 15 %, load 1.3 to 2.3, 62 to 70 MB free); nothing ramped. The watcher confirmed four of them as **cold reboots** (box uptime dropped from 6148 s to 44, then 40, 44, 38); the 08:05 start is a fifth by the box's current uptime (it booted at about 08:05:06); 08:06:43 is a daemon restart 62 s later. The daemon's vitals started up again about 55 s after each.
 - The **Pi rebooted too** at 07:58:01 box time (06:58:01 Pi clock), and the watcher died with it. That is **within one second of the box daemon's fourth start (07:58:00)**: look for something on the box that power-cycles or reboots the Pi (USB port power, a script), or for both losing power together. The cause is unknown (no journal from the previous boot; throttled flags are clean now). The Pi's watcher was restarted at about 16:52 Pi clock and was logging again.
-- Since the 08:05 boot the box has **not rebooted** in 9.8 hours, through five more deploys. Every later start in the log is a deploy.
+- Since the 08:05 boot the box has **not rebooted**: uptime was 37,403 s (10.4 h) at 18:28, through seven deploys (08:25, 16:40, 16:53, 17:11, 17:27, 17:46, 18:21). Every later start in the log is a deploy, and the restarted watcher has seen no uptime drop. That is a quiet box, not a playback test: nobody has played from the Pixel since the cluster.
 - No dmesg from before the 08:05 boot survives (no pstore), and the PMIC power-on reason was not read. The current-boot dmesg matched none of the power, reset, watchdog or battery patterns I grepped; `/sys/class/power_supply/usb` shows online with an odd `VOLTAGE_NOW=-19`.
 - **I do not know what happened.** Healthy vitals just before a sudden death, a Pi reboot at the same time, and a stable stretch afterwards all fit a **power problem** (the box runs on its battery, about 3.7 V; an unplug, a loose cable, a battery cutting out) better than a software fault, but nothing proves it. It may also have been a playback test from the Pixel with the new bridge code: whether anyone was playing between 07:45 and 08:06 is not recorded. Ask Ben. If he was playing, the bridge write-path change (`5e7fd15`) is the one to suspect, and the unit tests do not cover real load.
 - Cheap things that would help: read the PMIC reason right after a boot (`dmesg | grep -i pon`), record battery voltage and charger state in the watcher, and note on the watcher which USB or power source feeds the Pi.
@@ -77,7 +77,7 @@ All times below are the **box's clock (EDT)**; the Pi's clock (CDT, `~/freeze-wa
 | | |
 |---|---|
 | Repo | `github.com/badlucksbane-lucky/PillowForrT` (`origin`, public, full history). The old repo is the `stone-of-heimdall` remote, untouched. |
-| Head | `30dab50` plus this file. The binary on the box is the build of `30dab50`, sha256 starting `5772f759f08848795fd`. Everything is pushed (`origin/main` at `55289d9`, this file's last commit). |
+| Head | The last code commit is `dc8dbb3`; the docs commits after it only touch this file. The binary on the box is the build of `dc8dbb3`, sha256 starting `50434458d53f25c3ab7`. Everything is pushed. |
 | Web page | `https://pillowforrt.lan/` (also `pillowforrt`). SSH alias `pillowforrt`. Local config in `~/.pillowforrt` (`tls.pem` pinned certificate, `ui.token`). |
 | Certificate | Self-signed, marked as a CA limited by critical name constraints to this box's own names and two addresses (Android's installer only installs a CA). SHA-256 begins `4C:A4:AD:90`. Valid 800 days from 2026-10-09. |
 | Deploy | `./build.sh` then `scripts/deploy-tinyfwd.sh` (rolls back by itself if the daemon doesn't answer). Always ask Ben before committing or deploying: he says "commit, build and deploy" each time. |
