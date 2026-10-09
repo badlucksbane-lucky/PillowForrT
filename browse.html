@@ -256,7 +256,7 @@ $('#pclose').addEventListener('click',()=>closePlayer());
 async function play(hash,name,mg){
  stopPlayer();pv.replaceChildren();ppick.hidden=true;$('#ptitle').textContent=name;
  if(!playerEl.classList.contains('open')){history.pushState({player:1},'');playerEl.classList.add('open');playerEl.inert=false;document.body.classList.add('lock')}
- const say=(msg,bad)=>pstat.replaceChildren(h('div',{class:'row2'},h('span',{class:bad?'err':'',text:msg}),h('span',{class:'pbtn'},h('a',{class:'btn ghost',href:mg,text:'Open magnet'}))));
+ const say=(msg,bad)=>pstat.replaceChildren(h('div',{class:'row2'},h('span',{class:bad?'err':'',text:msg}),h('span',{class:'pbtn'},/certificate/i.test(msg)?h('a',{class:'btn',href:'/api/cert/orbic.crt',text:'Trust certificate'}):null,h('a',{class:'btn ghost',href:mg,text:'Open magnet'}))));
  say('Starting…');
  const st=await btStatus(true);if(!st.enabled||st.ready){say(st.ready||'Playback is off',true);return}
  let c;try{c=await engine()}catch(e){say(e.message,true);return}

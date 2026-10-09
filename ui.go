@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"io"
 	"net"
@@ -386,6 +387,21 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 		w.Header().Set("Content-Type", "application/x-pem-file")
 		w.Header().Set("Content-Disposition", `attachment; filename="orbic-web-certificate.pem"`)
 		w.Write(pem)
+	case path == "cert/orbic.crt" && r.Method == http.MethodGet:
+		// The same public certificate, sent as a CA certificate (DER): Android's Chrome and iPhone's Safari offer to install that type when it is opened, where the .pem download above
+		// only saves a file. Installing it is what lets a browser register the player's service worker, which refuses an origin with a certificate warning.
+		if certMgr == nil {
+			http.Error(w, "not found", 404)
+			return
+		}
+		pemb, err := certMgr.PEM()
+		der, derr := certInstallDER(pemb)
+		if err != nil || derr != nil {
+			http.Error(w, "no certificate", 404)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+		w.Write(der)
 	case path == "ssh" && r.Method == http.MethodGet:
 		writeJSON(w, 200, sshMgr.View())
 	case (path == "ssh/add" || path == "ssh/delete") && r.Method == http.MethodPost:
@@ -1099,7 +1115,7 @@ func handleBackup(w http.ResponseWriter, r *http.Request, path string) {
 
 // settingsPaths are the endpoints handled by handleSettings (everything that is not DNS, VPN, account or backup). Adding an endpoint there means adding it here too.
 var settingsPaths = map[string]bool{
-	"wifi": true, "dhcp": true, "cell": true, "diag": true, "diag/run": true, "diag/report": true, "cert": true, "cert/renew": true, "cert/download": true,
+	"wifi": true, "dhcp": true, "cell": true, "diag": true, "diag/run": true, "diag/report": true, "cert": true, "cert/renew": true, "cert/download": true, "cert/orbic.crt": true,
 	"ssh": true, "ssh/add": true, "ssh/delete": true, "sms": true, "devices": true, "devices/note": true, "graphs": true, "linkhist": true, "canary": true, "rogue-dhcp": true, "rogue-dhcp/allow": true, "arp": true, "tor": true, "tor/set": true, "tor/device": true, "tor/overvpn": true, "device/mode": true, "tor/test": true, "speed": true, "speed/set": true, "speed/run": true, "canary/set": true, "canary/ignore": true, "actions": true, "actions/set": true, "actions/delete": true, "actions/run": true, "events": true, "events/seen": true, "events/clear": true, "notify/set": true, "notify/clear": true, "notify/test": true, "devices/wake": true, "devices/watch": true,
 	"system": true, "system/reboot": true, "system/stockadmin": true, "system/lanv6": true, "egress": true, "egress/set": true, "egress/allow": true, "egress/remove": true, "egress/service": true, "egress/httpupgrade": true,
 	"dnscanary": true, "dnscanary/set": true, "macchurn": true, "torbypass": true, "beacon": true, "beacon/ignore": true, "dganxdomain": true, "tlssni": true, "tlscert": true, "lanannounce": true, "dnsxcheck": true, "dnsmitm": true, "dhcpfp": true, "ttl": true, "ttl/ignore": true, "admintrip": true, "steer": true, "steer/allow": true, "rebind": true, "rebind/set": true, "rebind/allow": true,
@@ -1227,4 +1243,19 @@ func dnsSummary() map[string]any {
 	sn := dnsProxy.Stats.Snapshot(0, 0)
 	return map[string]any{"enabled": true, "mode": dnsProxy.Filter.Mode(), "upstream_mode": dnsProxy.Up.State().Mode,
 		"queries": sn.Queries, "blocked": sn.Blocked, "errors": sn.Errors}
+}
+
+// certInstallDER returns the first certificate in a PEM file as DER, the form a phone installs.
+func certInstallDER(p []byte) ([]byte, error) {
+	for len(p) > 0 {
+		var b *pem.Block
+		b, p = pem.Decode(p)
+		if b == nil {
+			break
+		}
+		if b.Type == "CERTIFICATE" {
+			return b.Bytes, nil
+		}
+	}
+	return nil, errors.New("no certificate in the file")
 }

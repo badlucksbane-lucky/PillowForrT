@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
@@ -413,5 +414,30 @@ func TestBTSettings(t *testing.T) {
 	handleBTAPIWith(m, w, httptest.NewRequest("POST", "/api/bt/set", strings.NewReader(`{"upload":"x"}`)), "bt/set")
 	if w.Code != 400 {
 		t.Fatal("bad mode accepted")
+	}
+}
+
+func TestCertInstallDER(t *testing.T) {
+	cm, _, err := newCertManager(t.TempDir(), []string{"orbic"}, []net.IP{net.ParseIP("192.168.1.1")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := cm.PEM()
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := certInstallDER(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := x509.ParseCertificate(der)
+	if err != nil || len(c.DNSNames) == 0 || c.DNSNames[0] != "orbic" {
+		t.Fatalf("not the box certificate: %v", err)
+	}
+	if _, err := certInstallDER([]byte("not a pem")); err == nil {
+		t.Fatal("garbage must be refused")
+	}
+	if _, err := certInstallDER([]byte("-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n")); err == nil {
+		t.Fatal("only a certificate may be handed out, never a key")
 	}
 }
