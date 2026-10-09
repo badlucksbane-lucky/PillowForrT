@@ -141,6 +141,7 @@ func (u *webUI) handler() http.Handler {
 	mux.HandleFunc("/logout", u.logout)
 	mux.HandleFunc("/ui", u.page)
 	mux.HandleFunc("/search", u.searchPage)
+	mux.HandleFunc("/browse", u.browsePage)
 	mux.HandleFunc("/opensearch.xml", serveOpenSearch)
 	mux.HandleFunc("/api/", u.apiAuthed(handleAPI))
 	mux.HandleFunc("/status.json", func(w http.ResponseWriter, r *http.Request) { secureHeaders(w); serveStatus(w, r) })
