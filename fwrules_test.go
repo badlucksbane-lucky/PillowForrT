@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -127,5 +128,103 @@ func TestScheduleZone(t *testing.T) { // the same instant is 22:30 Friday in Chi
 	inst := time.Date(2026, 10, 3, 3, 30, 0, 0, time.UTC) // Fri 22:30 Chicago (CDT)
 	if schedActive(s, inst.In(chi)) || !schedActive(s, inst.In(ny)) {
 		t.Error("zone not honoured")
+	}
+}
+
+func TestFWReconcileLoadsOnlyWhatChanged(t *testing.T) {
+	m, applied, now := newFW(t)
+	intact := true
+	checks := 0
+	m.intact = func() bool { checks++; return intact }
+	m.AddDest("203.0.113.5", "") // an edit loads at once
+	if len(*applied) != 1 {
+		t.Fatalf("an edit must load the rules once: %d", len(*applied))
+	}
+	for i := 0; i < 5; i++ { // the 15 s loop with nothing to do
+		*now = now.Add(15 * time.Second)
+		m.Reconcile()
+	}
+	if len(*applied) != 1 || checks != 5 {
+		t.Errorf("idle loop: %d loads, %d hook checks (want 1 load, a hook check each time)", len(*applied), checks)
+	}
+	intact = false // the stock firmware rebuilt its tables
+	*now = now.Add(15 * time.Second)
+	m.Reconcile()
+	if len(*applied) != 2 {
+		t.Errorf("lost hooks must load the rules again: %d", len(*applied))
+	}
+	intact = true
+	*now = now.Add(15 * time.Second)
+	m.Reconcile()
+	if len(*applied) != 2 {
+		t.Errorf("quiet again: %d", len(*applied))
+	}
+	*now = now.Add(fwReassertEvery)
+	m.Reconcile()
+	if len(*applied) != 3 {
+		t.Errorf("the periodic re-assert: %d", len(*applied))
+	}
+}
+
+func TestFWReconcileLoadsWhenAScheduleStartsAndEnds(t *testing.T) {
+	m, applied, now := newFW(t)
+	if err := m.SetSched(fwSched{MAC: "aa:bb:cc:dd:ee:01", Days: []int{5}, From: "22:00", To: "23:00", Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	// the real loop looks every 15 s; the fake clock walks forward the same way (a jump of minutes would rightly trigger the periodic re-assert)
+	walk := func(to time.Time) {
+		for now.Before(to) {
+			*now = now.Add(15 * time.Second)
+			m.Reconcile()
+		}
+	}
+	*now = at(5, "21:50")
+	m.Reconcile()
+	n := len(*applied)
+	walk(at(5, "21:59"))
+	if len(*applied) > n+2 { // at most the 5-minute re-asserts
+		t.Errorf("before the window: %d loads in 9 minutes", len(*applied)-n)
+	}
+	n = len(*applied)
+	walk(at(5, "22:00").Add(15 * time.Second)) // the window opens
+	if len(*applied) != n+1 || !strings.Contains((*applied)[n], "ee:01") {
+		t.Fatalf("the start of a window must load the rules: %d -> %d", n, len(*applied))
+	}
+	n = len(*applied)
+	walk(at(5, "22:04"))
+	if len(*applied) != n {
+		t.Errorf("in the middle of the window nothing changes: %d loads", len(*applied)-n)
+	}
+	walk(at(5, "23:00").Add(15 * time.Second)) // and closes
+	last := (*applied)[len(*applied)-1]
+	if strings.Contains(last, "ee:01") {
+		t.Error("the end of a window must load the rules without the cut")
+	}
+}
+
+func TestFWFailedLoadIsRetried(t *testing.T) {
+	m, _, now := newFW(t)
+	fail := true
+	loads := 0
+	m.apply = func(v4, v6 string) error {
+		loads++
+		if fail {
+			return errors.New("busy")
+		}
+		return nil
+	}
+	m.Reconcile()
+	*now = now.Add(15 * time.Second)
+	m.Reconcile()
+	if loads != 2 {
+		t.Errorf("a failed load must be tried again at the next look: %d", loads)
+	}
+	fail = false
+	*now = now.Add(15 * time.Second)
+	m.Reconcile()
+	*now = now.Add(15 * time.Second)
+	m.Reconcile()
+	if loads != 3 {
+		t.Errorf("after a good load it stops: %d", loads)
 	}
 }

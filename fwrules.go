@@ -4,8 +4,9 @@ package main
 //   - blocked destinations: an IP or CIDR no device on the network (and not the box itself, so the proxied traffic is covered too) may reach;
 //   - internet schedules and pauses: a device's internet is cut during a weekly window or until a time, while its LAN access, DHCP and this web page stay.
 // The list of record is /data/proxy/fw.json (0600). Everything is rendered into chains we own (HS_FW forward, HS_FWIN input, HS_FWOUT output, HS_FW6 for
-// IPv6) and loaded atomically with iptables-restore --noflush; a loop every 15 s re-evaluates the clock, expires pauses and re-asserts the hooks, which the stock
-// firmware can rebuild. Rules are matched by MAC, as the block list is.
+// IPv6) and loaded atomically with iptables-restore --noflush. A loop every 15 s re-evaluates the clock and expires pauses, but only LOADS the rules when they changed
+// (a schedule began or ended, a pause ran out) or the hooks have gone (the stock firmware can rebuild its tables), with a full re-assert every few minutes besides: a load
+// replaces the whole table, which the kernel makes every packet wait out, and the old userspace has no lock against another writer. Rules are matched by MAC, as the block list is.
 
 import (
 	"encoding/json"
@@ -180,11 +181,18 @@ func planFW(st fwState, cut []string) (v4, v6 string) {
 }
 
 type fwManager struct {
-	mu    sync.Mutex
-	path  string
-	now   func() time.Time
-	apply func(v4, v6 string) error
+	mu     sync.Mutex
+	path   string
+	now    func() time.Time
+	apply  func(v4, v6 string) error
+	intact func() bool // cheap and read-only: are the chains still hooked in? (nil = assume so)
+	// what was loaded last, and when
+	lastV4, lastV6 string
+	lastAt         time.Time
 }
+
+// fwReassertEvery is how often the rules are loaded again although nothing changed and the hooks look fine: a rule edited behind our back would not show in the hook check.
+const fwReassertEvery = 5 * time.Minute
 
 // schedLoc is the zone schedules and the page's clock use (the -tz flag; the stock firmware's own clock is fixed Eastern).
 func schedLoc() *time.Location {
@@ -196,6 +204,10 @@ func schedLoc() *time.Location {
 	return loc
 }
 
+var fwHooks = [][2]string{
+	{"iptables", "FORWARD 2 -j HS_FW"}, {"iptables", "INPUT 2 -j HS_FWIN"}, {"iptables", "OUTPUT 1 -j HS_FWOUT"}, {"ip6tables", "FORWARD 1 -j HS_FW6"},
+}
+
 func defaultFWManager() *fwManager {
 	loc := schedLoc()
 	return &fwManager{path: *fwFile, now: func() time.Time { return time.Now().In(loc) }, apply: func(v4, v6 string) error {
@@ -205,9 +217,7 @@ func defaultFWManager() *fwManager {
 		if err := restore("ip6tables-restore", v6); err != nil {
 			return err
 		}
-		for _, h := range [][2]string{
-			{"iptables", "FORWARD 2 -j HS_FW"}, {"iptables", "INPUT 2 -j HS_FWIN"}, {"iptables", "OUTPUT 1 -j HS_FWOUT"}, {"ip6tables", "FORWARD 1 -j HS_FW6"},
-		} {
+		for _, h := range fwHooks {
 			parts := strings.SplitN(h[1], " ", 2) // "FORWARD", "2 -j HS_FW"
 			chain, rest := parts[0], parts[1]
 			spec := rest[strings.Index(rest, "-j"):]
@@ -216,6 +226,14 @@ func defaultFWManager() *fwManager {
 			}
 		}
 		return nil
+	}, intact: func() bool {
+		var checks []string // one shell for all four, and read-only: a check never replaces a table
+		for _, h := range fwHooks {
+			parts := strings.SplitN(h[1], " ", 2)
+			checks = append(checks, fmt.Sprintf("%s -C %s %s", h[0], parts[0], parts[1][strings.Index(parts[1], "-j"):]))
+		}
+		_, err := run("sh", "-c", strings.Join(checks, " >/dev/null 2>&1 && ")+" >/dev/null 2>&1")
+		return err == nil
 	}}
 }
 
@@ -246,9 +264,25 @@ func (m *fwManager) commit(st fwState) error {
 	return nil
 }
 
+// reapply loads the rules now and remembers what was loaded.
 func (m *fwManager) reapply(st fwState) error {
 	v4, v6 := planFW(st, cutMACs(st, m.now()))
-	return m.apply(v4, v6)
+	if err := m.apply(v4, v6); err != nil {
+		m.lastV4, m.lastV6 = "", "" // a failed load is tried again at the next look
+		return err
+	}
+	m.lastV4, m.lastV6, m.lastAt = v4, v6, m.now()
+	return nil
+}
+
+// current says whether what is loaded is still right: the same rules as now, loaded recently, with the hooks in place.
+func (m *fwManager) current(st fwState) bool {
+	now := m.now()
+	v4, v6 := planFW(st, cutMACs(st, now))
+	if m.lastV4 == "" || v4 != m.lastV4 || v6 != m.lastV6 || now.Sub(m.lastAt) >= fwReassertEvery || now.Before(m.lastAt) {
+		return false
+	}
+	return m.intact == nil || m.intact()
 }
 
 func (m *fwManager) Reconcile() {
@@ -264,6 +298,9 @@ func (m *fwManager) Reconcile() {
 	}
 	if changed {
 		m.save(st)
+	}
+	if m.current(st) {
+		return
 	}
 	if err := m.reapply(st); err != nil {
 		fmt.Fprintf(os.Stderr, "firewall: %v\n", err)
