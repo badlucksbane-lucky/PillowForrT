@@ -1,10 +1,11 @@
 package main
 
 // The DNS filter: which names are blocked. A catalog of published lists (defaultLists), each switched on or off, plus the owner's own wildcard rules (filtrules.go).
-// Lists differ in how they are published: "wildcard" lists cover an entry's subdomains too (suffix match), "exact" lists do not. Every downloaded list stays in memory
-// as sorted 64-bit hashes (8 bytes a name; hashset.go), so enabling or disabling one is instant, with no reload and no DNS stall. All lists together are held to
-// maxTotalEntries (about 19 MB, 20 MB is acceptable); a download that would exceed it is refused and the old copy kept. Downloads are streamed straight
-// into hashes and the compiled file, so a big list never exists as a slice of strings.
+// Lists differ in how they are published: "wildcard" lists cover an entry's subdomains too (suffix match), "exact" lists do not. Every downloaded list stays in memory,
+// all of them together in one table of 64-bit name hashes with a mask of the lists that have each name (listindex.go), so a query is a few probes whatever the number of
+// lists, and enabling or disabling a list is instant: no reload, no DNS stall. All lists together are held to maxTotalEntries (the table costs about 11 bytes a name, so
+// 26 MB at the limit); a download that would exceed it is refused and the old copy kept. Downloads are streamed straight into hashes and the compiled file, so a big
+// list never exists as a slice of strings.
 
 import (
 	"bufio"
@@ -12,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/bits"
 	"net"
 	"os"
 	"path/filepath"
@@ -33,7 +35,7 @@ type listSpec struct {
 }
 
 const maxListEntries = 1_000_000  // one list
-const maxTotalEntries = 2_400_000 // all lists together: about 19 MB of hashes
+const maxTotalEntries = 2_400_000 // all lists together: about 26 MB of table
 
 var defaultLists = []listSpec{
 	{"oisd", "https://small.oisd.nl/domainswild2", "domains", true, "Ads and trackers", "OISD small: a short, low-breakage list", 0, true},
@@ -82,7 +84,6 @@ type listData struct {
 	Cat     string    `json:"category,omitempty"`
 	Desc    string    `json:"desc,omitempty"`
 	On      bool      `json:"enabled"`
-	set     hashSet
 }
 
 type Filter struct {
@@ -96,8 +97,22 @@ type Filter struct {
 	custom     *customRules
 	allowGlob  []string
 	pauseUntil time.Time
+	index      *listIndex    // every downloaded list, merged (guarded by mu)
+	enabledBit uint16        // the enabled lists as a mask (guarded by mu; kept by recountEnabled)
+	indexMu    sync.Mutex    // one rebuild of the index at a time; taken before mu
 	ready      chan struct{} // closed when every list on disk has been read (LoadLists)
 	readyOnce  sync.Once
+}
+
+// recountEnabled refreshes the enabled mask from the enabled map. Caller holds f.mu (or owns f).
+func (f *Filter) recountEnabled() {
+	var m uint16
+	for n, on := range f.enabled {
+		if b, ok := listBit[n]; ok && on {
+			m |= 1 << b
+		}
+	}
+	f.enabledBit = m
 }
 
 func NewFilter(dir string) *Filter {
@@ -105,7 +120,9 @@ func NewFilter(dir string) *Filter {
 	for _, sp := range defaultLists {
 		en[sp.Name] = sp.Default
 	}
-	return &Filter{dir: dir, lists: map[string]*listData{}, mode: "on", allow: map[string]struct{}{}, devMode: map[string]string{}, enabled: en, custom: newCustomRules(dir), ready: make(chan struct{})}
+	f := &Filter{dir: dir, lists: map[string]*listData{}, mode: "on", allow: map[string]struct{}{}, devMode: map[string]string{}, enabled: en, custom: newCustomRules(dir), ready: make(chan struct{})}
+	f.recountEnabled()
+	return f
 }
 
 var skipNames = map[string]bool{
@@ -352,6 +369,7 @@ func (f *Filter) LoadBase() {
 			}
 		}
 	}
+	f.recountEnabled()
 	f.custom = newCustomRules(f.dir)
 	if b, err := os.ReadFile(f.allowPath()); err == nil {
 		for _, ln := range strings.Split(string(b), "\n") {
@@ -363,45 +381,105 @@ func (f *Filter) LoadBase() {
 	}
 }
 
-// LoadLists reads every compiled list on disk, one at a time, and puts each into service as soon as it is read, without holding the lock while it reads (a list takes a
-// few seconds on the box's one slow core, and all of them together more than that). Until a list is in, names on it are not blocked: for those seconds the filter fails open
-// on the block lists only, where holding DNS back until they are all read would leave the whole house without name lookups after every restart. A list the updater has
+// LoadLists reads every compiled list on disk and builds the table from them. All the lists' hashes go into one array (tagged with the list's number, see listindex.go), which
+// is sorted and compacted in place, so the memory it needs at its peak is about the size of the table and not several times it. No lock is held while it reads or builds (that
+// takes seconds on the box's one slow core); the lists all come into service together at the end. Until then names on them are not blocked: for those seconds the filter
+// fails open on the block lists only, where holding DNS back until they are read would leave the whole house without name lookups after every restart. A list the updater has
 // already replaced meanwhile is left alone.
 func (f *Filter) LoadLists() {
 	defer f.readyOnce.Do(func() { close(f.ready) })
+	type read struct {
+		bit      int
+		from, to int // its records in recs
+		fi       os.FileInfo
+	}
+	var found []read
+	var size int64
 	for _, sp := range defaultLists {
-		fi, err := os.Stat(f.listPath(sp.Name))
-		if err != nil {
+		if fi, err := os.Stat(f.listPath(sp.Name)); err == nil {
+			found = append(found, read{bit: listBit[sp.Name], fi: fi})
+			size += fi.Size()
+		}
+	}
+	recs := make([]uint64, 0, size/16) // a name and its newline average about 18 bytes: sized once, not grown by append
+	got := found[:0]
+	for _, r := range found {
+		from := len(recs)
+		var err error
+		if recs, err = appendCompiled(f.listPath(defaultLists[r.bit].Name), r.bit, recs, maxListEntries); err != nil || len(recs) == from {
+			recs = recs[:from]
 			continue
 		}
-		set, err := loadCompiled(f.listPath(sp.Name), maxListEntries)
-		f.mu.Lock()
+		r.from, r.to = from, len(recs)
+		got = append(got, r)
+	}
+
+	f.indexMu.Lock()
+	defer f.indexMu.Unlock()
+	f.mu.Lock()
+	total := 0
+	for _, l := range f.lists {
+		total += l.Entries
+	}
+	var kept []read
+	w := 0
+	for _, r := range got {
+		sp := defaultLists[r.bit]
 		l := f.lists[sp.Name]
 		if l == nil {
 			l = &listData{Name: sp.Name}
 			f.lists[sp.Name] = l
 		}
-		if err != nil || len(set) == 0 || l.set != nil {
-			f.mu.Unlock()
-			continue
-		}
-		total := len(set)
-		for n, o := range f.lists {
-			if n != sp.Name {
-				total += o.Entries
-			}
-		}
-		if total > maxTotalEntries {
+		switch n := r.to - r.from; {
+		case l.Entries > 0: // the updater got there first
+		case total+n > maxTotalEntries:
 			l.Err = "not loaded: the lists together would pass the memory budget"
-			f.mu.Unlock()
-			continue
+		default:
+			total += n
+			w += copy(recs[w:], recs[r.from:r.to]) // close the gap a skipped list leaves
+			kept = append(kept, r)
 		}
-		l.Wild, l.set, l.Entries = sp.Wildcard, set, len(set)
-		if l.Updated.IsZero() {
-			l.Updated = fi.ModTime()
-		}
-		f.mu.Unlock()
 	}
+	base := f.index
+	f.mu.Unlock()
+	recs = recs[:w]
+	if len(recs) == 0 {
+		return
+	}
+	next := indexFromRecords(recs)
+	if base != nil && len(base.keys) > 0 { // the updater published a list while this was reading: keep it
+		next = mergeIndexes(base, next)
+	}
+	counts := next.listCounts()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.index = next
+	for _, r := range kept {
+		sp, l := defaultLists[r.bit], f.lists[defaultLists[r.bit].Name]
+		l.Wild, l.Entries = sp.Wildcard, counts[r.bit]
+		if l.Updated.IsZero() {
+			l.Updated = r.fi.ModTime()
+		}
+	}
+}
+
+// appendCompiled reads a compiled list file and appends its names to dst as tagged records (list number in the low bits of the hash).
+func appendCompiled(path string, bit int, dst []uint64, max int) ([]uint64, error) {
+	fh, err := os.Open(path)
+	if err != nil {
+		return dst, err
+	}
+	defer fh.Close()
+	sc := bufio.NewScanner(fh)
+	sc.Buffer(make([]byte, 64*1024), 1<<20)
+	n := 0
+	for sc.Scan() {
+		if name := strings.TrimSpace(sc.Text()); name != "" && n < max {
+			dst = append(dst, tagRecord(hashName(name), bit))
+			n++
+		}
+	}
+	return dst, sc.Err()
 }
 
 func (f *Filter) rebuildAllowGlobs() {
@@ -415,23 +493,30 @@ func (f *Filter) rebuildAllowGlobs() {
 
 // setListSet publishes a freshly compiled list (already written to disk by the caller). It refuses a list that would push the total past the memory budget.
 func (f *Filter) setListSet(sp listSpec, set hashSet, etag, lastmod string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+	f.indexMu.Lock()
+	defer f.indexMu.Unlock()
+	f.mu.RLock()
 	total := len(set)
 	for n, l := range f.lists {
 		if n != sp.Name {
 			total += l.Entries
 		}
 	}
+	base := f.index
+	f.mu.RUnlock()
 	if total > maxTotalEntries {
 		return fmt.Errorf("would pass the memory budget (%d names in all, at most %d)", total, maxTotalEntries)
 	}
+	next := base.withList(listBit[sp.Name], set) // the old copy of this list leaves the table as the new one enters; no lock held while it is built
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.index = next
 	l := f.lists[sp.Name]
 	if l == nil {
 		l = &listData{Name: sp.Name}
 		f.lists[sp.Name] = l
 	}
-	l.Wild, l.set, l.Entries, l.Updated, l.ETag, l.LastMod, l.Err = sp.Wildcard, set, len(set), time.Now(), etag, lastmod, ""
+	l.Wild, l.Entries, l.Updated, l.ETag, l.LastMod, l.Err = sp.Wildcard, len(set), time.Now(), etag, lastmod, ""
 	f.saveState()
 	return nil
 }
@@ -477,6 +562,7 @@ func (f *Filter) SetMode(m string) error {
 		m = "on"
 	}
 	f.mode = m
+	f.recountEnabled()
 	f.saveState()
 	return nil
 }
@@ -489,6 +575,7 @@ func (f *Filter) SetListEnabled(name string, on bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.enabled[name] = on
+	f.recountEnabled()
 	f.saveState()
 	return nil
 }
@@ -570,27 +657,18 @@ type decision struct {
 	Category string `json:"category,omitempty"`
 }
 
-// listsFor returns the names of the lists that apply for a mode. Caller holds f.mu.
-func (f *Filter) listsFor(mode string) []string {
-	var out []string
+// modeMask is the set of lists a mode consults: the enabled ones for the default, every downloaded one for strict, the named ones for a first-version mode, none for off.
+// Caller holds f.mu.
+func (f *Filter) modeMask(mode string) uint16 {
 	switch {
 	case mode == "off":
+		return 0
 	case mode == "strict":
-		for _, sp := range defaultLists {
-			if l := f.lists[sp.Name]; l != nil && l.set != nil {
-				out = append(out, sp.Name)
-			}
-		}
-	case legacyModes[mode] != nil:
-		out = legacyModes[mode]
-	default: // "on" / "default"
-		for _, sp := range defaultLists {
-			if f.enabled[sp.Name] {
-				out = append(out, sp.Name)
-			}
-		}
+		return allMask // lists that are not downloaded have no names in the index, so they add nothing
+	case legacyMask[mode] != 0:
+		return legacyMask[mode]
 	}
-	return out
+	return f.enabledBit // "on" / "default"
 }
 
 func (f *Filter) decide(client, name string, now time.Time) decision {
@@ -625,22 +703,10 @@ func (f *Filter) decide(client, name string, now time.Time) decision {
 			return d
 		}
 	}
-	for _, ln := range f.listsFor(mode) {
-		l := f.lists[ln]
-		if l == nil || l.set == nil {
-			continue
-		}
-		hit := false
-		if l.Wild {
-			hit = suffixHit(l.set.has, name)
-		} else {
-			hit = l.set.has(name)
-		}
-		if hit {
-			sp, _ := listKnown(ln)
-			d.Result, d.By, d.Category = "blocked", ln, sp.Category
-			return d
-		}
+	if hit := f.index.match(name, f.modeMask(mode)); hit != 0 {
+		sp := defaultLists[bits.TrailingZeros16(hit)] // the first list in the catalog's order that has it
+		d.Result, d.By, d.Category = "blocked", sp.Name, sp.Category
+		return d
 	}
 	return d
 }
@@ -716,7 +782,6 @@ func (f *Filter) Lists() []listData {
 	for _, sp := range defaultLists {
 		if l := f.lists[sp.Name]; l != nil {
 			c := *l
-			c.set = nil
 			c.Wild, c.Cat, c.Desc, c.On = sp.Wildcard, sp.Category, sp.Desc, f.enabled[sp.Name]
 			out = append(out, c)
 		} else {
@@ -756,6 +821,7 @@ func (f *Filter) SetEnabledLists(names []string) {
 			f.enabled[n] = true
 		}
 	}
+	f.recountEnabled()
 	f.saveState()
 }
 
