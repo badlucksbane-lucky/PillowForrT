@@ -2,6 +2,17 @@
 
 Written at the end of a long session. **Playback works. The box (an Orbic RC400L) freezes and drops connections at random, and has cold-rebooted. Tor has been switched off for every playback test.** The freeze is the open problem; everything else below is context for it.
 
+## Next session: start here
+
+**First task: find out why the box freezes.** Do this before any new feature. Ben decided on 2026-10-09 that this is the priority.
+
+1. Ask Ben to be present and to say how he wants to recover a frozen box (a freeze needs a power cycle). Don't deploy anything without his say.
+2. Read "Open problem" below, then check the box is up: `ssh pillowforrt uptime` and `cat /data/proxy/tinyfwd.log | tail`.
+3. Take a baseline at idle: `top -b -n 1`, the daemon's CPU time over 10 s (`/proc/<pid>/stat` fields 14 and 15), `/metrics` heap and goroutines. The strongest lead is the daemon sitting at 40 to 50 % CPU with its heap over the 48 MB limit set in `main.go`.
+4. Compare with an older build (deploy the binary from before the player work, then look at the same numbers right after a boot). That tells you whether the idle load predates this session.
+5. Add the missing visibility (heap profile, a 15-second heartbeat line with load, heap and goroutines) so that the next freeze leaves evidence, then reproduce under a small player load while watching `top` over SSH.
+6. Only then change behaviour (memory limit or leak, one multiplexed WebSocket for peers, lower caps, load shedding).
+
 ## State
 
 | | |
