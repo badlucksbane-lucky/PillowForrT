@@ -27,7 +27,7 @@ func TestServiceTable(t *testing.T) {
 	dir := t.TempDir()
 	mk := func(pid, comm, cmd string) {
 		os.MkdirAll(filepath.Join(dir, pid), 0o755)
-		os.WriteFile(filepath.Join(dir, pid, "comm"), []byte(comm+"\n"), 0o644)
+		os.WriteFile(filepath.Join(dir, pid, "stat"), []byte(pid+" ("+comm+") S 1 1 1 0 -1 4194560 0 0 0 0\n"), 0o644)
 		os.WriteFile(filepath.Join(dir, pid, "cmdline"), []byte(strings.ReplaceAll(cmd, " ", "\x00")), 0o644)
 	}
 	mk("10", "tinyfwd", "/data/proxy/tinyfwd -4")
@@ -35,8 +35,8 @@ func TestServiceTable(t *testing.T) {
 	mk("12", "sh", "/bin/sh ./wpad-guard.sh")
 	mk("13", "QCMAP_Connectio", "QCMAP_ConnectionManager /usrdata/data/qcmap/mobileap_cfg.xml d")
 	mk("14", "upgrade", "/usr/bin/upgrade")
-	os.WriteFile(filepath.Join(dir, "14", "status"), []byte("Name:\tupgrade\nState:\tT (stopped)\n"), 0o644)
-	os.MkdirAll(filepath.Join(dir, "self"), 0o755) // not a pid: ignored
+	os.WriteFile(filepath.Join(dir, "14", "stat"), []byte("14 (upgrade) T 1 1 1 0 -1 4194560 0 0 0 0\n"), 0o644) // stopped
+	os.MkdirAll(filepath.Join(dir, "self"), 0o755)                                                               // not a pid: ignored
 	comms, stopped, lines := scanProcs(dir)
 	want := map[string]string{"tinyfwd (proxy, DNS filter, this page)": "running", "hostapd, 2.4 GHz": "running", "hostapd, 5 GHz": "not running", "dnsmasq (DHCP and DNS)": "not running",
 		"guard (firewall, reservations, FOTA hold)": "running", "QCMAP (the cellular data connection)": "running", "carrier updates (upgrade)": "held"}

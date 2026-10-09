@@ -4,6 +4,7 @@ package main
 // Deliberately absent: the IMEI, serial numbers and SIM identifiers (the page never needs them), and factory reset (not offered at all).
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -135,25 +136,103 @@ func serviceTable(comms, stopped map[string]bool, cmdlines []string) []sysServic
 		upgrade,
 	}
 }
+
+// scanProcs lists the running processes under root (/proc): every command name, the names of those that are stopped, and the command lines of the user-space ones. Two small reads
+// a process (one for a kernel thread), through bare system calls and one reused buffer: it runs every 20 s on a core that is busy enough.
 func scanProcs(root string) (comms, stopped map[string]bool, lines []string) {
 	comms, stopped = map[string]bool{}, map[string]bool{}
-	es, _ := os.ReadDir(root)
-	for _, e := range es {
-		if _, err := strconv.Atoi(e.Name()); err != nil {
+	d, err := os.Open(root)
+	if err != nil {
+		return comms, stopped, nil
+	}
+	names, _ := d.Readdirnames(-1) // not os.ReadDir: that sorts and allocates an entry for each of the 60-odd non-process names too
+	d.Close()
+	buf := make([]byte, 4096)
+	for _, name := range names {
+		if !allDigits(name) {
 			continue
 		}
-		if b, err := os.ReadFile(filepath.Join(root, e.Name(), "comm")); err == nil {
-			name := strings.TrimSpace(string(b))
-			comms[name] = true
-			if st, err := os.ReadFile(filepath.Join(root, e.Name(), "status")); err == nil && strings.Contains(string(st), "State:\tT") {
-				stopped[name] = true
-			}
+		n := readProcFile(root+"/"+name+"/stat", buf)
+		comm, state, kthread, ok := parseProcStat(buf[:n])
+		if !ok {
+			continue
 		}
-		if b, err := os.ReadFile(filepath.Join(root, e.Name(), "cmdline")); err == nil && len(b) > 0 {
-			lines = append(lines, strings.ReplaceAll(string(b), "\x00", " "))
+		if !comms[string(comm)] { // the lookup does not allocate; only a name seen for the first time does
+			comms[string(comm)] = true
+		}
+		if state == 'T' {
+			stopped[string(comm)] = true
+		}
+		if kthread { // a kernel thread has no command line: half the entries on the box
+			continue
+		}
+		if n = readProcFile(root+"/"+name+"/cmdline", buf); n > 0 {
+			for i := 0; i < n; i++ {
+				if buf[i] == 0 {
+					buf[i] = ' '
+				}
+			}
+			lines = append(lines, string(buf[:n]))
 		}
 	}
 	return comms, stopped, lines
+}
+
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// readProcFile reads up to len(buf) bytes of a small /proc file in three system calls (open, read, close; os.ReadFile makes five and allocates a File and a buffer each time). It returns 0 for a file that is gone.
+func readProcFile(path string, buf []byte) int {
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return 0
+	}
+	n, err := syscall.Read(fd, buf)
+	syscall.Close(fd)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+const pfKthread = 0x00200000
+
+// parseProcStat reads what scanProcs needs from /proc/PID/stat: "pid (comm) S ppid pgrp session tty tpgid flags ...". The command name is whatever sits between the first "(" and the LAST ")" (it may contain either).
+func parseProcStat(b []byte) (comm []byte, state byte, kthread, ok bool) {
+	open, end := bytes.IndexByte(b, '('), bytes.LastIndexByte(b, ')')
+	if open < 0 || end < open || end+2 >= len(b) {
+		return nil, 0, false, false
+	}
+	comm, state = b[open+1:end], b[end+2]
+	// after the state and the space that follows it: ppid pgrp session tty tpgid flags
+	if end+4 > len(b) {
+		return comm, state, false, true
+	}
+	rest, skip := b[end+4:], 5
+	for skip > 0 {
+		i := bytes.IndexByte(rest, ' ')
+		if i < 0 {
+			return comm, state, false, true
+		}
+		rest, skip = rest[i+1:], skip-1
+	}
+	var flags uint64
+	for _, c := range rest {
+		if c < '0' || c > '9' {
+			break
+		}
+		flags = flags*10 + uint64(c-'0')
+	}
+	return comm, state, flags&pfKthread != 0, true
 }
 
 func readDisk(name, path, note string) (sysDisk, bool) {

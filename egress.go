@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/netip"
 	"os"
 	"regexp"
 	"sort"
@@ -469,29 +470,86 @@ type ctFlow struct {
 	Port            int
 }
 
-// parseConntrack returns the original-direction flows of LAN hosts to non-LAN addresses (IPv4 tcp and udp).
-func parseConntrack(s string) map[string]ctFlow {
-	out := map[string]ctFlow{}
-	_, lan, _ := net.ParseCIDR(lanCIDR)
-	for _, l := range strings.Split(s, "\n") {
-		f := strings.Fields(l)
-		if len(f) < 8 || f[0] != "ipv4" || (f[2] != "tcp" && f[2] != "udp") {
-			continue
+// ctEntry is one outbound flow: key identifies it (protocol, both addresses and ports of the original direction) for the "already seen" test.
+type ctEntry struct {
+	Key  string
+	Flow ctFlow
+}
+
+var lanPrefix = netip.MustParsePrefix(lanCIDR)
+
+// conntrackFlows returns the original-direction flows of LAN hosts to non-LAN addresses (IPv4 tcp and udp), from the text of /proc/net/nf_conntrack. It runs every 10 s over a table
+// that can hold 10,000 lines, so it walks the text in place: no list of lines, no list of fields, no map per line, no net.IP per address. What it returns shares nothing with s
+// (the Src and Dst strings are slices of each entry's own short key), so a caller may keep them without keeping the table's text alive.
+func conntrackFlows(s string) []ctEntry {
+	var out []ctEntry
+	for len(s) > 0 {
+		var line string
+		if i := strings.IndexByte(s, '\n'); i >= 0 {
+			line, s = s[:i], s[i+1:]
+		} else {
+			line, s = s, ""
 		}
-		kv := map[string]string{}
-		for _, w := range f[4:] {
-			if i := strings.IndexByte(w, '='); i > 0 {
-				if _, dup := kv[w[:i]]; !dup {
-					kv[w[:i]] = w[i+1:]
+		var src, dst, sport, dport, proto string
+		n := 0 // fields so far
+		for rest := line; ; {
+			rest = strings.TrimLeft(rest, " \t")
+			if rest == "" {
+				break
+			}
+			f := rest
+			if i := strings.IndexAny(rest, " \t"); i >= 0 {
+				f, rest = rest[:i], rest[i+1:]
+			} else {
+				rest = ""
+			}
+			switch {
+			case n == 0 && f != "ipv4":
+				rest = "" // IPv6 and anything else: not a flow of ours
+			case n == 2:
+				switch f {
+				case "tcp":
+					proto = "tcp" // the literal, not a slice of the table
+				case "udp":
+					proto = "udp"
+				default:
+					rest = ""
+				}
+			case n >= 4: // the first src=, dst=, sport=, dport= are the original direction; the reply direction repeats them
+				if v, ok := strings.CutPrefix(f, "src="); ok && src == "" {
+					src = v
+				} else if v, ok := strings.CutPrefix(f, "dst="); ok && dst == "" {
+					dst = v
+				} else if v, ok := strings.CutPrefix(f, "sport="); ok && sport == "" {
+					sport = v
+				} else if v, ok := strings.CutPrefix(f, "dport="); ok && dport == "" {
+					dport = v
 				}
 			}
+			n++
 		}
-		src, dst := net.ParseIP(kv["src"]), net.ParseIP(kv["dst"])
-		port, _ := strconv.Atoi(kv["dport"])
-		if src == nil || dst == nil || port == 0 || !lan.Contains(src) || lan.Contains(dst) || dst.IsLoopback() || dst.IsMulticast() || dst.Equal(net.IPv4bcast) {
+		if n < 8 || proto == "" || src == "" || dst == "" {
 			continue
 		}
-		out[f[2]+"|"+kv["src"]+"|"+kv["sport"]+"|"+kv["dst"]+"|"+kv["dport"]] = ctFlow{f[2], kv["src"], kv["dst"], port}
+		sa, err1 := netip.ParseAddr(src)
+		da, err2 := netip.ParseAddr(dst)
+		port, _ := strconv.Atoi(dport)
+		if err1 != nil || err2 != nil || port == 0 || !lanPrefix.Contains(sa) || lanPrefix.Contains(da) || da.IsLoopback() || da.IsMulticast() || da == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
+			continue
+		}
+		key := proto + "|" + src + "|" + sport + "|" + dst + "|" + dport
+		srcAt := len(proto) + 1
+		dstAt := srcAt + len(src) + 1 + len(sport) + 1
+		out = append(out, ctEntry{key, ctFlow{proto, key[srcAt : srcAt+len(src)], key[dstAt : dstAt+len(dst)], port}}) // Src and Dst point into the small key, not into the table's text
+	}
+	return out
+}
+
+// parseConntrack is conntrackFlows as a map by key (the form the tests and older callers use).
+func parseConntrack(s string) map[string]ctFlow {
+	out := map[string]ctFlow{}
+	for _, e := range conntrackFlows(s) {
+		out[e.Key] = e.Flow
 	}
 	return out
 }
@@ -518,7 +576,7 @@ func portListed(rs []egressRule, proto string, port int) bool {
 
 // Sample tallies the flows that the list would refuse (called every 10 s in monitor and enforce mode; in enforce mode a refused flow never reaches conntrack, so the tally is the monitor-time evidence).
 func (m *egressMgr) Sample() {
-	flows := parseConntrack(m.conn())
+	flows := conntrackFlows(m.conn())
 	arp := m.arp()
 	ip2mac := map[string]string{}
 	for mac, ip := range arp {
@@ -527,7 +585,8 @@ func (m *egressMgr) Sample() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	now := m.now().Unix()
-	for k, fl := range flows {
+	for _, e := range flows {
+		k, fl := e.Key, e.Flow
 		if _, dup := m.flows[k]; dup {
 			m.flows[k] = now
 			continue
