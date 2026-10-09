@@ -20,7 +20,9 @@ button.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 .ib{width:44px;min-height:44px;padding:0;display:inline-flex;align-items:center;justify-content:center}.ib.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}.ib.bad.on{background:var(--bad);border-color:var(--bad)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}.chip{min-height:40px;padding:0 12px;border-radius:20px;font-size:14px}.chip .cnt{margin-left:6px}
 input.ed{font:inherit;flex:1;min-width:0;height:44px;border:1px solid var(--ac);border-radius:10px;padding:0 10px;background:var(--bg);color:var(--fg)}
-.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.dot{background:var(--ln)}.dot.ok{background:var(--okc)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.kvr{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--ln)}.kvr:last-child{border:0}.kvr>span:last-child{text-align:right;min-width:0;word-break:break-all}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.dot{background:var(--ln)}.dot.ok{background:var(--okc)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.sw{position:relative;width:60px;height:36px;border-radius:18px;background:var(--ln);border:0;padding:0;flex:none;min-height:0;transition:background .15s}.sw::before{content:"";position:absolute;top:4px;left:4px;width:28px;height:28px;border-radius:50%;background:var(--card);transition:transform .15s}.sw.on{background:var(--ac)}.sw.on::before{transform:translateX(24px)}
+.scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch}.scroll .chip{flex:none}.chip.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
+.kvr{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--ln)}.kvr:last-child{border:0}.kvr>span:last-child{text-align:right;min-width:0;word-break:break-all}
 .bar{height:4px;background:var(--ln);border-radius:2px;margin-top:6px}.bar>i{display:block;height:4px;background:var(--ac);border-radius:2px}
 input{font:inherit;padding:6px 8px;border:1px solid var(--ln);border-radius:8px;background:var(--bg);color:var(--fg);min-width:0;flex:1}
 .banner{padding:10px 12px;border-radius:8px;background:var(--warn);color:#000;margin:12px 0;font-weight:600}
@@ -210,6 +212,8 @@ function node(j){const s=j.system||{},p=j.proxy||{},us=j.usage||{},b=j.budget||{
   ['Proxy',p.conns_active+' active, '+fmt(p.conns_total)+' total']])}
 
 let V=null,AdS=null,UpOk;
+const sw=(on,fn,lab)=>'<button type="button" class="sw'+(on?' on':'')+'" role="switch" aria-checked="'+!!on+'" aria-label="'+esc(lab)+'" onclick="'+fn+'"></button>';
+const chip=(t,cls,tip)=>'<span class="cnt'+(cls?' '+cls:'')+'" title="'+esc(tip||'')+'">'+t+'</span>';
 const seg=(label,opts,cur,fn,full)=>'<span class="seg'+(full?' full':'')+'" role="radiogroup" aria-label="'+esc(label)+'">'+opts.map(o=>'<button type="button" role="radio" aria-checked="'+(cur===o[0])+'" class="'+(cur===o[0]?'on':'')+'"'+(o[2]?' title="'+esc(o[2])+'"':'')+(cur===o[0]?'':' onclick="'+fn(o[0])+'"')+'>'+o[1]+'</button>').join('')+'</span>';
 const exitSeg=(ip,mac)=>{const tor=((Tr&&Tr.devices)||[]).some(d=>d.ip===ip);const cur=tor?'tor':((V.device_exit||{})[ip]||'');return seg('Exit for this device',[['','Default ('+(V.default_exit==='mullvad'?'Mullvad':'Direct')+')'],['direct','Direct'],['mullvad','Mullvad'],['tor','Tor']],cur,v=>"devmode('"+esc(ip)+"','"+v+"')")};
 async function devmode(ip,mode){if(mode==='tor'&&!confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.')){try{V=await (await api('/api/vpn')).json();vrender(V,true);egrender(true)}catch(e){}return}const r=await apost('device/mode',{ip,mode:mode||'default'});$('egmsg').textContent=r.j.error||'';try{V=await (await api('/api/vpn')).json();vrender(V,true)}catch(e){}trload()}
@@ -218,7 +222,6 @@ async function vpost(p,b){const r=await api('/api/vpn/'+p,{method:'POST',headers
 const fmtB=n=>n>=1e9?(n/1e9).toFixed(2)+' GB':n>=1e6?(n/1e6).toFixed(1)+' MB':n>=1e3?(n/1e3).toFixed(0)+' kB':n+' B';
 let vsel={};
 function pickCountry(c){vsel.country=c;vrender(V)}
-function pickCity(c){vsel.city=c}
 const RUNGS=[['1','Tor through Mullvad'],['2','Mullvad or Tor'],['3','Direct']];
 function dnsPath(o){const el=$('dpath');if(!el)return;
  if(!o){el.textContent='';return}
@@ -238,24 +241,24 @@ function vrender(d,force){
  $('vpnbadge').innerHTML=d&&d.available!==false&&d.up?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; ready</span>':'';
  const el=$('vpn');if(!force&&el.contains(document.activeElement)&&document.activeElement!==el)return;if(!d||d.available===false){$('pxpol').innerHTML='';$('c-px').classList.add('empty');el.textContent='The VPN is not enabled on this build.';return}
  if(!d.registered){
-  $('pxpol').innerHTML='';$('c-px').classList.add('empty');el.innerHTML='<p>Register as a Mullvad device (<b>uses 1 of 5 slots</b>). Account number sent once, <b>not stored</b>.</p>'+
-   '<div class="row"><input id="acct" type="password" inputmode="numeric" autocomplete="off" placeholder="16-digit Mullvad account number"><button onclick="const a=$(\'acct\').value;$(\'acct\').value=\'\';vpost(\'register\',{account:a})">Register</button></div>';return}
+  $('pxpol').innerHTML='';$('c-px').classList.add('empty');el.innerHTML='<div class="row"><input id="acct" type="password" inputmode="numeric" autocomplete="off" placeholder="16-digit Mullvad account number" title="Registers this router as a Mullvad device (uses 1 of 5 slots). The account number is sent once and not stored."><button onclick="const a=$(\'acct\').value;$(\'acct\').value=\'\';vpost(\'register\',{account:a})">Register</button></div>';return}
  const loc=d.locations||[];const rp=d.relay_pick||{};
  const cc=vsel.country||rp.country||'us';const country=loc.find(c=>c.code===cc)||loc[0];
  const cities=country?country.cities:[];const cy=vsel.city||(rp.country===cc?rp.city:'')||(cities[0]&&cities[0].code);
- const st=d.up?'<b style="color:var(--ac)">Up</b> via '+esc(d.relay)+' - handshake '+d.handshake_age_s+' s ago, down '+fmtB(d.rx_bytes)+', up '+fmtB(d.tx_bytes):(d.enabled?'<b class="err">Connecting...</b>':'Down (disconnected)');
- const btn=(v,l,on,cb)=>'<button class="'+(on?'on':'')+'" onclick="'+cb+'">'+l+'</button>';
  $('c-px').classList.remove('empty');$('pxpol').innerHTML='<div class="row" style="margin-top:8px"><span class="mut">Everyone\'s exit</span>'+seg('Everyone\'s exit',[['direct','Direct'],['mullvad','Mullvad']],d.default_exit,v=>"vpost('default',{exit:'"+v+"'})")+'</div>'+
   rungRow(d)+
   '<div class="row" style="margin-top:8px"><span class="mut">Kill switch</span>'+seg('Kill switch',[['direct','Direct','Falls back to direct, with a warning'],['mullvad_or_tor','Mullvad or Tor','Blocks if neither is up'],['tor_over_mullvad','Tor through Mullvad','Blocks unless Tor over Mullvad is up; name lookups wait a few minutes after a restart']],d.kill_tier,v=>v==='tor_over_mullvad'?"tierpick('tor_over_mullvad')":"vpost('tier',{tier:'"+v+"'})")+'</div>'+
   '<div class="row" style="margin-top:8px"><button onclick="vpost(\'panic\')">Panic: everything direct</button></div>';
- el.innerHTML='<div>'+st+'</div><div class="mut">device '+esc(d.device_name||'')+' - '+esc(d.address||'')+'</div>'+(d.error?'<div class="err">'+esc(d.error)+'</div>':'')+
-  '<div class="row" style="margin-top:8px">'+btn(1,d.enabled?'Disconnect':'Connect',d.enabled,'vpost(\'enable\',{on:'+(!d.enabled)+'})')+
-  '<select onchange="pickCountry(this.value)">'+loc.map(c=>'<option value="'+c.code+'"'+(country&&c.code===country.code?' selected':'')+'>'+esc(c.name)+'</option>').join('')+'</select>'+
-  '<select onchange="pickCity(this.value)">'+cities.map(c=>'<option value="'+c.code+'"'+(c.code===cy?' selected':'')+'>'+esc(c.name)+' ('+c.relays+')</option>').join('')+'</select>'+
-  '<button onclick="vpost(\'relay\',{country:\''+(country?country.code:'')+'\',city:vsel.city||\''+(cy||'')+'\'})">Use this location</button></div>'+
-  '<div class="row"><label><input type="checkbox" '+(d.dns_via_vpn?'checked':'')+' onchange="vpost(\'dnsvpn\',{on:this.checked})"> Use Mullvad DNS for devices that exit via Mullvad</label></div>'+
-  '<div class="row" style="margin-top:8px"><button onclick="const a=prompt(\'Account number, to remove this device from your Mullvad account:\');if(a!==null)vpost(\'remove\',{account:a})">Remove device</button></div>'}
+ const cur=loc.find(c=>c.code===rp.country)||{},curCity=((cur.cities||[]).find(c=>c.code===rp.city)||{}).name||'';
+ const hs=d.handshake_age_s;
+ el.innerHTML='<div class="row"><span class="dot'+(d.up?' ok':d.enabled?' warn':'')+'"></span><b>'+esc(curCity||cur.name||(d.up?'Connected':'Off'))+'</b><span class="mut">'+esc(curCity?cur.name:'')+'</span><span style="flex:1"></span>'+sw(d.enabled,"vpost('enable',{on:"+(!d.enabled)+"})",'Mullvad')+'</div>'+
+  (d.error?'<div class="err" style="margin-top:6px">'+esc(d.error)+'</div>':'')+
+  (d.up?'<div class="row" style="margin-top:10px">'+chip('&darr; '+fmtB(d.rx_bytes))+chip('&uarr; '+fmtB(d.tx_bytes))+chip(hs+' s',hs>180?'warn':'','last handshake: '+hs+' s ago')+'</div>':(d.enabled?'<div class="row" style="margin-top:10px">'+chip('connecting','warn')+'</div>':''))+
+  '<details style="margin-top:12px"><summary><b>Location</b></summary><div class="scroll" style="margin-top:8px">'+loc.map(c=>'<button type="button" class="chip'+(country&&c.code===country.code?' on':'')+'" onclick="pickCountry(\''+c.code+'\')">'+esc(c.name)+'</button>').join('')+'</div>'+
+  '<div class="scroll">'+cities.map(c=>'<button type="button" class="chip'+(rp.country===cc&&c.code===rp.city?' on':'')+'" title="'+c.relays+' relays" onclick="vpost(\'relay\',{country:\''+(country?country.code:'')+'\',city:\''+c.code+'\'})">'+esc(c.name)+'</button>').join('')+'</div></details>'+
+  '<div class="row" style="margin-top:12px"><span>DNS</span><span style="flex:1"></span>'+sw(d.dns_via_vpn,"vpost('dnsvpn',{on:"+(!d.dns_via_vpn)+"})",'Use Mullvad DNS for devices that exit via Mullvad')+'</div>'+
+  '<details style="margin-top:12px"><summary><b>Device</b></summary><div style="margin-top:6px"><div class="kvr"><span class="mut">Name</span><span>'+esc(d.device_name||'')+'</span></div><div class="kvr"><span class="mut">Address</span><span>'+esc(d.address||'')+'</span></div><div class="kvr"><span class="mut">Relay</span><span>'+esc(d.relay||'')+'</span></div>'+
+  '<div class="row" style="margin-top:10px"><button style="color:var(--bad);border-color:var(--bad)" onclick="const a=prompt(\'Account number, to remove this device from your Mullvad account:\');if(a!==null)vpost(\'remove\',{account:a})">Remove device</button></div></div></details>'}
 
 async function apost(p,b){const r=await api('/api/'+p,{method:'POST',headers:hdr(),body:JSON.stringify(b||{})});const j=await r.json();if(r.status===403){await session()}return {ok:r.ok,j}}
 const dur=s=>s>=86400?Math.floor(s/86400)+' d':s>=3600?Math.floor(s/3600)+' h':s>=60?Math.floor(s/60)+' min':s+' s';
@@ -319,17 +322,18 @@ async function dsave(){const r=await apost('dhcp/set',{mac:$('d_mac').value,ip:$
 async function dmove(mac){if(!confirm('Disconnect this device so it rejoins at its reserved address?'))return;const r=await apost('dhcp/move',{mac});$('dmsg').textContent=r.j.error||r.j.status||'';setTimeout(dload,8000)}
 async function ddel(mac,name){if(!confirm('Delete the reservation for '+name+'?'))return;const r=await apost('dhcp/delete',{mac});$('dmsg').textContent=r.j.error||r.j.status||'';dload()}
 let Tr=null;
-function trstate(){if(!Tr.installed)return '<b class="err">not installed</b>';if(Tr.yielding)return '<b class="err">paused to protect the router\'s memory</b> <span class="mut">(back in about '+Math.ceil(Tr.yield_left_s/60)+' min)</span>';if(Tr.ready)return '<b style="color:var(--ac)">ready</b>';if(Tr.running)return '<b>connecting, '+Tr.bootstrap+'%</b>';return Tr.enabled?'<b class="err">not running</b>':'<span class="mut">switched off</span>'}
+function trstate(){if(!Tr.installed)return ['bad','not installed'];if(Tr.yielding)return ['warn','paused'];if(Tr.ready)return ['ok','ready'];if(Tr.running)return ['warn','connecting '+Tr.bootstrap+'%'];return Tr.enabled?['bad','not running']:['','off']}
+let TrTest=null;
 function trrender(force){const el=$('tor');if(!Tr||guard(el,force))return;
  if(Tr.available===false){el.textContent='Tor is not available on this build.';return}
  $('torbadge').innerHTML=Tr.blocked?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+Tr.devices.length+' device'+(Tr.devices.length===1?'':'s')+' waiting for Tor</span>':Tr.ready?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; ready</span>'+((Tr.devices||[]).length?'<span class="cnt" title="devices sent through Tor">'+Tr.devices.length+'</span>':''):'';
- const nd=(Tr.devices||[]).length;
- el.innerHTML='<div class="row"><span>'+trstate()+(Tr.running?' <span class="mut">'+(Tr.rss_mb?Tr.rss_mb.toFixed(0)+' MB used, ':'')+Tr.avail_mb.toFixed(0)+' MB free on the router'+(Tr.restarts?', '+Tr.restarts+' restart'+(Tr.restarts===1?'':'s'):'')+'</span>':'')+'</span><span><button class="'+(Tr.enabled?'':'on')+'" onclick="trset('+(!Tr.enabled)+','+Tr.onion+')">'+(Tr.enabled?'Switch off':'Switch on')+'</button></span></div>'+
-  (Tr.error?'<div class="err" style="margin-top:4px">'+esc(Tr.error)+'</div>':'')+
-  '<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.over_vpn?'checked ':'')+'onchange="trovervpn(this.checked)"> <b>Tor over Mullvad</b></label>'+(Tr.vpn_wait?'<b class="err">waiting for the tunnel</b>':'')+'</div>'+
-  '<div class="row" style="margin-top:6px"><button onclick="trtest()">Test Tor from the router</button></div>'+
-  '<div id="trtestout" class="mut" style="margin-top:4px"></div>'+
-  ''}
+ const [tk,tw]=trstate(),rss=Tr.rss_mb?Math.round(Tr.rss_mb):0,tt=TrTest;
+ el.innerHTML='<div class="row"><span class="dot'+(tk?' '+tk:'')+'"></span><b>'+tw+'</b>'+(Tr.yielding?chip(Math.ceil(Tr.yield_left_s/60)+' min','warn','back in about '+Math.ceil(Tr.yield_left_s/60)+' min'):'')+'<span style="flex:1"></span>'+sw(Tr.enabled,'trset('+(!Tr.enabled)+','+Tr.onion+')','Tor')+'</div>'+
+  (Tr.running&&!Tr.ready&&!Tr.yielding?'<div class="bar"><i style="width:'+(Tr.bootstrap||0)+'%"></i></div>':'')+
+  (Tr.running?'<div class="row" style="margin-top:10px">'+(rss?chip(rss+' MB','','used by Tor'):'')+chip(Math.round(Tr.avail_mb)+' MB free','','free on the router')+(Tr.restarts?chip(Tr.restarts+' restart'+(Tr.restarts===1?'':'s'),'warn'):'')+'</div>':'')+
+  (Tr.error?'<div class="err" style="margin-top:6px">'+esc(Tr.error)+'</div>':'')+
+  '<div class="row" style="margin-top:12px"><span title="Tor connects through the Mullvad tunnel, so the carrier sees the tunnel and not Tor">Over Mullvad</span>'+(Tr.vpn_wait?chip('waiting','warn','waiting for the tunnel'):'')+'<span style="flex:1"></span>'+sw(Tr.over_vpn,'trovervpn('+(!Tr.over_vpn)+')','Tor over Mullvad')+'</div>'+
+  '<div class="row" style="margin-top:12px"><button onclick="trtest()">Test</button>'+(tt?'<span class="dot'+(tt.k?' '+tt.k:'')+'"></span><span class="mut">'+esc(tt.t)+'</span>':'')+'</div>'}
 async function trload(){try{Tr=await (await api('/api/tor')).json();trrender();if(typeof Eg!=='undefined'&&Eg)egrender()}catch(e){}odload()}
 let Od=null;
 function odrender(force){const el=$('od');if(!Od||guard(el,force))return;
@@ -355,7 +359,7 @@ async function odrm(name){if(!confirm('Remove '+name+'? It can no longer find th
 async function trovervpn(on){const r=await apost('tor/overvpn',{on});$('tormsg').textContent=r.j.error||'';trload()}
 async function trset(en,on){const r=await apost('tor/set',{enabled:en,onion:on});$('tormsg').textContent=r.j.error||'';trload()}
 async function trdev(mac,on){if(on?!confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.'):!confirm('Give this device its direct internet line back? Its traffic will no longer go through Tor.'))return;const r=await apost('tor/device',{mac,on});$('egmsg').textContent=r.j.error||'';trload()}
-async function trtest(){const o=$('trtestout');o.textContent='asking check.torproject.org through Tor (this can take a minute)...';const r=await apost('tor/test',{});o.textContent=r.ok?(r.j.IsTor?'Tor works: the router reached the internet through Tor, as '+r.j.IP:'The request did not come from Tor ('+r.j.IP+')'):('Test failed: '+(r.j.error||'?'))}
+async function trtest(){TrTest={k:'warn',t:'testing, this can take a minute'};trrender(true);const r=await apost('tor/test',{});TrTest=r.ok?(r.j.IsTor?{k:'ok',t:'works, exit '+r.j.IP}:{k:'bad',t:'not Tor ('+r.j.IP+')'}):{k:'bad',t:'failed: '+(r.j.error||'?')};trrender(true)}
 let Lh=null,LhH=168;
 const LH_DEFS=[{id:'lha',title:'Connect time',axis:()=>({u:'ms',div:1}),fmt:v=>Math.round(v)+' ms',series:[{k:'avg',name:'Average',c:'--s1',m:1},{k:'max',name:'Worst',c:'--s2',m:1}]},
  {id:'lhl',title:'Failed checks',axis:()=>({u:'%',div:1}),fmt:v=>v.toFixed(v<10?1:0)+'%',series:[{k:'loss',name:'Failed',c:'--s1',m:1}],area:true}];
