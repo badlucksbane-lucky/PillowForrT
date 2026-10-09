@@ -142,6 +142,8 @@ func (u *webUI) handler() http.Handler {
 	mux.HandleFunc("/ui", u.page)
 	mux.HandleFunc("/search", u.searchPage)
 	mux.HandleFunc("/browse", u.browsePage)
+	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, btSWJS) })
+	mux.HandleFunc("/bt/btclient.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, btClientJS) })
 	mux.HandleFunc("/opensearch.xml", serveOpenSearch)
 	mux.HandleFunc("/api/", u.apiAuthed(handleAPI))
 	mux.HandleFunc("/status.json", func(w http.ResponseWriter, r *http.Request) { secureHeaders(w); serveStatus(w, r) })
@@ -184,7 +186,7 @@ func onionPathOK(p string) bool {
 	case "/", "/login", "/logout", "/ui":
 		return true
 	}
-	return strings.HasPrefix(p, "/api/")
+	return strings.HasPrefix(p, "/api/") && !strings.HasPrefix(p, "/api/bt") // the torrent bridge is for the LAN page only
 }
 
 // onionLANOnly: changes that are refused through the onion door even when remote writes are switched on: the door's own settings (a remote session must never authorize more keys or loosen its

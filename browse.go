@@ -16,7 +16,7 @@ var browseHTML string
 const browseCSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: https://*.metahub.space https://image.tmdb.org https://*.anilist.co; " +
 	"connect-src 'self' https://v3-cinemeta.strem.io https://cinemeta-catalogs.strem.io https://yts.gg https://movies-api.accel.li https://yts.bz " +
-	"https://eztvx.to https://eztv.re https://eztv.wf https://graphql.anilist.co; frame-ancestors 'none'; form-action 'self'; base-uri 'none'"
+	"https://eztvx.to https://eztv.re https://eztv.wf https://graphql.anilist.co; worker-src 'self'; media-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'"
 
 func writeBrowse(w http.ResponseWriter) {
 	secureHeaders(w)

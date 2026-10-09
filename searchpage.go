@@ -155,7 +155,11 @@ func searchAPIView(m *searchMgr) map[string]any {
 		}
 		es = append(es, searchAPIEngine{e.ID, e.Name, on})
 	}
-	return map[string]any{"available": true, "enabled": cfg.Enabled, "proxy": cfg.Proxy, "dns": cfg.DNS, "engines": es, "ready": m.Ready()}
+	v := map[string]any{"available": true, "enabled": cfg.Enabled, "proxy": cfg.Proxy, "dns": cfg.DNS, "engines": es, "ready": m.Ready()}
+	if btMgrG != nil {
+		v["bt"] = map[string]any{"enabled": btMgrG.Enabled(), "ready": btMgrG.Ready(), "upload": btMgrG.Upload()}
+	}
+	return v
 }
 
 func handleSearchAPI(w http.ResponseWriter, r *http.Request, path string) {

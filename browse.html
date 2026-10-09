@@ -80,6 +80,16 @@ main{max-width:1100px;margin:0 auto;padding:10px 12px calc(40px + env(safe-area-
 .rs{padding:12px 0;border-bottom:1px solid var(--ln)}.rs a.t{font-size:17px;color:var(--ac);text-decoration:none;word-break:break-word}.rs .u{color:var(--mut);font-size:12px;word-break:break-all}.rs .e{color:var(--mut);font-size:11px}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}.pill{padding:2px 10px;border:1px solid var(--ln);border-radius:12px;font-size:12px;color:var(--mut)}.pill.bad{color:var(--bad);border-color:var(--bad)}
 .refine{display:flex;gap:8px;margin:6px 0}.refine input{flex:1;min-width:0;min-height:38px;padding:0 12px;border:1px solid var(--ln);border-radius:19px;background:var(--card);color:var(--fg);font:inherit}
+/* player */
+.player{position:fixed;inset:0;z-index:80;background:#000;color:#eee;display:flex;flex-direction:column;visibility:hidden}.player.open{visibility:visible}
+.ph{display:flex;align-items:center;gap:10px;padding:max(8px,env(safe-area-inset-top)) 12px 8px}.ph .pt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;opacity:.9}
+.ph button{width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:20px;line-height:1}
+.pv{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#000}.pv video{width:100%;max-height:100%;background:#000}
+.ps{padding:8px 12px max(12px,env(safe-area-inset-bottom));font-size:13px}.ps .bar{height:3px;background:rgba(255,255,255,.2);border-radius:2px;overflow:hidden;margin-bottom:8px}.ps .bar i{display:block;height:100%;width:0;background:var(--ac,#d3a96e);transition:width .5s}
+.ps .row2{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}.ps .err{color:#ff9a8f}.ps .pbtn{margin-left:auto;display:flex;gap:8px}
+.ps .btn{min-height:34px;font-size:13px}.ps .btn.ghost{color:#eee;border-color:rgba(255,255,255,.3)}
+.pick{padding:0 12px 6px;max-height:34vh;overflow-y:auto}.pick button{display:block;width:100%;text-align:left;padding:9px 10px;margin:4px 0;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#eee;font-size:13px}
+.tb{display:flex;gap:6px;flex:none}.tor{flex-wrap:wrap}.tor .m{flex:1 1 180px}
 @media(min-width:720px){.card{width:150px}.skc{width:150px}.grid{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}.panel{height:90vh;bottom:5vh;border-radius:18px}.sheet.open .panel{transform:none}}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style></head><body>
@@ -87,6 +97,7 @@ main{max-width:1100px;margin:0 auto;padding:10px 12px calc(40px + env(safe-area-
 <form id="sf" role="search"><input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="120" aria-label="Search"></form></div>
 <nav class="tabs" role="tablist" id="tabs"><button role="tab" data-t="movies">Movies</button><button role="tab" data-t="series">Series</button><button role="tab" data-t="anime">Anime</button><button role="tab" data-t="web">Web</button><i class="ind" id="ind"></i></nav></header>
 <main id="main"></main>
+<div class="player" id="player" inert><div class="ph"><div class="pt" id="ptitle"></div><button id="pclose" aria-label="Close player">×</button></div><div class="pv" id="pv"></div><div class="pick" id="ppick" hidden></div><div class="ps" id="pstat"></div></div>
 <div class="sheet" id="sheet" inert><div class="scrim" id="scrim"></div><section class="panel" id="panel" role="dialog" aria-modal="true" tabindex="-1"></section></div>
 <script>
 (()=>{'use strict';
@@ -175,10 +186,13 @@ async function renderWeb(pane,rid){
  }catch(e){if(rid===S.rid)holder.replaceChildren(fail('The box did not answer',()=>render(true)))}}
 // ---------- the detail sheet ----------
 const sheet=$('#sheet'),panel=$('#panel');
-function tor(label,sub,hash,name,seeds,sz){const mg=magnet(hash,name);if(!mg)return null;const n=+seeds||0;
- return h('div',{class:'tor'},h('div',{class:'m'},h('div',{class:'t',text:label}),h('div',{class:'s'},h('span',{class:'dot '+(n>=10?'g':n>0?'a':'')}),h('span',{text:n+' seeds'}),sz?h('span',{text:sz}):null,sub?h('span',{text:sub}):null)),
-  h('button',{class:'btn ghost',title:'Copy magnet link','aria-label':'Copy magnet link',text:'Copy',onclick:ev=>{const b=ev.currentTarget;(navigator.clipboard?navigator.clipboard.writeText(mg):Promise.reject()).then(()=>{b.textContent='Copied'},()=>{b.textContent='Select';prompt('Magnet link',mg)});setTimeout(()=>b.textContent='Copy',1500)}}),
-  h('a',{class:'btn',href:mg,text:'Magnet'}))}
+const maybeNot=n=>/hevc|x265|h\.?265|10[- ]?bit|hi10|\bav1\b|dts|truehd|atmos|e-?ac-?3|ddp|\.avi|\.wmv/i.test(n||'');
+function tor(label,sub,hash,name,seeds,sz){const mg=magnet(hash,name);if(!mg)return null;const n=+seeds||0,bt=BT.status&&BT.status.enabled,warn=bt&&maybeNot(label+' '+name);
+ return h('div',{class:'tor'},h('div',{class:'m'},h('div',{class:'t',text:label}),h('div',{class:'s'},h('span',{class:'dot '+(n>=10?'g':n>0?'a':'')}),h('span',{text:n+' seeds'}),sz?h('span',{text:sz}):null,sub?h('span',{text:sub}):null,warn?h('span',{text:'may not play',title:'HEVC, 10-bit, DTS or similar: many browsers cannot play this. Use Magnet with a desktop player instead.',style:'color:var(--warn)'}):null)),
+  h('div',{class:'tb'},
+   h('button',{class:'btn ghost',title:'Copy magnet link','aria-label':'Copy magnet link',text:'Copy',onclick:ev=>{const b=ev.currentTarget;(navigator.clipboard?navigator.clipboard.writeText(mg):Promise.reject()).then(()=>{b.textContent='Copied'},()=>{b.textContent='Select';prompt('Magnet link',mg)});setTimeout(()=>b.textContent='Copy',1500)}}),
+   bt?h('button',{class:'btn',text:'Play','aria-label':'Play '+name,onclick:()=>play(hash,name,mg)}):null,
+   h('a',{class:(bt?'btn ghost':'btn'),href:mg,text:'Magnet'})))}
 const torRows=(arr,fn,empty)=>{const r=arr.map(fn).filter(Boolean);return r.length?r:[h('div',{class:'note',text:empty})]};
 function heroFor(m,bd){return h('div',{class:'hero'},bd&&okUrl(bd)?img(bd,'bd',''):null,h('div',{class:'hi'},poster(m),h('div',{},h('h1',{text:m.name}),factsFor(m))))}
 function factsFor(m){const f=[];if(m.rating)f.push(h('b',{text:'★ '+m.rating}));if(m.year)f.push(m.year);if(m.runtime)f.push(m.runtime);if(m.type==='anime'){if(m.format)f.push(m.format.replace('_',' '));if(m.eps)f.push(m.eps+' eps');if(m.status)f.push(m.status.replace('_',' ').toLowerCase())}else if(m.status)f.push(m.status);return h('div',{class:'facts'},f.map(x=>x.nodeType?x:h('span',{text:x})))}
@@ -217,9 +231,59 @@ const closeBtn=()=>h('button',{class:'x','aria-label':'Close',text:'×',onclick:
 const grab=()=>h('div',{class:'grab'},closeBtn());
 function closeSheet(){if(S.fromApp){S.fromApp=false;history.back()}else go({id:''},true)}
 function showSheet(on){if(!on&&sheet.contains(document.activeElement))document.activeElement.blur();sheet.classList.toggle('open',on);sheet.inert=!on;document.body.classList.toggle('lock',on);if(!on){panel.style.transform='';panel.style.borderTop='';seasonSwipe=null}else{panel.scrollTop=0;panel.focus({preventScroll:true})}}
-async function renderSheet(rid){showSheet(true);panel.replaceChildren(grab(),h('div',{class:'hero sk',style:'height:260px'}));
+async function renderSheet(rid){await btStatus();showSheet(true);panel.replaceChildren(grab(),h('div',{class:'hero sk',style:'height:260px'}));
  try{if(S.tab==='movies')await openMovie(S.id,rid);else if(S.tab==='series')await openSeries(S.id,rid);else if(S.tab==='anime')await openAnime(S.id,rid)}
  catch(e){if(rid===S.sid)panel.replaceChildren(grab(),fail('Could not load this title',()=>renderSheet(rid)))}}
+// ---------- the player: WebTorrent in this page, its TCP peers carried by the box (btclient/) ----------
+const BT={status:null,at:0,client:null,cur:null,timers:[],ac:null};
+async function btStatus(force){if(!force&&BT.status&&Date.now()-BT.at<8000)return BT.status;try{BT.status=await jf('/api/bt',{credentials:'same-origin'})}catch(e){BT.status={available:false}}BT.at=Date.now();return BT.status}
+const loadScript=src=>new Promise((ok,no)=>{const e=document.createElement('script');e.src=src;e.onload=ok;e.onerror=()=>no(new Error('could not load the player'));document.head.append(e)});
+async function engine(){if(BT.client)return BT.client;
+ if(!('serviceWorker' in navigator))throw new Error('This browser has no service workers: the page needs HTTPS with a trusted certificate');
+ await loadScript('/bt/btclient.js');
+ const reg=await navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{throw new Error('The player needs this browser to trust the box certificate')});
+ await navigator.serviceWorker.ready;
+ if(!navigator.serviceWorker.controller)await new Promise(r=>{navigator.serviceWorker.addEventListener('controllerchange',r,{once:true});setTimeout(r,3000)});
+ const c=new WebTorrent({tracker:false,lsd:false,secure:0,maxConns:40,uploadLimit:1024});c.on('error',()=>{});c.createServer({controller:reg});BT.client=c;return c}
+const playerEl=$('#player'),pv=$('#pv'),pstat=$('#pstat'),ppick=$('#ppick');
+const fmtSpeed=n=>n>1048576?(n/1048576).toFixed(1)+' MB/s':Math.round(n/1024)+' KB/s';
+function stopPlayer(){BT.timers.forEach(clearInterval);BT.timers=[];if(BT.ac){BT.ac.abort();BT.ac=null}
+ const v=pv.querySelector('video');if(v){v.pause();v.removeAttribute('src');v.load()}
+ if(BT.cur){try{BT.cur.destroy({destroyStore:true})}catch(e){}BT.cur=null}}
+function closePlayer(fromPop){if(!playerEl.classList.contains('open'))return;stopPlayer();pv.replaceChildren();ppick.hidden=true;playerEl.classList.remove('open');playerEl.inert=true;document.body.classList.toggle('lock',sheet.classList.contains('open'));if(!fromPop&&history.state&&history.state.player)history.back()}
+window.addEventListener('popstate',()=>{if(playerEl.classList.contains('open'))closePlayer(true)});
+$('#pclose').addEventListener('click',()=>closePlayer());
+async function play(hash,name,mg){
+ stopPlayer();pv.replaceChildren();ppick.hidden=true;$('#ptitle').textContent=name;
+ if(!playerEl.classList.contains('open')){history.pushState({player:1},'');playerEl.classList.add('open');playerEl.inert=false;document.body.classList.add('lock')}
+ const say=(msg,bad)=>pstat.replaceChildren(h('div',{class:'row2'},h('span',{class:bad?'err':'',text:msg}),h('span',{class:'pbtn'},h('a',{class:'btn ghost',href:mg,text:'Open magnet'}))));
+ say('Starting…');
+ const st=await btStatus(true);if(!st.enabled||st.ready){say(st.ready||'Playback is off',true);return}
+ let c;try{c=await engine()}catch(e){say(e.message,true);return}
+ const up=st.upload||'off';c.throttleUpload(up==='normal'?524288:up==='low'?131072:1024);// off: no upload slots at all, so nothing is served to other peers
+ const t=BT.cur=c.add('magnet:?xt=urn:btih:'+hash+'&dn='+encodeURIComponent(name),{destroyStoreOnDestroy:true,uploads:up==='off'?false:10});
+ let started=Date.now(),wires=0,file=null,note='';const bar=h('i'),line=h('div',{class:'row2'});pstat.replaceChildren(h('div',{class:'bar'},bar),line);
+ const draw=()=>{if(BT.cur!==t)return;const sec=(Date.now()-started)/1000;let msg=!t.infoHash?'Starting…':!t.metadata?(wires?'Fetching the file list…':sec>40?'No peers found for this torrent':'Finding peers…'):(file?(wires?'Buffering…':'Looking for peers…'):'Choose a file');
+  if(file&&video().readyState>=3&&!video().paused)msg='Playing';
+  bar.style.width=Math.round((file?file.progress:t.progress)*100)+'%';
+  line.replaceChildren(h('span',{text:msg+(note?' · '+note:'')}),h('span',{text:t.numPeers+' peer'+(t.numPeers===1?'':'s')}),h('span',{text:'↓ '+fmtSpeed(t.downloadSpeed)}),h('span',{class:'pbtn'},h('a',{class:'btn ghost',href:mg,text:'Open magnet'})))};
+ const video=()=>pv.querySelector('video')||{readyState:0,paused:true};
+ BT.timers.push(setInterval(draw,1000));
+ t.on('wire',()=>{wires++});t.on('error',e=>{note=String(e.message||e)});
+ // peers: the box asks the trackers and the DHT over Mullvad and streams back what it finds; ask again now and then
+ const feed=async()=>{if(BT.cur!==t||t.destroyed)return;BT.ac=new AbortController();
+  try{const r=await fetch('/api/bt/peers?h='+hash,{credentials:'same-origin',signal:BT.ac.signal,referrerPolicy:'no-referrer'});if(!r.ok){let m='';try{m=(await r.json()).error}catch(e){}note=m||'bridge refused';return}
+   const rd=r.body.getReader(),dec=new TextDecoder();let buf='';for(;;){const {value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;while((i=buf.indexOf('\n'))>=0){const ln=buf.slice(0,i);buf=buf.slice(i+1);try{const m=JSON.parse(ln);(m.peers||[]).forEach(p=>{try{t.addPeer(p)}catch(e){}})}catch(e){}}}}
+  catch(e){}};
+ t.on('infoHash',()=>{feed();let last=Date.now();BT.timers.push(setInterval(()=>{if(t.numPeers<4&&Date.now()-last>45000||Date.now()-last>240000){last=Date.now();feed()}},5000))});
+ t.on('ready',()=>{
+  const vids=t.files.filter(f=>/\.(mp4|m4v|mkv|webm|mov|avi|ts)$/i.test(f.name)).sort((a,b)=>b.length-a.length);
+  if(!vids.length){say('This torrent has no video file',true);return}
+  const start=f=>{file=f;ppick.hidden=true;t.files.forEach(x=>{if(x!==f)x.deselect()});
+   const v=h('video',{controls:true,playsinline:true,autoplay:true});v.addEventListener('error',()=>{note='the browser cannot play this file (codec or container)';v.remove()});pv.replaceChildren(v);f.streamTo(v);v.play().catch(()=>{});draw()};
+  const big=vids.filter(f=>f.length>=vids[0].length*.3);
+  if(big.length>1){ppick.hidden=false;ppick.replaceChildren(...big.map(f=>h('button',{text:f.name+'  ·  '+size(f.length),onclick:()=>start(f)})))}else start(vids[0])});
+ draw()}
 // ---------- gestures ----------
 function hswipe(el,fn){let x0,y0,t0,on=false,car=null,edge=null;el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;x0=e.touches[0].clientX;y0=e.touches[0].clientY;t0=Date.now();on=true;
   car=e.target.closest&&e.target.closest('.scrollx');edge=car?{start:car.scrollLeft<=8,end:car.scrollLeft+car.clientWidth>=car.scrollWidth-8}:null},{passive:true});
@@ -231,7 +295,7 @@ hswipe($('#main'),dx=>{if(sheet.classList.contains('open'))return;const i=TABS.i
  panel.addEventListener('touchmove',e=>{if(!on)return;dy=e.touches[0].clientY-y0;if(dy>8){panel.classList.add('drag');panel.style.transform='translateY('+Math.max(0,dy-8)+'px)';if(e.cancelable)e.preventDefault()}else if(dy<0){on=false;panel.classList.remove('drag');panel.style.transform=''}},{passive:false});
  panel.addEventListener('touchend',()=>{if(!on)return;on=false;panel.classList.remove('drag');const v=dy/(Date.now()-t0+1);if(dy>120||(dy>50&&v>.5)){panel.style.transform='translateY(102%)';setTimeout(closeSheet,160)}else panel.style.transform=''},{passive:true})})();
 $('#scrim').addEventListener('click',closeSheet);
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sheet.classList.contains('open'))closeSheet();else if(e.key==='/'&&document.activeElement.tagName!=='INPUT'){e.preventDefault();$('#q').focus()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&playerEl.classList.contains('open'))closePlayer();else if(e.key==='Escape'&&sheet.classList.contains('open'))closeSheet();else if(e.key==='/'&&document.activeElement.tagName!=='INPUT'){e.preventDefault();$('#q').focus()}});
 // ---------- render ----------
 function indicator(dir){const b=$('#tabs [data-t="'+S.tab+'"]'),ind=$('#ind');ind.style.width=b.offsetWidth*.5+'px';ind.style.transform='translateX('+(b.offsetLeft+b.offsetWidth*.25)+'px)'}
 function render(force){const p=parse(),prevTab=S.tab,key=p.tab+'|'+p.c+'|'+p.g+'|'+p.q,hadSheet=!!S.id;
@@ -244,6 +308,6 @@ function render(force){const p=parse(),prevTab=S.tab,key=p.tab+'|'+p.c+'|'+p.g+'
 $('#sf').addEventListener('submit',e=>{e.preventDefault();const q=$('#q').value.trim();$('#q').blur();go({q,g:'',c:''})});
 $('#tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(b&&b.dataset.t!==S.tab)go({tab:b.dataset.t,c:'',g:'',q:''})});
 window.addEventListener('hashchange',()=>render());window.addEventListener('resize',indicator);
-render(true);
+btStatus();render(true);
 })();
 </script></body></html>

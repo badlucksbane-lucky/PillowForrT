@@ -1135,6 +1135,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleOnionAPI(w, r, path)
 		return
 	}
+	if path == "bt" || strings.HasPrefix(path, "bt/") {
+		handleBTAPI(w, r, path)
+		return
+	}
 	if path == "search" || strings.HasPrefix(path, "search/") {
 		handleSearchAPI(w, r, path)
 		return
