@@ -22,6 +22,8 @@ button.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 input.ed{font:inherit;flex:1;min-width:0;height:44px;border:1px solid var(--ac);border-radius:10px;padding:0 10px;background:var(--bg);color:var(--fg)}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.dot{background:var(--ln)}.dot.ok{background:var(--okc)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.sw{position:relative;width:60px;height:36px;border-radius:18px;background:var(--ln);border:0;padding:0;flex:none;min-height:0;transition:background .15s}.sw::before{content:"";position:absolute;top:4px;left:4px;width:28px;height:28px;border-radius:50%;background:var(--card);transition:transform .15s}.sw.on{background:var(--ac)}.sw.on::before{transform:translateX(24px)}
 .scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch}.scroll .chip{flex:none}.chip.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
+.rl{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 0;border-bottom:1px solid var(--ln)}.rl:last-child{border:0}.rl .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.days{display:flex;gap:4px}.days i{width:22px;height:22px;border-radius:6px;font:12px/22px system-ui,sans-serif;text-align:center;font-style:normal;background:var(--ln);color:var(--mut)}.days i.on{background:var(--ac);color:var(--onac)}
 .sub{margin-top:12px;padding-top:12px;border-top:1px solid var(--ln)}
 .kvr{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--ln)}.kvr:last-child{border:0}.kvr>span:last-child{text-align:right;min-width:0;word-break:break-all}
 .bar{height:4px;background:var(--ln);border-radius:2px;margin-top:6px}.bar>i{display:block;height:4px;background:var(--ac);border-radius:2px}
@@ -135,8 +137,8 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 <div class="card"><h2>Recent</h2><table id="rc"></table></div>
 <div class="sec">Devices</div>
 <div class="card" id="c-wifi"><h2>Wi-Fi <span id="wibadge"></span></h2><div id="wifi" class="mut">loading</div><div id="wmsg" class="msg"></div></div>
-<div class="card"><h2>Blocked devices</h2><div id="blk" class="mut">loading</div><div id="bmsg" class="msg"></div></div>
-<div class="card"><h2>Internet schedules</h2><div id="fws" class="mut">loading</div><div id="fmsg" class="msg"></div></div>
+<div class="card"><h2>Blocked devices <span id="blbadge"></span></h2><div id="blk" class="mut">loading</div><div id="bmsg" class="msg"></div></div>
+<div class="card"><h2>Internet schedules <span id="fwbadge"></span></h2><div id="fws" class="mut">loading</div><div id="fmsg" class="msg"></div></div>
 <div class="sec">Network</div>
 <div class="card"><h2>DHCP reservations</h2><div id="dhcp" class="mut">loading</div><div id="dmsg" class="msg"></div></div>
 <div class="card"><h2>DHCP pool</h2><div id="pool" class="mut">loading</div><div id="pmsg" class="msg"></div></div>
@@ -818,7 +820,7 @@ function devinfo(d,dnsBy){const c=dnsBy[d.ip]||{};const orig=d.name||d.hostname|
   const ip=d.ip?esc(d.ip)+((d.ipv6||[]).length?' <span class="mut" title="'+esc(d.ipv6.join('\n'))+'">+IPv6</span>':''):'<span class="mut">-</span>';
 
   return {c,orig,nm,flags,conn}}
-async function dvload(){try{Dv=await (await api('/api/devices')).json();egrender()}catch(e){}}
+async function dvload(){try{Dv=await (await api('/api/devices')).json();egrender();brender();frender()}catch(e){}}
 async function dvact(p,b){const r=await apost(p,b);$('egmsg').textContent=r.j.error||'';setTimeout(()=>{dvload();bload();fload()},1200)}
 async function dvwake(mac){const r=await apost('devices/wake',{mac});$('egmsg').textContent=r.j.error||r.j.status||''}
 function dvpause(mac,nm){if(confirm('Cut the internet for '+nm+' for 30 minutes? Its LAN access, address and this page keep working.'))dvact('fw/pause',{mac,minutes:30})}
@@ -931,37 +933,45 @@ function crender(force){const el=$('cell');if(!Ce||guard(el,force))return;const 
   ((c.missing||[]).length?'<div class="err">could not read: '+esc(c.missing.join(', '))+'</div>':'')}
 async function cload(){try{Ce=await (await api('/api/cell')).json();CeS=await (await api('/status.json')).json();crender()}catch(e){}}
 let Fw=null;const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-function devopts(sel){const seen={},o=[];(Dh&&Dh.reservations||[]).forEach(r=>{seen[r.mac]=1;o.push([r.mac,r.name])});(Dh&&Dh.devices||[]).forEach(d=>{if(!seen[d.mac]){seen[d.mac]=1;o.push([d.mac,d.name||d.ip||d.mac])}});return '<option value="">'+sel+'</option>'+o.map(x=>'<option value="'+x[0]+'">'+esc(x[1])+'  '+esc(x[0])+'</option>').join('')}
 function frender(force){const a=$('fws'),b=$('fwd');if(!Fw||guard(a,force)||guard(b,force))return;
  const nm=m=>{const r=(Dh&&Dh.reservations||[]).find(x=>x.mac===m);return r?r.name:m};
- const pz=(Fw.paused||[]).map(p=>'<tr><td>'+esc(p.name||p.mac)+'</td><td>paused until '+esc(p.until)+'</td><td><button onclick="fresume(\''+p.mac+'\')">Resume</button></td></tr>').join('');
- const sc=(Fw.sched||[]).map(x=>'<tr><td>'+esc(x.name||x.mac)+'</td><td>'+x.days.map(d=>DAYS[d]).join(' ')+'</td><td>'+esc(x.from)+' to '+esc(x.to)+'</td><td>'+(x.enabled?(x.active?'<span class="err">internet cut now</span>':'on'):'<span class="mut">off</span>')+'</td><td><button onclick="fsoff('+x.id+','+(x.enabled?0:1)+')">'+(x.enabled?'Turn off':'Turn on')+'</button> <button onclick="fsdel('+x.id+')">Delete</button></td></tr>').join('');
- a.innerHTML='<div class="mut">Schedule time: '+esc(Fw.now)+'. Paused devices keep LAN access, lose internet.</div>'+
-  '<table style="margin:8px 0">'+(pz||'')+(sc||'')+((pz||sc)?'':'<tr><td class="mut">no pauses or schedules</td></tr>')+'</table>'+
-  '<div class="row"><select id="f_pdev">'+devopts('Pause a device...')+'</select><select id="f_pmin"><option value="30">30 min</option><option value="60">1 hour</option><option value="180">3 hours</option><option value="480">8 hours</option><option value="1440">24 hours</option></select><button class="on" onclick="fpause()">Pause internet</button></div>'+
-  '<div class="row" style="margin-top:8px"><select id="f_sdev">'+devopts('Schedule for...')+'</select><input id="f_from" value="22:00" style="max-width:70px"><span class="mut">to</span><input id="f_to" value="06:00" style="max-width:70px"></div>'+
-  '<div class="row" style="margin-top:4px">'+DAYS.map((d,i)=>'<label class="mut"><input type="checkbox" class="f_day" value="'+i+'" '+'checked'+'> '+d+'</label>').join(' ')+'<button class="on" onclick="fsadd()">Add schedule</button></div>'+
-  '<div class="mut" style="margin-top:4px">Days = start day (22:00 Fri runs into Sat morning).</div>';
+ const dl=((Dv&&Dv.devices)||[]).filter(d=>d.mac).map(d=>[d.mac,d.label||d.name||d.hostname||d.ip||d.mac]),dn=m=>(dl.find(x=>x[0]===m)||[0,nm(m)])[1],sel=Fd.dev;
+ const pz2=(Fw.paused||[]).map(p=>'<div class="rl"><span class="dot warn"></span><span class="t">'+esc(p.name||dn(p.mac))+'</span>'+chip(esc(p.until),'warn','paused until')+'<button class="ib" aria-label="Resume" onclick="fresume(\''+p.mac+'\')">'+ic('play')+'</button></div>').join('');
+ const sc2=(Fw.sched||[]).map(x=>'<div class="rl"><span class="dot'+(x.enabled?(x.active?' bad':' ok'):'')+'" title="'+(x.active?'internet cut now':'')+'"></span><span class="t">'+esc(x.name||dn(x.mac))+'<div class="days" style="margin-top:4px" title="start days">'+DAYS.map((d,i)=>'<i class="'+(x.days.indexOf(i)>=0?'on':'')+'">'+d[0]+'</i>').join('')+'</div></span>'+chip(esc(x.from)+'&ndash;'+esc(x.to))+sw(x.enabled,'fsoff('+x.id+','+(x.enabled?0:1)+')','Schedule on')+'<button class="ib" aria-label="Delete" onclick="fsdel('+x.id+')">'+ic('x')+'</button></div>').join('');
+ const act=(Fw.sched||[]).some(x=>x.enabled&&x.active),n2=(Fw.paused||[]).length+(Fw.sched||[]).length;
+ $('fwbadge').innerHTML=n2?chip(n2,act?'bad':'',act?'internet cut now':'pauses and schedules'):'';
+ a.innerHTML=(pz2||sc2?pz2+sc2:'<div class="mut" style="padding:6px 0">&mdash;</div>')+
+  '<details style="margin-top:12px"><summary><b>New</b></summary>'+
+  '<div class="scroll" style="margin-top:8px">'+dl.map(d=>'<button type="button" class="chip'+(sel===d[0]?' on':'')+'" onclick="fdsel(\''+d[0]+'\')">'+esc(d[1])+'</button>').join('')+'</div>'+
+  '<div class="row" style="margin-top:4px"><span class="mut">Pause</span><span class="seg" role="group" aria-label="Pause internet">'+[[30,'30m'],[60,'1h'],[180,'3h'],[480,'8h'],[1440,'24h']].map(o=>'<button type="button"'+(sel?'':' disabled style="opacity:.45"')+' onclick="fpause('+o[0]+')">'+o[1]+'</button>').join('')+'</span></div>'+
+  '<div class="sub"><div class="row"><span class="mut">Schedule</span><input type="time" aria-label="From" style="width:104px;flex:none" value="'+esc(Fd.from)+'" oninput="Fd.from=this.value"><span class="mut">&ndash;</span><input type="time" aria-label="To" style="width:104px;flex:none" value="'+esc(Fd.to)+'" oninput="Fd.to=this.value"></div>'+
+  '<div class="scroll" style="margin-top:8px" title="Days = start day (22:00 Fri runs into Sat morning)">'+DAYS.map((d,i)=>'<button type="button" class="chip'+(Fd.days.indexOf(i)>=0?' on':'')+'" onclick="fdday('+i+')">'+d[0]+'</button>').join('')+'</div>'+
+  '<div class="row" style="margin-top:6px"><button class="on" onclick="fsadd()">Add schedule</button>'+(sel?'':'<span class="mut">pick a device</span>')+'</div></div></details>';
  const dz=(Fw.dest||[]).map(d=>'<tr><td>'+esc(d.cidr)+'</td><td class="mut">'+esc(d.note||'')+'</td><td><button onclick="fddel(\''+d.cidr+'\')">Unblock</button></td></tr>').join('')||'<tr><td class="mut">none</td></tr>';
  b.innerHTML='<table style="margin:8px 0">'+dz+'</table><div class="row"><input id="f_cidr" placeholder="203.0.113.7 or 203.0.113.0/24" style="max-width:230px"><input id="f_note" placeholder="note (optional)" maxlength="60" style="max-width:200px"><button class="on" onclick="fdadd()">Block</button></div><div class="mut" style="margin-top:4px">IPv4 or IPv6, /8 or narrower. Local network cannot be blocked.</div>'}
 async function fload(){try{Fw=await (await api('/api/fw')).json();frender()}catch(e){}}
 async function fdo(path,body,box){const r=await apost(path,body);$(box).textContent=r.j.error||'';fload();return r}
-function fpause(){const m=$('f_pdev').value;if(!m){$('fmsg').textContent='Pick a device.';return}fdo('fw/pause',{mac:m,minutes:parseInt($('f_pmin').value)},'fmsg')}
+let Fd={dev:'',days:[0,1,2,3,4,5,6],from:'22:00',to:'06:00'};
+function fdsel(m){Fd.dev=Fd.dev===m?'':m;frender(true)}
+function fdday(i){const k=Fd.days.indexOf(i);if(k>=0)Fd.days.splice(k,1);else Fd.days.push(i);frender(true)}
+function fpause(min){if(!Fd.dev){$('fmsg').textContent='Pick a device.';return}fdo('fw/pause',{mac:Fd.dev,minutes:min},'fmsg')}
 function fresume(m){fdo('fw/resume',{mac:m},'fmsg')}
-function fsadd(){const m=$('f_sdev').value;if(!m){$('fmsg').textContent='Pick a device.';return}const days=[...document.querySelectorAll('.f_day')].filter(x=>x.checked).map(x=>parseInt(x.value));fdo('fw/sched/set',{mac:m,days,from:$('f_from').value.trim(),to:$('f_to').value.trim(),enabled:true},'fmsg')}
+function fsadd(){if(!Fd.dev){$('fmsg').textContent='Pick a device.';return}if(!Fd.days.length){$('fmsg').textContent='Pick at least one day.';return}fdo('fw/sched/set',{mac:Fd.dev,days:Fd.days.slice().sort(),from:Fd.from.trim(),to:Fd.to.trim(),enabled:true},'fmsg')}
 function fsdel(id){if(confirm('Delete this schedule?'))fdo('fw/sched/delete',{id},'fmsg')}
 function fsoff(id,on){const x=Fw.sched.find(s=>s.id===id);if(x)fdo('fw/sched/set',{id,mac:x.mac,days:x.days,from:x.from,to:x.to,note:x.note,enabled:!!on},'fmsg')}
 function fdadd(){fdo('fw/dest/add',{cidr:$('f_cidr').value,note:$('f_note').value},'gmsg')}
 function fddel(c){if(confirm('Unblock '+c+'?'))fdo('fw/dest/delete',{cidr:c},'gmsg')}
 let Bl=null;
 function brender(force){const el=$('blk');if(!Bl||guard(el,force))return;
- const rows=(Bl.blocked||[]).map(b=>'<tr><td>'+esc(b.name||'(unknown)')+'</td><td class="mut">'+esc(b.mac)+'</td><td>'+(b.online?'<span class="err">on the Wi-Fi, but cut off</span>':'<span class="mut">cut off</span>')+'</td><td><button onclick="bdel(\''+b.mac+'\')">Unblock</button></td></tr>').join('')||'<tr><td class="mut">nobody is blocked</td></tr>';
- const cand=(Dh&&Dh.devices||[]).filter(d=>d.wifi&&!(Bl.blocked||[]).some(b=>b.mac===d.mac));
- el.innerHTML='<table style="margin:8px 0">'+rows+'</table><div class="row"><select id="b_pick"><option value="">Block a connected device...</option>'+cand.map(d=>'<option value="'+d.mac+'">'+esc(d.name||d.ip||'?')+'  '+esc(d.mac)+'</option>').join('')+'</select><input id="b_mac" placeholder="or a MAC: aa:bb:cc:dd:ee:ff" style="max-width:210px"><button class="on" onclick="badd()">Block</button></div>'+
-  '<div class="mut" style="margin-top:4px">Blocked = no address, DNS, internet or LAN. Kicked off Wi-Fi on sight. Cannot block yourself. Persists across reboots.</div>'}
+ const bl=Bl.blocked||[];$('blbadge').innerHTML=bl.length?chip(bl.length,'bad','blocked: no address, DNS, internet or LAN; kicked off Wi-Fi on sight'):'';
+ const rows=bl.map(b=>'<div class="rl"><span class="dot bad"></span><span class="t">'+esc(b.name||'(unknown)')+'</span>'+chip(esc(b.mac.slice(-5)),'',b.mac)+(b.online?chip('on Wi-Fi','warn','on the Wi-Fi, but cut off'):'')+'<button class="ib" aria-label="Unblock" onclick="bdel(\''+b.mac+'\')">'+ic('restore')+'</button></div>').join('')||'<div class="mut" style="padding:6px 0">&mdash;</div>';
+ const cand=((Dv&&Dv.devices)||[]).filter(d=>d.wifi&&d.mac&&!bl.some(b=>b.mac===d.mac));
+ el.innerHTML=rows+
+  (cand.length?'<div class="mut" style="margin-top:12px">Block</div><div class="scroll" style="margin-top:6px">'+cand.map(d=>'<button type="button" class="chip" onclick="bblock(\''+d.mac+'\')">'+esc(d.label||d.name||d.hostname||d.ip||d.mac)+'</button>').join('')+'</div>':'')+
+  '<details style="margin-top:12px"><summary><b>By MAC</b></summary><div class="row" style="margin-top:8px"><input id="b_mac" aria-label="MAC" placeholder="aa:bb:cc:dd:ee:ff" style="flex:1;min-width:0"><button class="on" onclick="badd()">Block</button></div></details>'}
 async function bload(){try{Bl=await (await api('/api/wifi/macfilter')).json();brender()}catch(e){}}
-async function badd(){const mac=($('b_mac').value.trim()||$('b_pick').value).toLowerCase();if(!mac){$('bmsg').textContent='Pick a device or type a MAC.';return}
- if(!confirm('Cut '+mac+' off the network? '))return;const r=await apost('wifi/macfilter/add',{mac});$('bmsg').textContent=r.j.error||r.j.status||'';setTimeout(bload,1500)}
+async function badd(){const mac=$('b_mac').value.trim().toLowerCase();if(!mac){$('bmsg').textContent='Type a MAC.';return}bblock(mac)}
+async function bblock(mac){if(!confirm('Cut '+mac+' off the network? '))return;const r=await apost('wifi/macfilter/add',{mac});$('bmsg').textContent=r.j.error||r.j.status||'';setTimeout(bload,1500)}
 async function bdel(mac){if(!confirm('Let '+mac+' back onto the network? '))return;const r=await apost('wifi/macfilter/remove',{mac});$('bmsg').textContent=r.j.error||r.j.status||'';setTimeout(bload,1500)}
 let Pl=null;
 function prender(force){const el=$('pool');if(!Pl||guard(el,force))return;
@@ -998,7 +1008,7 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
   s.addEventListener('click',tog);s.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tog()}})});
 
  // tabs: the same cards, grouped so one thumb-reachable view shows at a time
- const IC={bridge:'M2 18h20M4 18v-4c0-4 3.5-7 8-7s8 3 8 7v4M8 18v-5M12 18v-6M16 18v-5',devices:'M4 5h16v11H4zM8 20h8M12 16v4',eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',pause:'M8 5v14M16 5v14',play:'M7 4l13 8-13 8z',block:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8',pen:'M4 20l4-1 11-11-3-3L5 16l-1 4z',chev:'M6 9l6 6 6-6',check:'M5 12l5 5 9-10',chart:'M4 20V10M10 20V4M16 20v-8M22 20H2',shield:'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',lock:'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',globe:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',wall:'M3 5h18v14H3zM3 10h18M3 15h18M9 5v5M15 10v5M9 15v4',tower:'M12 13v8M8 21h8M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M12 11.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',wifi:'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01'};
+ const IC={bridge:'M2 18h20M4 18v-4c0-4 3.5-7 8-7s8 3 8 7v4M8 18v-5M12 18v-6M16 18v-5',devices:'M4 5h16v11H4zM8 20h8M12 16v4',eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',pause:'M8 5v14M16 5v14',play:'M7 4l13 8-13 8z',block:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8',pen:'M4 20l4-1 11-11-3-3L5 16l-1 4z',chev:'M6 9l6 6 6-6',check:'M5 12l5 5 9-10',x:'M6 6l12 12M18 6L6 18',restore:'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3',chart:'M4 20V10M10 20V4M16 20v-8M22 20H2',shield:'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',lock:'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',globe:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',wall:'M3 5h18v14H3zM3 10h18M3 15h18M9 5v5M15 10v5M9 15v4',tower:'M12 13v8M8 21h8M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M12 11.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',wifi:'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01'};
  const ic=n=>'<svg class="i" viewBox="0 0 24 24"><path d="'+IC[n]+'"/></svg>';window.ic=ic;
  const SECS={'Bridge control':['none','bridge'],'Monitoring':['watch','watch'],'Security':['watch','watch'],'DNS':['watch','watch'],'Devices':['none','devices'],'Network':['more','more'],'System':['more','more']};
  const CARDS={'Devices':'bridge','Blocked devices':'devices','Internet schedules':'devices','Wi-Fi':'devices','Cellular':'bridge'};
