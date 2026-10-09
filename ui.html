@@ -18,10 +18,19 @@ button.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 .strip .a{display:flex;align-items:center;gap:8px;padding:6px 12px 12px;flex-wrap:wrap}.strip .more{padding:0 12px 12px}.strip .more .row{margin-top:10px}
 .seg.full{display:flex;width:100%}.seg.full button{flex:1;padding:0 4px}
 .ib{width:44px;min-height:44px;padding:0;display:inline-flex;align-items:center;justify-content:center}.ib.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}.ib.bad.on{background:var(--bad);border-color:var(--bad)}
+.cnt.bad{color:var(--bad);border-color:var(--bad)}.cnt.warn{color:var(--warn);border-color:var(--warn)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}.chip{min-height:40px;padding:0 12px;border-radius:20px;font-size:14px}.chip .cnt{margin-left:6px}
 input.ed{font:inherit;flex:1;min-width:0;height:44px;border:1px solid var(--ac);border-radius:10px;padding:0 10px;background:var(--bg);color:var(--fg)}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.dot{background:var(--ln)}.dot.ok{background:var(--okc)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.sw{position:relative;width:60px;height:36px;border-radius:18px;background:var(--ln);border:0;padding:0;flex:none;min-height:0;transition:background .15s}.sw::before{content:"";position:absolute;top:4px;left:4px;width:28px;height:28px;border-radius:50%;background:var(--card);transition:transform .15s}.sw.on{background:var(--ac)}.sw.on::before{transform:translateX(24px)}
 .scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch}.scroll .chip{flex:none}.chip.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
+.ev{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--ln);cursor:pointer}.ev:last-child{border:0}.ev .dot{margin-top:6px}.ev .et{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ev .et.open{white-space:normal;word-break:break-word}.ev.un .et{font-weight:600}.ev .ts{flex:none;font-size:13px}
+.evw{border-bottom:1px solid var(--ln)}.evw:last-child{border:0}.evw .ev{border:0}
+.wall{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tile{aspect-ratio:1;border-radius:14px;border:1px solid var(--ln);background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:12px;color:var(--mut);padding:4px;min-height:0}
+.tile i{width:16px;height:16px;border-radius:50%;background:var(--okc)}.tile.warn i{background:var(--warn)}.tile.bad i{background:var(--bad)}
+.rl{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 0;border-bottom:1px solid var(--ln)}.rl:last-child{border:0}.rl .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.days{display:flex;gap:4px}.days i{width:22px;height:22px;border-radius:6px;font:12px/22px system-ui,sans-serif;text-align:center;font-style:normal;background:var(--ln);color:var(--mut)}.days i.on{background:var(--ac);color:var(--onac)}
+.sub{margin-top:12px;padding-top:12px;border-top:1px solid var(--ln)}
 .kvr{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--ln)}.kvr:last-child{border:0}.kvr>span:last-child{text-align:right;min-width:0;word-break:break-all}
 .bar{height:4px;background:var(--ln);border-radius:2px;margin-top:6px}.bar>i{display:block;height:4px;background:var(--ac);border-radius:2px}
 input{font:inherit;padding:6px 8px;border:1px solid var(--ln);border-radius:8px;background:var(--bg);color:var(--fg);min-width:0;flex:1}
@@ -105,6 +114,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 <div class="card empty" id="c-px"><h2>Proxy</h2><div id="pxpol"></div></div>
 <div class="card" id="c-mv"><h2>Mullvad <span id="vpnbadge"></span></h2><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div></div>
 <div class="card" id="c-tor"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
+<div class="card" id="c-wall"><h2>Detectors <span id="dtbadge"></span></h2><div class="wall" id="wall"></div></div>
 <div class="sec">Monitoring</div>
 <div class="card"><h2>Events <span id="evbadge"></span></h2><div id="ev" class="mut">loading</div><div id="evmsg" class="msg"></div></div>
 <div class="card"><h2>Latency history <span id="lhbadge"></span></h2><div id="lh" class="mut">loading</div></div>
@@ -133,9 +143,9 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 <div class="card"><h2>Top asked</h2><table id="tq"></table></div>
 <div class="card"><h2>Recent</h2><table id="rc"></table></div>
 <div class="sec">Devices</div>
-<div class="card" id="c-wifi"><h2>Wi-Fi</h2><div id="wifi" class="mut">loading</div><div id="wmsg" class="msg"></div></div>
-<div class="card"><h2>Blocked devices</h2><div id="blk" class="mut">loading</div><div id="bmsg" class="msg"></div></div>
-<div class="card"><h2>Internet schedules</h2><div id="fws" class="mut">loading</div><div id="fmsg" class="msg"></div></div>
+<div class="card" id="c-wifi"><h2>Wi-Fi <span id="wibadge"></span></h2><div id="wifi" class="mut">loading</div><div id="wmsg" class="msg"></div></div>
+<div class="card"><h2>Blocked devices <span id="blbadge"></span></h2><div id="blk" class="mut">loading</div><div id="bmsg" class="msg"></div></div>
+<div class="card"><h2>Internet schedules <span id="fwbadge"></span></h2><div id="fws" class="mut">loading</div><div id="fmsg" class="msg"></div></div>
 <div class="sec">Network</div>
 <div class="card"><h2>DHCP reservations</h2><div id="dhcp" class="mut">loading</div><div id="dmsg" class="msg"></div></div>
 <div class="card"><h2>DHCP pool</h2><div id="pool" class="mut">loading</div><div id="pmsg" class="msg"></div></div>
@@ -264,39 +274,48 @@ async function apost(p,b){const r=await api('/api/'+p,{method:'POST',headers:hdr
 const dur=s=>s>=86400?Math.floor(s/86400)+' d':s>=3600?Math.floor(s/3600)+' h':s>=60?Math.floor(s/60)+' min':s+' s';
 let W=null,Dh=null,wpoll=null;
 function guard(el,force){return !force&&el.contains(document.activeElement)&&document.activeElement!==el&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)}
-function wrender(force){const el=$('wifi');if(!W||guard(el,force))return;const s=W.settings,L=W.live;
- const cl=(W.clients||[]).map(c=>'<tr><td>'+esc(c.name||c.mac)+(c.name?' <span class="mut">'+esc(c.mac)+'</span>':'')+'</td><td>'+esc(c.ip||'')+'</td><td class="mut">'+esc(c.band||'2.4 GHz')+'</td><td>'+dur(c.connected_s)+'</td><td><button onclick="wkick(\''+c.mac+'\')">Disconnect</button></td></tr>').join('')||'<tr><td class="mut">no devices connected</td></tr>';
- const st=W.state==='waiting'?'<div class="err"><b>Waiting for a device to rejoin ... '+Math.floor(W.wait_left_s/60)+':'+String(W.wait_left_s%60).padStart(2,'0')+' left.</b> Connect one device with the new Wi-Fi settings. If none joins in time, the old settings come back by themselves. <button onclick="wrestore()">Revert now</button></div>':W.state==='applying'?'<div class="err">'+esc(W.message)+' ... Wi-Fi drops for about 10 seconds.</div>':W.state==='failed'?'<div class="err">'+esc(W.message)+'</div>':W.state==='ok'?'<div class="mut">'+esc(W.message)+'</div>':'';
- const opt=(v,t,cur)=>'<option value="'+v+'"'+(String(cur)===String(v)?' selected':'')+'>'+t+'</option>';
- const chs=[0,1,2,3,4,5,6,7,8,9,10,11].map(c=>opt(c,c?('Channel '+c):'Automatic',s.channel)).join('');
- const mx=[1,2,3,4,5,6,7,8,9,10].map(c=>opt(c,c,s.max_clients)).join('');
- const f5=s.five||{},L5=W.live5;
- const ch5=[[36,'Channel 36 (5180 MHz, lower band)'],[149,'Channel 149 (5745 MHz, upper band)']].map(c=>opt(c[0],c[1],f5.channel)).join('');
- const five='<div style="margin-top:12px"><b>5 GHz network</b> '+(f5.enabled?(L5&&L5.hostapd==='ENABLED'?'<b style="color:var(--ac)">up</b> on channel '+L5.channel+' ('+L5.freq_mhz+' MHz)':'<b class="err">'+esc(L5?L5.hostapd||'down':'down')+'</b>'):'<span class="mut">off</span>')+'</div>'+
-  '<div class="row" style="margin-top:6px"><label><input type="checkbox" id="w5_on" '+(f5.enabled?'checked':'')+'> On</label><label>Name <input id="w5_ssid" maxlength="32" value="'+esc(f5.ssid||'')+'" placeholder="not the same as the 2.4 GHz name"></label><label><select id="w5_ch">'+ch5+'</select></label><label><input type="checkbox" id="w5_hid" '+(f5.hidden?'checked':'')+'> Hidden</label></div>'+
-  '<div class="row" style="margin-top:6px"><label>New password <input id="w5_pw" type="password" autocomplete="new-password" placeholder="blank = keep (a 2.4 GHz password change carries over if they match)" maxlength="63" style="min-width:260px"></label><label>Again <input id="w5_pw2" type="password" autocomplete="new-password" maxlength="63"></label></div>'+
-  '<div class="mut" style="margin-top:4px">Two real channel choices: 36 or 149. 5 GHz has shorter range through walls.</div>';
- el.innerHTML='<div><b>'+esc(s.ssid)+'</b>'+(s.hidden?' (hidden)':'')+' on '+(L.channel?('channel '+L.channel+' ('+L.freq_mhz+' MHz)'):'-')+' - Wi-Fi '+(L.hostapd==='ENABLED'?'<b style="color:var(--ac)">up</b>':'<b class="err">'+esc(L.hostapd||'down')+'</b>')+' - '+(W.clients||[]).length+' of '+s.max_clients+' devices</div>'+st+
-  '<table style="margin:8px 0">'+cl+'</table>'+
-  '<div class="row"><label>Name <input id="w_ssid" maxlength="32" value="'+esc(s.ssid)+'"></label><label>New password <input id="w_pw" type="password" autocomplete="new-password" placeholder="leave blank to keep" maxlength="63"></label><label>Again <input id="w_pw2" type="password" autocomplete="new-password" placeholder="type it again" maxlength="63"></label><label><input type="checkbox" onchange="wshow(this.checked)"> show</label></div>'+
-  '<div class="row" style="margin-top:6px"><label><select id="w_ch">'+chs+'</select></label><label>Max devices <select id="w_mx">'+mx+'</select></label><label><input type="checkbox" id="w_hid" '+(s.hidden?'checked':'')+'> Hidden network</label></div>'+
-  '<div class="row" style="margin-top:6px"><label><input type="checkbox" id="w_iso" '+(s.ap_isolate?'checked':'')+'> Isolate devices from each other <span class="err">(cuts computers off from the phones: the cluster stops working)</span></label></div>'+
-  five+
-  '<div class="row" style="margin-top:8px"><button class="on" onclick="wapply()">Apply</button>'+(W.backups&&W.backups.length?'<button onclick="wrestore()">Undo last change ('+esc(W.backups[0].replace(/^(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)\d\d$/,'$1-$2-$3 $4:$5'))+')</button>':'')+'</div>'}
+let Wd=null,Wdirty=false;
+function wdraft(){const t=W.settings,f=t.five||{};return {ssid:t.ssid,pw:'',pw2:'',ch:t.channel,mx:t.max_clients,hid:!!t.hidden,iso:!!t.ap_isolate,show:false,f:{on:!!f.enabled,ssid:f.ssid||'',pw:'',pw2:'',hid:!!f.hidden,ch:f.channel}}}
+function wset(k,v,five){(five?Wd.f:Wd)[k]=v;Wdirty=true;wrender(true)}
+function wtype(k,v,five){(five?Wd.f:Wd)[k]=v;Wdirty=true}
+function wdiscard(){Wd=null;Wdirty=false;wrender(true)}
+function wrender(force){const el=$('wifi');if(!W||guard(el,force))return;const t=W.settings,L=W.live,f5=t.five||{},L5=W.live5;
+ if(!Wd||!Wdirty)Wd=wdraft();const d=Wd,n=(W.clients||[]).length;
+ $('wibadge').innerHTML=chip(n+'/'+t.max_clients,'','devices connected');
+ const band=(lab,ssid,live,on,hid)=>'<div class="row" style="margin-top:8px"><span class="dot'+(on?(live&&live.hostapd==='ENABLED'?' ok':' bad'):'')+'"></span><b>'+esc(ssid||'-')+'</b>'+chip(lab)+(on&&live&&live.channel?chip('ch '+live.channel,'',live.freq_mhz+' MHz'):'')+(hid?chip('hidden'):'')+(on?'':chip('off'))+'</div>';
+ const st=W.state==='waiting'?'<div class="row" style="margin-top:10px"><span class="dot warn"></span><b>'+Math.floor(W.wait_left_s/60)+':'+String(W.wait_left_s%60).padStart(2,'0')+'</b><span class="mut" title="Join one device with the new settings. If none joins in time, the old settings come back by themselves.">waiting for a device</span><span style="flex:1"></span><button class="on" onclick="wrestore()">Revert now</button></div>':W.state==='applying'?'<div class="row" style="margin-top:10px"><span class="dot warn"></span><span>'+esc(W.message||'Applying')+'</span>'+chip('~10 s','warn','Wi-Fi drops for about 10 seconds')+'</div>':W.state==='failed'?'<div class="err" style="margin-top:10px">'+esc(W.message)+'</div>':W.state==='ok'&&W.message?'<div class="mut" style="margin-top:10px">'+esc(W.message)+'</div>':'';
+ const chips=a=>'<div class="scroll">'+a.map(o=>'<button type="button" class="chip'+(String(o[2])===String(o[3])?' on':'')+'" onclick="'+o[4]+'">'+o[0]+'</button>').join('')+'</div>';
+ const row=(lab,ctl,tip)=>'<div class="row" style="margin-top:12px"><span'+(tip?' title="'+esc(tip)+'"':'')+'>'+lab+'</span><span style="flex:1"></span>'+ctl+'</div>';
+ const inp=(id,lab,val,k,five,type,ph)=>'<input id="'+id+'" type="'+(type||'text')+'" aria-label="'+lab+'" placeholder="'+esc(ph||lab)+'" title="'+(/pw/.test(id)?'Leave blank to keep the current password':'')+'" maxlength="'+(type==='password'||d.show?63:32)+'" value="'+esc(val)+'" autocomplete="'+(type==='password'||d.show&&/pw/.test(id)?'new-password':'off')+'" oninput="wtype(\''+k+'\',this.value'+(five?',true':'')+')" style="flex:1;min-width:140px">';
+ const pwt=d.show?'text':'password';
+ const chA=chips([['Auto','','0',d.ch,"wset('ch',0)"]].concat([1,2,3,4,5,6,7,8,9,10,11].map(c=>[c,'',c,d.ch,"wset('ch',"+c+")"])).map(o=>[o[0],o[1],o[2],o[3],o[4]]));
+ const dirty=Wdirty?'<div class="row" style="margin-top:12px"><button class="on" onclick="wapply()">Apply</button><button onclick="wdiscard()">Discard</button></div>':'';
+ el.innerHTML=band('2.4',t.ssid,L,true,t.hidden)+band('5',f5.ssid||'',L5,!!f5.enabled,f5.hidden)+st+
+  '<details style="margin-top:12px"><summary><b>Settings</b></summary>'+
+  '<div class="row" style="margin-top:10px">'+inp('w_ssid','Name',d.ssid,'ssid',0)+'</div>'+
+  '<div class="row" style="margin-top:8px">'+inp('w_pw','New password',d.pw,'pw',0,pwt,'New password')+inp('w_pw2','Again',d.pw2,'pw2',0,pwt,'Again')+'<button class="ib'+(d.show?' on':'')+'" aria-label="Show passwords" onclick="wset(\'show\','+(!d.show)+')">'+ic('eye')+'</button></div>'+
+  '<div class="mut" style="margin-top:12px">Channel</div>'+chA+
+  row('Max devices','<span class="seg"><button type="button" onclick="wset(\'mx\','+Math.max(1,d.mx-1)+')">&minus;</button><button type="button" class="on" style="min-width:44px">'+d.mx+'</button><button type="button" onclick="wset(\'mx\','+Math.min(10,d.mx+1)+')">+</button></span>')+
+  row('Hidden',sw(d.hid,"wset('hid',"+(!d.hid)+")",'Hidden network'))+
+  row('Isolate devices',sw(d.iso,"wset('iso',"+(!d.iso)+")",'Isolate devices from each other'),'Cuts computers off from the phones: the cluster stops working')+
+  '<div class="sub"><div class="row"><b>5 GHz</b><span style="flex:1"></span>'+sw(d.f.on,"wset('on',"+(!d.f.on)+",true)",'5 GHz network')+'</div>'+
+  (d.f.on?'<div class="row" style="margin-top:10px">'+inp('w5_ssid','Name',d.f.ssid,'ssid',1,0,'Name')+'</div>'+
+   '<div class="row" style="margin-top:8px">'+inp('w5_pw','New password',d.f.pw,'pw',1,pwt,'New password')+inp('w5_pw2','Again',d.f.pw2,'pw2',1,pwt,'Again')+'</div>'+
+   '<div class="row" style="margin-top:12px"><span class="mut">Channel</span><span class="seg" role="radiogroup" aria-label="5 GHz channel"><button type="button" class="'+(+d.f.ch===36?'on':'')+'" title="5180 MHz, lower band" onclick="wset(\'ch\',36,true)">36</button><button type="button" class="'+(+d.f.ch===149?'on':'')+'" title="5745 MHz, upper band" onclick="wset(\'ch\',149,true)">149</button></span></div>'+
+   row('Hidden',sw(d.f.hid,"wset('hid',"+(!d.f.hid)+",true)",'Hide the 5 GHz network')):'')+'</div>'+
+  (W.backups&&W.backups.length?'<div class="row" style="margin-top:14px"><button onclick="wrestore()">Undo last change</button>'+chip(esc(W.backups[0].replace(/^(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)\d\d$/,'$2-$3 $4:$5')))+'</div>':'')+'</details>'+dirty}
 async function wload(){try{W=await (await api('/api/wifi')).json();wrender();if((W.state==='waiting'||W.state==='applying')&&!wpoll)wpollStart();return true}catch(e){return false}}
-async function wkick(mac){if(!confirm('Disconnect '+mac+'? It will rejoin by itself.'))return;const r=await apost('wifi/kick',{mac});$('wmsg').textContent=r.j.error||r.j.status||'';setTimeout(wload,3000)}
-function wshow(on){$('w_pw').type=$('w_pw2').type=on?'text':'password'}
 function wpollStart(){clearInterval(wpoll);let n=0;wpoll=setInterval(async()=>{n++;const ok=await wload();if(ok&&W.state!=='applying'&&W.state!=='waiting'){clearInterval(wpoll);return}if(!ok)$('wmsg').textContent='Wi-Fi is restarting. If you changed the name or password, reconnect with the new details, then reload this page.';if(n>130)clearInterval(wpoll)},3000)}
 async function wapply(){const s=W.settings,c={},what=[];
- const pw2=$('w_pw2').value;if($('w_pw').value!==pw2){$('wmsg').textContent='The two password boxes differ: type the new password twice, identically.';return}
- const ssid=$('w_ssid').value,pw=$('w_pw').value,ch=+$('w_ch').value,mx=+$('w_mx').value,hid=$('w_hid').checked,iso=$('w_iso').checked;
+ const pw2=Wd.pw2;if(Wd.pw!==pw2){$('wmsg').textContent='The two password boxes differ: type the new password twice, identically.';return}
+ const d=Wd,ssid=d.ssid,pw=d.pw,ch=+d.ch,mx=+d.mx,hid=d.hid,iso=d.iso;
  if(ssid!==s.ssid){c.ssid=ssid;what.push('rename the network to "'+ssid+'" (every device must pick it again)')}
  if(pw){c.password=pw;c.password_confirm=pw2;what.push('change the password to the one you typed (every device must enter the new one; a typo locks every device out until the automatic revert)')}
  if(hid!==s.hidden){c.hidden=hid;what.push(hid?'hide the network':'show the network')}
  if(mx!==s.max_clients){c.max_clients=mx;what.push('limit to '+mx+' devices')}
  if(ch!==s.channel){c.channel=ch;what.push(ch?'use channel '+ch:'choose the channel automatically')}
  if(iso!==s.ap_isolate){c.ap_isolate=iso;what.push(iso?'ISOLATE devices from each other (breaks computer-to-phone traffic)':'stop isolating devices')}
- const f5=s.five||{},c5={};const on5=$('w5_on').checked,n5=$('w5_ssid').value,pw5=$('w5_pw').value,pw52=$('w5_pw2').value,h5=$('w5_hid').checked,k5=+$('w5_ch').value;
+ const f5=s.five||{},c5={};const on5=Wd.f.on,n5=Wd.f.ssid,pw5=Wd.f.pw,pw52=Wd.f.pw2,h5=Wd.f.hid,k5=+Wd.f.ch;
  if(pw5!==pw52){$('wmsg').textContent='The two 5 GHz password boxes differ: type it twice, identically.';return}
  if(on5!==!!f5.enabled){c5.enabled=on5;what.push(on5?'turn the 5 GHz network ON':'turn the 5 GHz network OFF (devices on it lose Wi-Fi until they join the 2.4 GHz one)')}
  if(n5!==(f5.ssid||'')){c5.ssid=n5;what.push('name the 5 GHz network "'+n5+'"')}
@@ -306,8 +325,8 @@ async function wapply(){const s=W.settings,c={},what=[];
  if(Object.keys(c5).length)c.five=c5;
  if(!what.length){$('wmsg').textContent='Nothing to change.';return}
  if(!confirm('This restarts Wi-Fi: every device disconnects for about 10 seconds.\n\nChanges:\n- '+what.join('\n- ')+'\n\nA backup is saved first. If the radio does not come back, or if no device manages to rejoin within 5 minutes, the old settings are restored automatically. Have the new details ready to enter on a device straight away. Continue?'))return;
- const r=await apost('wifi/apply',c);$('wmsg').textContent=r.j.error||'';if(r.ok){$('w_pw').value='';$('w_pw2').value='';$('w5_pw').value='';$('w5_pw2').value='';wpollStart()}}
-async function wrestore(){if(!confirm('Put back the Wi-Fi settings from before the last change? Wi-Fi restarts.'))return;const r=await apost('wifi/restore',{});$('wmsg').textContent=r.j.error||'';if(r.ok)wpollStart()}
+ const r=await apost('wifi/apply',c);$('wmsg').textContent=r.j.error||'';if(r.ok){Wd=null;Wdirty=false;wpollStart()}}
+async function wrestore(){if(!confirm('Put back the Wi-Fi settings from before the last change? Wi-Fi restarts.'))return;const r=await apost('wifi/restore',{});$('wmsg').textContent=r.j.error||'';if(r.ok){Wd=null;Wdirty=false;wpollStart()}}
 function drender(force){const el=$('dhcp');if(!Dh||guard(el,force))return;
  const rows=(Dh.reservations||[]).map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+esc(r.ip)+'</td><td class="mut">'+esc(r.mac)+'</td><td>'+(r.online?(r.seen_as?'<span class="err">online as '+esc(r.seen_as)+'</span> <button onclick="dmove(\''+r.mac+'\')">Move now</button>':'<span style="color:var(--ac)">online</span>'):'<span class="mut">offline</span>')+'</td><td><button onclick="dedit(\''+r.mac+'\')">Edit</button> <button onclick="ddel(\''+r.mac+'\',\''+esc(r.name)+'\')">Delete</button></td></tr>').join('')||'<tr><td class="mut">none</td></tr>';
  const free=(Dh.devices||[]).filter(d=>!d.reserved);
@@ -365,52 +384,55 @@ const LH_DEFS=[{id:'lha',title:'Connect time',axis:()=>({u:'ms',div:1}),fmt:v=>M
  {id:'lhl',title:'Failed checks',axis:()=>({u:'%',div:1}),fmt:v=>v.toFixed(v<10?1:0)+'%',series:[{k:'loss',name:'Failed',c:'--s1',m:1}],area:true}];
 function lhrender(force){const el=$('lh');if(!Lh||guard(el,force))return;
  if(Lh.available===false){el.textContent='The history is not available on this build.';return}
- el.replaceChildren();
- const bar=document.createElement('div');bar.className='row range';
- [[24,'Last 24 hours'],[168,'Last 7 days'],[720,'Last 30 days']].forEach(([h,t])=>{const b=document.createElement('button');b.type='button';b.className=LhH===h?'sel':'';b.textContent=(LhH===h?'\u2713 ':'')+t;b.onclick=()=>{LhH=h;lhload()};bar.appendChild(b)});
- const s=document.createElement('span');s.className='mut';s.textContent=Lh.probes?Lh.probes+' checks, '+Lh.loss_pct.toFixed(2)+'% failed, average '+Math.round(Lh.avg_ms)+' ms':'no checks in this range yet';bar.appendChild(s);el.appendChild(bar);
- $('lhbadge').innerHTML=Lh.outage_now?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; down now</span>':'';
- const n=document.createElement('div');n.className='mut';n.style.margin='6px 0';n.textContent='TCP to 1.1.1.1 every 30 s; 5 s timeout = failed. Hourly, kept ~35 days. 3 failures = outage.';el.appendChild(n);
- if(Lh.probes)LH_DEFS.forEach(d=>el.appendChild(gchart(d,Lh)));
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- if((Lh.days||[]).length){const t=document.createElement('table');t.style.marginTop='8px';t.innerHTML='<tr><th>Day</th><th>Checks</th><th>Failed</th><th>Average</th><th>Worst</th><th>Outages</th></tr>'+Lh.days.map(d=>'<tr><td>'+esc(d.day)+'</td><td class="mut">'+d.probes+'</td><td'+(d.loss_pct>=2?' class="err"':'')+'>'+d.loss_pct.toFixed(2)+'%</td><td>'+Math.round(d.avg_ms)+' ms</td><td class="mut">'+Math.round(d.max_ms)+' ms</td><td>'+(d.outages||'')+'</td></tr>').join('');el.appendChild(t)}
- if((Lh.outages||[]).length){const o=document.createElement('div');o.className='mut';o.style.marginTop='6px';o.textContent='Outages: '+Lh.outages.map(x=>when(x.start)+(x.open?' (still down)':', '+(x.secs>=120?Math.round(x.secs/60)+' min':x.secs+' s'))).join('; ');el.appendChild(o)}}
+ $('lhbadge').innerHTML=Lh.outage_now?chip('down now','bad'):'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}),dur=x=>x.secs>=120?Math.round(x.secs/60)+' min':x.secs+' s';
+ const days=Lh.days||[],outs=Lh.outages||[];
+ el.innerHTML='<div class="row"><span class="dot'+(Lh.outage_now?' bad':Lh.probes?' ok':'')+'"></span><span style="font-size:27px;font-weight:650;line-height:1">'+(Lh.probes?Math.round(Lh.avg_ms):'-')+'</span><span class="mut">ms</span><span style="flex:1"></span>'+seg('Range',[[24,'24h'],[168,'7d'],[720,'30d']],LhH,v=>'LhH='+v+';lhload()')+'</div>'+
+  (Lh.probes?'<div class="row" style="margin-top:12px">'+chip(Lh.loss_pct.toFixed(2)+'% failed',Lh.loss_pct>=2?'bad':'','checks that did not connect')+chip(outs.length+' outage'+(outs.length===1?'':'s'),outs.length?'warn':'','3 failed checks in a row')+chip(Lh.probes+' checks','','TCP to 1.1.1.1 every 30 s; a 5 s timeout counts as failed; kept about 35 days')+'</div>'+sparkSvg(Lh.avg):'<div class="mut" style="margin-top:10px">&mdash;</div>')+
+  (Lh.probes?'<details style="margin-top:12px"><summary><b>Charts</b></summary><div id="lhch"></div></details>':'')+
+  (days.length?'<details style="margin-top:12px"><summary><b>Days</b><span class="cnt">'+days.length+'</span></summary>'+days.map(d=>'<div class="rl"><span class="t">'+esc(d.day)+'</span>'+chip(Math.round(d.avg_ms)+' ms','','worst '+Math.round(d.max_ms)+' ms')+chip(d.loss_pct.toFixed(1)+'%',d.loss_pct>=2?'bad':'','failed')+(d.outages?chip(d.outages,'warn','outages'):'')+'</div>').join('')+'</details>':'')+
+  (outs.length?'<details style="margin-top:12px"><summary><b>Outages</b><span class="cnt">'+outs.length+'</span></summary>'+outs.map(x=>'<div class="rl"><span class="dot'+(x.open?' bad':' warn')+'"></span><span class="t">'+esc(when(x.start))+'</span>'+chip(x.open?'still down':dur(x),x.open?'bad':'')+'</div>').join('')+'</details>':'');
+ const ch=document.getElementById('lhch');if(ch)LH_DEFS.forEach(d=>ch.appendChild(gchart(d,Lh)))}
 async function lhload(){try{Lh=await (await api('/api/linkhist?hours='+LhH)).json();lhrender(true)}catch(e){}}
 let Sp=null,SpPoll=null;
 const SP_DEFS=[{id:'spd',title:'Speed test',axis:h=>h*8>=1e6?{u:'Mbit/s',div:125000}:{u:'kbit/s',div:125},fmt:v=>fmtBits(v),series:[{k:'down',name:'Download',c:'--s1',m:8},{k:'up',name:'Upload',c:'--s2',m:8}]},
  {id:'spl',title:'Time to first byte',axis:()=>({u:'ms',div:1}),fmt:v=>Math.round(v)+' ms',series:[{k:'lat',name:'First byte',c:'--s1',m:1}],area:true}];
 function sprender(force){const el=$('sp');if(!Sp||guard(el,force))return;
  if(Sp.available===false){el.textContent='Speed tests are not available on this build.';return}
- el.replaceChildren();
- const row=document.createElement('div');row.className='row';
- const l=Sp.last,when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const info=document.createElement('span');info.innerHTML=l?(l.err?'<b class="err">last test failed</b> <span class="mut">'+esc(l.err)+', '+esc(when(l.t))+'</span>':'<b>'+fmtBits(l.down)+'</b> down, <b>'+fmtBits(l.up)+'</b> up <span class="mut">'+esc(when(l.t))+(l.busy?' (the house was using the link)':'')+'</span>'):'<span class="mut">no test yet</span>';
- row.appendChild(info);
- const b=document.createElement('button');b.className='on';b.textContent=Sp.running?'Testing...':'Test now';b.disabled=!!Sp.running;b.onclick=spnow;row.appendChild(b);el.appendChild(row);
- const set=document.createElement('div');set.className='row';set.style.marginTop='6px';
- const sel=document.createElement('select');[1,3,6,12,24].forEach(h=>{const o=document.createElement('option');o.value=h;o.textContent='every '+h+' hour'+(h===1?'':'s');if(h===Sp.interval_h)o.selected=true;sel.appendChild(o)});
- sel.onchange=()=>spset(Sp.enabled,+sel.value);
- const tg=document.createElement('button');tg.textContent=Sp.enabled?'Switch off':'Switch on';tg.onclick=()=>spset(!Sp.enabled,Sp.interval_h);
- const m=document.createElement('span');m.className='mut';m.textContent='about '+Sp.data_per_day_mb.toFixed(0)+' MB of data a day';
- set.append(sel,tg,m);el.appendChild(set);
- const n=document.createElement('div');n.className='mut';n.style.margin='6px 0';n.textContent='1 MB down / 256 KB up over cellular, same size each time. Waits for idle link. < 30% of median raises an event.'+(Sp.median_down?' Median '+fmtBits(Sp.median_down)+', best '+fmtBits(Sp.best_down)+'.':'');el.appendChild(n);
- if(Sp.t.length>=2)SP_DEFS.forEach(d=>el.appendChild(gchart(d,Sp)));else if(Sp.count<2){const e=document.createElement('div');e.className='mut';e.textContent='The chart appears after the second test.';el.appendChild(e)}
- const hs=Sp.by_hour||[],mx=Math.max(...hs);
- if(mx>0&&Sp.count>=12){const h=document.createElement('div');h.style.marginTop='8px';h.innerHTML='<div class="mut">Median download by hour of the day (schedule time)</div><div style="display:flex;gap:2px;align-items:flex-end;height:44px">'+hs.map((v,i)=>'<div title="'+i+':00 &ndash; '+(v?fmtBits(v):'no data')+'" style="flex:1;background:'+(v?'var(--s1)':'transparent')+';height:'+(v?Math.max(3,Math.round(v/mx*42)):0)+'px;border-radius:3px 3px 0 0"></div>').join('')+'</div><div class="mut" style="display:flex;justify-content:space-between"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>';el.appendChild(h)}
- if((Sp.errors||[]).length){const e=document.createElement('div');e.className='mut';e.style.marginTop='6px';e.textContent='Recent failures: '+Sp.errors.map(x=>when(x.t)+' '+x.err).join('; ');el.appendChild(e)}}
+ const l=Sp.last,hs=Sp.by_hour||[],mx=Math.max(0,...hs),when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const num=(arrow,v)=>'<div><div style="font-size:24px;font-weight:650;line-height:1.1">'+arrow+' '+(v!=null?fmtBits(v):'?')+'</div></div>';
+ el.innerHTML='<div class="row"><span class="dot'+(l?(l.err?' bad':' ok'):'')+'"></span>'+(l&&!l.err?'<span class="mut">'+evrel(l.t)+'</span>':'')+(l&&l.busy?chip('busy','warn','the house was using the link'):'')+(l&&l.err?chip('failed','bad',l.err+', '+when(l.t)):'')+'<span style="flex:1"></span>'+(Sp.running?chip('testing','warn'):'<button class="ib on" aria-label="Test now" title="Test now" onclick="spnow()">'+ic('play')+'</button>')+'</div>'+
+  (l&&!l.err?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">'+num('&darr;',l.down)+num('&uarr;',l.up)+'</div>':'<div class="mut" style="margin-top:10px">'+(l?'':'&mdash;')+'</div>')+
+  (Sp.median_down?'<div class="row" style="margin-top:12px">'+chip('median '+fmtBits(Sp.median_down),'','typical download; a test under 30% of it raises an event')+chip('best '+fmtBits(Sp.best_down))+'</div>':'')+
+  (Sp.t&&Sp.t.length>=2?sparkSvg(Sp.down):'')+
+  '<div class="row" style="margin-top:12px"><span>Auto</span>'+chip('~'+Sp.data_per_day_mb.toFixed(0)+' MB/day','','1 MB down and 256 KB up over cellular each time; waits for an idle link')+'<span style="flex:1"></span>'+sw(Sp.enabled,'spset('+(!Sp.enabled)+','+Sp.interval_h+')','Automatic speed tests')+'</div>'+
+  '<div class="row" style="margin-top:10px">'+seg('Test every',[[1,'1h'],[3,'3h'],[6,'6h'],[12,'12h'],[24,'24h']],Sp.interval_h,v=>'spset('+Sp.enabled+','+v+')')+'</div>'+
+  (Sp.t&&Sp.t.length>=2?'<details style="margin-top:12px"><summary><b>Charts</b></summary><div id="spch"></div></details>':'')+
+  (mx>0&&Sp.count>=12?'<details style="margin-top:12px"><summary><b>By hour</b></summary><div style="display:flex;gap:2px;align-items:flex-end;height:44px;margin-top:8px">'+hs.map((v,i)=>'<div title="'+i+':00 &ndash; '+(v?fmtBits(v):'no data')+'" style="flex:1;background:'+(v?'var(--s1)':'transparent')+';height:'+(v?Math.max(3,Math.round(v/mx*42)):0)+'px;border-radius:3px 3px 0 0"></div>').join('')+'</div><div class="mut" style="display:flex;justify-content:space-between"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div></details>':'')+
+  ((Sp.errors||[]).length?'<details style="margin-top:12px"><summary><b>Failures</b><span class="cnt">'+Sp.errors.length+'</span></summary>'+Sp.errors.map(x=>'<div class="rl"><span class="dot bad"></span><span class="t">'+esc(x.err)+'</span><span class="mut ts">'+evrel(x.t)+'</span></div>').join('')+'</details>':'');
+ const ch=document.getElementById('spch');if(ch)SP_DEFS.forEach(d=>ch.appendChild(gchart(d,Sp)))}
 async function spload(){try{Sp=await (await api('/api/speed')).json();sprender()}catch(e){}}
 async function spset(en,h){const r=await apost('speed/set',{enabled:en,interval_h:h});$('spmsg').textContent=r.j.error||'';spload()}
 async function spnow(){const r=await apost('speed/run',{});$('spmsg').textContent=r.j.error||'';if(!r.ok)return;Sp.running=true;sprender(true);clearInterval(SpPoll);let k=0;SpPoll=setInterval(async()=>{await spload();if(++k>14||!Sp.running){clearInterval(SpPoll)}},4000)}
+let DOpen={};
+const dstate=v=>v==='bad'?' bad':v==='warn'?' warn':v==='ok'?' ok':'';
+const dwhen=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+function dtog(fn,k){const key=fn+':'+k;DOpen[key]=!DOpen[key];window[fn](true)}
+function dfind(fn,r){const k=String(r.k).replace(/[^A-Za-z0-9_.:-]/g,'_'),op=DOpen[fn+':'+k];
+ return '<div class="evw"><div class="ev" onclick="dtog(\''+fn+'\',\''+k+'\')"><span class="dot'+dstate(r.sev===undefined?'warn':r.sev)+'"></span><span class="et'+(op?' open':'')+'">'+r.title+'</span>'+(r.t?'<span class="mut ts" title="'+esc(dwhen(r.t))+'">'+evrel(r.t)+'</span>':'')+'</div>'+(op?'<div style="padding:0 0 10px 18px">'+(r.detail?'<div class="mut">'+r.detail+'</div>':'')+(r.act?'<div class="row" style="margin-top:8px">'+r.act+'</div>':'')+'</div>':'')+'</div>'}
+function det(el,fn,o){el.innerHTML='<div class="row" title="'+esc(o.tip||'')+'"><span class="dot'+dstate(o.sev)+'"></span><b>'+o.label+'</b>'+(o.chips||'')+'<span style="flex:1"></span>'+(o.sw||'')+'</div>'+((o.rows||[]).length?'<div style="margin-top:6px">'+o.rows.map(r=>dfind(fn,r)).join('')+'</div>':'')+(o.foot||'')}
+const dsec=(name,n,body)=>body?'<details style="margin-top:12px"><summary><b>'+name+'</b><span class="cnt">'+n+'</span></summary>'+body+'</details>':'';
+const dx2=(label,fn)=>'<button class="ib" aria-label="'+label+'" title="'+label+'" onclick="'+fn+'">'+ic('x')+'</button>';
 let Ar=null;
 function arrender(force){const el=$('ar');if(!Ar||guard(el,force))return;
  if(Ar.available===false){el.textContent='The ARP watch is not running on this build.';return}
  const f=Ar.findings||[],al=Ar.alerts||0;
  $('arbadge').innerHTML=al?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+al+' impersonation'+(al===1?'':'s')+'</span>':f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const what={arp_gateway:'<b class="err">impersonating the router</b>',arp_conflict:'<b class="err">claims a reserved address</b>',arp_flip:'address changed owner',arp_sweep:'scanned the network'};
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip||'(no address)')+'</b></td><td>'+(what[x.kind]||esc(x.kind))+'<div class="mut">'+(x.kind==='arp_sweep'?esc(x.mac)+(x.name?' ('+esc(x.name)+')':'')+' asked for '+x.count+' addresses within a minute':'now '+esc(x.mac)+(x.name?' ('+esc(x.name)+')':'')+(x.other?', was '+esc(x.other):''))+'</div></td></tr>').join('');
- el.innerHTML='<div class="row"><span>'+(Ar.capture_ok?(al?'<b class="err">something is impersonating an address</b>':f.length?'<b>nothing hostile, a few things to look at</b>':'<b style="color:var(--ac)">no impersonation seen</b>'):'<b class="err">watcher not running</b>')+'</span><span class="mut">'+Ar.claims_seen+' claims, '+Ar.addresses+' addresses watched</span></div>'+
-  '<div class="mut" style="margin:6px 0">Passive ARP monitoring. Alerts on gateway impersonation or reserved-address conflicts. Address changes within 10 min are flagged (random MAC rejoins look the same), and so is one device asking for 20 or more addresses within a minute: a host scan, which a new phone looking for printers also does once.</div>'+(rows?'<table>'+rows+'</table>':'')+(al?'<div style="margin-top:8px"><div class="mut">Allowed servers</div>'+al+'</div>':'')+'<div id="rdmsg" class="msg"></div>'}
+ const wh={arp_gateway:['impersonating the router',1],arp_conflict:['claims a reserved address',1],arp_flip:['address changed owner',0],arp_sweep:['scanned the network',0]};
+ det(el,'arrender',{sev:!Ar.capture_ok?'bad':al?'bad':f.length?'warn':'ok',label:!Ar.capture_ok?'Not running':al?'Impersonation':f.length?'To look at':'Quiet',chips:chip(Ar.claims_seen+' claims','','ARP claims seen')+chip(Ar.addresses+' addr','','addresses watched'),
+  tip:'Passive ARP monitoring. Alerts on gateway impersonation or reserved-address conflicts. Address changes within 10 minutes are flagged (random MAC rejoins look the same), and so is one device asking for 20 or more addresses within a minute: a host scan.',
+  rows:f.map(x=>{const w=wh[x.kind]||[esc(x.kind),0];return {k:x.t+x.mac,t:x.t,sev:w[1]?'bad':'warn',title:'<b>'+esc(x.ip||'(no address)')+'</b> '+w[0],detail:(x.kind==='arp_sweep'?esc(x.mac)+(x.name?' ('+esc(x.name)+')':'')+' asked for '+x.count+' addresses within a minute':'now '+esc(x.mac)+(x.name?' ('+esc(x.name)+')':'')+(x.other?', was '+esc(x.other):''))}}),
+  foot:'<div id="rdmsg" class="msg"></div>'})}
 async function rdallow(mac,on){if(on&&!confirm('Allow '+mac+' to answer DHCP on this network? Only do this for a server you run yourself: everything it hands out (gateway, DNS) will be trusted.'))return;const r=await apost('rogue-dhcp/allow',{mac,allow:on});if(!r.ok){const m=$('rdmsg');if(m)m.textContent=r.j.error||'failed';return}rdload()}
 async function arload(){try{Ar=await (await api('/api/arp')).json();arrender()}catch(e){}}
 let Rd=null;
@@ -418,24 +440,22 @@ function rdrender(force){const el=$('rd');if(!Rd||guard(el,force))return;
  if(Rd.available===false){el.textContent='The DHCP watch is not running on this build.';return}
  const n=(Rd.servers||[]).length;
  $('rdbadge').innerHTML=n?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+n+' other server'+(n===1?'':'s')+'</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=(Rd.servers||[]).map(x=>'<tr><td><b>'+esc(x.ip)+'</b><div class="mut">'+esc(x.mac)+'</div></td><td>'+x.replies+' repl'+(x.replies===1?'y':'ies')+' ('+esc((x.types||[]).join(', '))+')'+(x.offered?'<div class="mut">offered '+esc(x.offered)+'</div>':'')+'</td><td class="mut">'+esc(when(x.first))+' to '+esc(when(x.last))+'</td><td><button onclick="rdallow(\''+x.mac+'\',true)">Allow this server</button></td></tr>').join('');
- const al=(Rd.allowed||[]).map(a=>'<div>'+esc(a.mac)+(a.replies?' <span class="mut">answered '+a.replies+' time'+(a.replies===1?'':'s')+(a.ip?' from '+esc(a.ip):'')+'</span>':' <span class="mut">not seen answering</span>')+' <button onclick="rdallow(\''+a.mac+'\',false)">Stop allowing</button></div>').join('');
- el.innerHTML='<div class="row"><span>'+(Rd.capture_ok?(n?'<b class="err">another server is answering</b>':'<b style="color:var(--ac)">only the Orbic answers</b>'):'<b class="err">watcher not running</b>')+'</span><span class="mut">'+Rd.honest_replies+' honest repl'+(Rd.honest_replies===1?'y':'ies')+' seen</span></div>'+
-  '<div class="mut" style="margin:6px 0">Passive DHCP listener. Only the Orbic may answer; a second server or a forged gateway is an alert.</div>'+(rows?'<table>'+rows+'</table>':'')}
+ det(el,'rdrender',{sev:!Rd.capture_ok?'bad':n?'bad':'ok',label:!Rd.capture_ok?'Not running':n?'Rogue server':'Only the Orbic',chips:chip(Rd.honest_replies+' replies','','honest replies seen'),
+  tip:'Passive DHCP listener. Only the Orbic may answer; a second server or a forged gateway is an alert.',
+  rows:(Rd.servers||[]).map(x=>({k:x.mac,t:x.last,sev:'bad',title:'<b>'+esc(x.ip)+'</b> '+x.replies+' repl'+(x.replies===1?'y':'ies'),detail:esc(x.mac)+' &middot; '+esc((x.types||[]).join(', '))+(x.offered?' &middot; offered '+esc(x.offered):'')+' &middot; '+esc(dwhen(x.first))+' to '+esc(dwhen(x.last)),act:'<button class="on" onclick="rdallow(\''+x.mac+'\',true)">Allow this server</button>'})),
+  foot:dsec('Allowed',(Rd.allowed||[]).length,(Rd.allowed||[]).map(a=>'<div class="rl"><span class="t">'+esc(a.mac)+'</span>'+chip(a.replies?a.replies+' answers':'not seen','')+dx2('Stop allowing',"rdallow('"+a.mac+"',false)")+'</div>').join(''))})}
 async function rdload(){try{Rd=await (await api('/api/rogue-dhcp')).json();rdrender()}catch(e){}}
 let St=null;
 function strender(force){const el=$('st');if(!St||guard(el,force))return;
  if(St.available===false){el.textContent='The steering watch is off on this build.';return}
  const n=St.alerts||0,ms=St.messages||[];
  $('stbadge').innerHTML=n?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+St.sources+' other router'+(St.sources===1?'':'s')+'</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const what=x=>{if(x.kind==='ra'){const d=[x.lifetime>0?'default router for '+x.lifetime+' s':'router lifetime 0 (withdrawal)'];if(x.managed)d.push('addresses by DHCPv6');if((x.prefixes||[]).length)d.push('prefix '+x.prefixes.map(esc).join(', '));if((x.dns||[]).length)d.push('<b class="err">DNS servers '+x.dns.map(esc).join(', ')+'</b>');else if(x.search)d.push('<b class="err">a DNS search list</b>');return '<b class="err">IPv6 router advertisement</b><div class="mut">'+d.join('; ')+'</div>'}
-  return '<b class="err">'+(x.kind==='redirect6'?'ICMPv6':'ICMP')+' redirect</b><div class="mut">telling '+esc(x.victim||'?')+' to use '+esc(x.via||'?')+(x.dest?' for '+esc(x.dest):'')+'</div>'};
- const rows=ms.slice(0,30).map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.mac)+'</b>'+(x.name?' <span class="mut">'+esc(x.name)+'</span>':'')+'<div class="mut">'+esc(x.ip)+'</div></td><td>'+what(x)+'</td><td><button onclick="stallow(\''+x.mac+'\',true)">Allow this router</button></td></tr>').join('');
- const al=(St.allowed||[]).map(a=>'<div>'+esc(a.mac)+(a.seen?' <span class="mut">announced '+a.seen+' time'+(a.seen===1?'':'s')+(a.last?', last '+esc(when(a.last)):'')+'</span>':' <span class="mut">not seen announcing</span>')+' <button onclick="stallow(\''+a.mac+'\',false)">Stop allowing</button></div>').join('');
- el.innerHTML='<div class="row"><span>'+(St.capture_ok?(n?'<b class="err">something else is announcing routes</b>':'<b style="color:var(--ac)">only the Orbic announces routes</b>'):'<b class="err">watcher not running</b>')+'</span><span class="mut">'+St.honest+' of the Orbic\'s own seen</span></div>'+
-  '<div class="mut" style="margin:6px 0">Passive watch for IPv6 router advertisements and ICMP redirects, the messages that tell a device to change its router. Only the Orbic may send them; a second router you run yourself can be allowed by its MAC. LAN IPv6 being off does not stop devices from listening to a rogue advertiser on the LAN, which is how mitm6-style attacks start.</div>'+(rows?'<table>'+rows+'</table>':'')+(al?'<div style="margin-top:8px"><div class="mut">Allowed routers</div>'+al+'</div>':'')}
+ const sd=x=>{if(x.kind==='ra'){const d=[x.lifetime>0?'default router for '+x.lifetime+' s':'router lifetime 0 (withdrawal)'];if(x.managed)d.push('addresses by DHCPv6');if((x.prefixes||[]).length)d.push('prefix '+x.prefixes.map(esc).join(', '));if((x.dns||[]).length)d.push('DNS servers '+x.dns.map(esc).join(', '));else if(x.search)d.push('a DNS search list');return {t:'IPv6 router advertisement',d:d.join('; ')}}
+  return {t:(x.kind==='redirect6'?'ICMPv6':'ICMP')+' redirect',d:'telling '+esc(x.victim||'?')+' to use '+esc(x.via||'?')+(x.dest?' for '+esc(x.dest):'')}};
+ det(el,'strender',{sev:!St.capture_ok?'bad':n?'bad':'ok',label:!St.capture_ok?'Not running':n?'Another router':'Only the Orbic',chips:chip(St.honest+' own','','of the Orbic\'s own announcements seen'),
+  tip:'Passive watch for IPv6 router advertisements and ICMP redirects, the messages that tell a device to change its router. Only the Orbic may send them; a second router you run yourself can be allowed by its MAC.',
+  rows:ms.slice(0,30).map(x=>{const q=sd(x);return {k:x.t+x.mac,t:x.t,sev:'bad',title:'<b>'+esc(x.name||x.mac)+'</b> '+q.t,detail:esc(x.mac)+' &middot; '+esc(x.ip)+' &middot; '+q.d,act:'<button class="on" onclick="stallow(\''+x.mac+'\',true)">Allow this router</button>'}}),
+  foot:dsec('Allowed',(St.allowed||[]).length,(St.allowed||[]).map(a=>'<div class="rl"><span class="t">'+esc(a.mac)+'</span>'+chip(a.seen?a.seen+' seen':'not seen')+dx2('Stop allowing',"stallow('"+a.mac+"',false)")+'</div>').join(''))})}
 async function stallow(mac,on){if(on&&!confirm('Allow '+mac+' to announce routes on this network? Only do this for a router you run yourself: devices that listen to it will send their traffic, and maybe their name lookups, through it.'))return;const r=await apost('steer/allow',{mac,allow:on});if(!r.ok){const m=$('stmsg');if(m)m.textContent=r.j.error||'failed';return}St=r.j;strender(true)}
 async function stload(){try{St=await (await api('/api/steer')).json();strender()}catch(e){}}
 let Cn=null;
@@ -443,13 +463,13 @@ function cnrender(force){const el=$('cn');if(!Cn||guard(el,force))return;
  if(Cn.available===false){el.textContent='The canary is not configured on this build.';return}
  $('cnbadge').innerHTML=(Cn.sources||[]).length?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+Cn.sources.length+' visitor'+(Cn.sources.length===1?'':'s')+'</span>':'';
  const ok=Cn.enabled&&Cn.alias_ok&&Cn.capture_ok;
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const src=(Cn.sources||[]).map(x=>'<tr><td><b>'+esc(x.src)+'</b>'+(x.name?' <span class="mut">'+esc(x.name)+'</span>':'')+'<div class="mut">'+esc(x.mac||'')+'</div></td><td>'+x.hits+' touch'+(x.hits===1?'':'es')+'<div class="mut">'+esc(when(x.first))+' to '+esc(when(x.last))+'</div></td><td class="mut">'+esc((x.ports||[]).join(', ')||'ping or ARP only')+'</td><td>'+(x.mac?'<button onclick="cnignore(\''+x.mac+'\')">Ignore this device</button>':'')+'</td></tr>').join('')||'<tr><td class="mut">nobody has touched it</td></tr>';
- const ig=(Cn.ignore||[]).map(m=>esc(m)+' <button onclick="cnunignore(\''+m+'\')">stop ignoring</button>').join(' &middot; ');
- el.innerHTML='<div class="row"><span>'+(Cn.enabled?(ok?'<b style="color:var(--ac)">watching</b>':'<b class="err">not fully in place</b> (address '+(Cn.alias_ok?'ok':'missing')+', watcher '+(Cn.capture_ok?'ok':'not running')+')'):'<span class="mut">switched off</span>')+' <code>'+esc(Cn.address)+'</code></span><button class="'+(Cn.enabled?'':'on')+'" onclick="cnset('+(!Cn.enabled)+')">'+(Cn.enabled?'Switch off':'Switch on')+'</button></div>'+
-  '<div class="mut" style="margin:6px 0">Decoy host on '+esc((Cn.listening||[]).join(', ')||'no ports')+' (tarpit). Any touch is an event; 5+ ports in 10 min = scan. Never handed out by DHCP.</div>'+
-  '<table>'+src+'</table>'+(ig?'<div class="mut" style="margin-top:6px">Ignored: '+ig+'</div>':'')+
-  ((Cn.hits||[]).length?'<details style="margin-top:6px"><summary class="mut">The last '+Cn.hits.length+' touches</summary><table>'+Cn.hits.map(h=>'<tr><td class="mut">'+esc(when(h.t))+'</td><td>'+esc(h.src)+'</td><td>'+esc(h.proto+(h.port?' '+h.port:''))+'</td><td class="mut">'+esc(h.kind)+'</td></tr>').join('')+'</table></details>':'')}
+ const nsrc=(Cn.sources||[]).length,ig=Cn.ignore||[];
+ det(el,'cnrender',{sev:!Cn.enabled?'':nsrc?'bad':ok?'ok':'warn',label:!Cn.enabled?'Off':nsrc?'Touched':ok?'Watching':'Not in place',chips:chip(esc(Cn.address),'','decoy address')+(Cn.enabled&&!ok?chip(Cn.alias_ok?'address ok':'address missing',Cn.alias_ok?'':'bad')+chip(Cn.capture_ok?'watcher ok':'watcher off',Cn.capture_ok?'':'bad'):''),
+  sw:sw(Cn.enabled,'cnset('+(!Cn.enabled)+')','Canary'),
+  tip:'Decoy host on '+((Cn.listening||[]).join(', ')||'no ports')+' (tarpit). Any touch is an event; 5+ ports in 10 minutes is a scan. Never handed out by DHCP.',
+  rows:(Cn.sources||[]).map(x=>({k:x.src,t:x.last,sev:'bad',title:'<b>'+esc(x.src)+'</b> '+x.hits+' touch'+(x.hits===1?'':'es'),detail:(x.name?esc(x.name)+' &middot; ':'')+esc(x.mac||'')+' &middot; ports '+esc((x.ports||[]).join(', ')||'ping or ARP only')+' &middot; '+esc(dwhen(x.first))+' to '+esc(dwhen(x.last)),act:x.mac?'<button onclick="cnignore(\''+x.mac+'\')">Ignore this device</button>':''})),
+  foot:dsec('Ignored',ig.length,'<div class="chips" style="margin-top:8px">'+ig.map(m=>'<button class="chip" onclick="cnunignore(\''+m+'\')">'+esc(m)+' &times;</button>').join('')+'</div>')+
+   dsec('Touches',(Cn.hits||[]).length,(Cn.hits||[]).map(h=>'<div class="rl"><span class="t">'+esc(h.src)+' <span class="mut">'+esc(h.proto+(h.port?' '+h.port:''))+'</span></span><span class="mut ts">'+evrel(h.t)+'</span></div>').join(''))})}
 async function cnload(){try{Cn=await (await api('/api/canary')).json();cnrender()}catch(e){}}
 async function cndo(p,b){const r=await apost(p,b);$('cnmsg').textContent=r.j.error||'';cnload()}
 function cnset(on){cndo('canary/set',{enabled:on})}
@@ -459,39 +479,38 @@ let Mc=null;
 function mcrender(force){const el=$('mc');if(!Mc||guard(el,force))return;
  const f=Mc.findings||[];
  $('mcbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.key)+'</b><div class="mut">'+(x.kind==='mac_churn_ip'?'this address':'this device')+'</div></td><td>'+(x.others||[]).length+' distinct '+(x.kind==='mac_churn_ip'?'MACs':'addresses')+'<div class="mut">'+esc((x.others||[]).join(', '))+'</div></td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">Widens the ARP watch\'s address-flip check into a short history: one address claimed by several MACs, or one MAC claiming several addresses, within 10 minutes. A device rejoining with a randomized MAC can look the same, so this is one to look at, not proof.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'mcrender',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',
+  tip:'Widens the ARP watch\'s address-flip check into a short history: one address claimed by several MACs, or one MAC claiming several addresses, within 10 minutes. A device rejoining with a randomized MAC can look the same, so this is one to look at, not proof.',
+  rows:f.map(x=>({k:x.t+x.key,t:x.t,title:'<b>'+esc(x.key)+'</b> '+(x.others||[]).length+' distinct '+(x.kind==='mac_churn_ip'?'MACs':'addresses'),detail:(x.kind==='mac_churn_ip'?'this address':'this device')+': '+esc((x.others||[]).join(', '))}))})}
 async function mcload(){try{Mc=await (await api('/api/macchurn')).json();mcrender()}catch(e){}}
 let Dc=null;
 function dcrender(force){const el=$('dc');if(!Dc||guard(el,force))return;
  if(Dc.available===false){el.textContent='The DNS canary is not available (the DNS filter is off).';return}
  const h=Dc.hits||[];
  $('dcbadge').innerHTML=h.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+h.length+' hit'+(h.length===1?'':'s')+'</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
  const what={canary:'decoy name',exfil:'tunneling-shaped lookups'};
- const rows=h.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'</td><td class="mut">'+(what[x.kind]||esc(x.kind))+'</td></tr>').join('')||'<tr><td class="mut">nothing yet</td></tr>';
- el.innerHTML='<div class="row"><span>'+(Dc.enabled?'<b style="color:var(--ac)">watching</b>':'<span class="mut">switched off</span>')+'</span><button class="'+(Dc.enabled?'':'on')+'" onclick="dcset('+(!Dc.enabled)+')">'+(Dc.enabled?'Switch off':'Switch on')+'</button></div>'+
-  '<div class="mut" style="margin:6px 0">Watches every DNS query for decoy names, plain DNS while encrypted DNS is in use, and tunneling-shaped runs of lookups.</div>'+
-  '<table>'+rows+'</table>'}
+ det(el,'dcrender',{sev:!Dc.enabled?'':h.length?'warn':'ok',label:!Dc.enabled?'Off':h.length?'Hits':'Watching',sw:sw(Dc.enabled,'dcset('+(!Dc.enabled)+')','DNS canary'),
+  tip:'Watches every DNS query for decoy names, plain DNS while encrypted DNS is in use, and tunneling-shaped runs of lookups.',
+  rows:h.map(x=>({k:x.t+x.client,t:x.t,title:'<b>'+esc(x.client)+'</b> '+esc(x.name),detail:(what[x.kind]||esc(x.kind))+(x.mac?' &middot; '+esc(x.mac):'')}))})}
 async function dcload(){try{Dc=await (await api('/api/dnscanary')).json();dcrender()}catch(e){}}
 async function dcset(on){const r=await apost('dnscanary/set',{enabled:on});$('dcmsg').textContent=r.j.error||'';dcload()}
 let Dg2=null;
 function dg2render(force){const el=$('dg2');if(!Dg2||guard(el,force))return;
  const f=Dg2.findings||[];
  $('dgbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+x.count+' different failed lookups</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">A client racking up many different failed (NXDOMAIN) lookups in a short window is the shape of a domain-generation-algorithm beacon burning through candidate names.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'dg2render',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',
+  tip:'A client racking up many different failed (NXDOMAIN) lookups in a short window is the shape of a domain-generation-algorithm beacon burning through candidate names.',
+  rows:f.map(x=>({k:x.t+x.client,t:x.t,title:'<b>'+esc(x.client)+'</b> '+x.count+' failed lookups',detail:x.mac?esc(x.mac):''}))})}
 async function dg2load(){try{Dg2=await (await api('/api/dganxdomain')).json();dg2render()}catch(e){}}
 let Bc=null;
 function bcrender(force){const el=$('bc');if(!Bc||guard(el,force))return;
  const f=Bc.findings||[];
  $('bcbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.dst)+'</td><td>every ~'+Math.round(x.period_s)+'s, '+x.n+' times</td><td><button onclick="bcignore(\''+esc(x.src)+'\',\''+esc(x.dst)+'\')">Mark expected</button></td></tr>').join('');
- const ig=(Bc.ignore||[]).map(k=>{const[s,d]=k.split('|');return esc(s)+' &rarr; '+esc(d)+' <button onclick="bcunignore(\''+esc(s)+'\',\''+esc(d)+'\')">stop ignoring</button>'}).join(' &middot; ');
- el.innerHTML='<div class="mut" style="margin:6px 0">A device connecting to the same address on a very regular schedule: the shape of a check-in beacon, though plenty of ordinary apps (chat heartbeats, cloud sync, IMAP idle) look the same. Mark a pair expected once you have checked it.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')+(ig?'<div class="mut" style="margin-top:6px">Marked expected: '+ig+'</div>':'')}
+ const ig=(Bc.ignore||[]).map(k=>k.split('|'));
+ det(el,'bcrender',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',
+  tip:'A device connecting to the same address on a very regular schedule: the shape of a check-in beacon, though plenty of ordinary apps (chat heartbeats, cloud sync, IMAP idle) look the same. Mark a pair expected once you have checked it.',
+  rows:f.map(x=>({k:x.t+x.src+x.dst,t:x.t,title:'<b>'+esc(x.src)+'</b> &rarr; '+esc(x.dst),detail:(x.mac?esc(x.mac)+' &middot; ':'')+'every ~'+Math.round(x.period_s)+' s, '+x.n+' times',act:'<button onclick="bcignore(\''+esc(x.src)+'\',\''+esc(x.dst)+'\')">Mark expected</button>'})),
+  foot:dsec('Expected',ig.length,ig.map(([a,b])=>'<div class="rl"><span class="t">'+esc(a)+' &rarr; '+esc(b)+'</span>'+dx2('Stop ignoring',"bcunignore('"+esc(a)+"','"+esc(b)+"')")+'</div>').join(''))})}
 async function bcload(){try{Bc=await (await api('/api/beacon')).json();bcrender()}catch(e){}}
 async function bcignore(src,dst){const r=await apost('beacon/ignore',{src,dst,ignore:true});$('bcmsg').textContent=r.j.error||'';bcload()}
 async function bcunignore(src,dst){const r=await apost('beacon/ignore',{src,dst,ignore:false});$('bcmsg').textContent=r.j.error||'';bcload()}
@@ -500,72 +519,69 @@ function tb2render(force){const el=$('tb2');if(!Tb2||guard(el,force))return;
  if(Tb2.available===false){el.textContent='No Tor relay/bridge list is loaded, so direct-exit detection is off; .onion-attempt detection still works.';return}
  const f=Tb2.findings||[];
  $('tbbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
  const what={tor_bypass_exit:'connected directly to a known Tor relay',tor_bypass_onion:'asked for a .onion name while not assigned to Tor'};
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+(what[x.kind]||esc(x.kind))+(x.dst?'<div class="mut">'+esc(x.dst)+'</div>':'')+(x.name?'<div class="mut">'+esc(x.name)+'</div>':'')+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">Devices reaching Tor outside the Orbic\'s own Tor path (tor.go), or attempting a .onion lookup the router refused. A device already sent through Tor on this page is never flagged.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'tb2render',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',
+  tip:'Devices reaching Tor outside the Orbic\'s own Tor path, or attempting a .onion lookup the router refused. A device already sent through Tor on this page is never flagged.',
+  rows:f.map(x=>({k:x.t+x.ip,t:x.t,title:'<b>'+esc(x.ip)+'</b> '+(what[x.kind]||esc(x.kind)),detail:(x.mac?esc(x.mac):'')+(x.dst?' &middot; '+esc(x.dst):'')+(x.name?' &middot; '+esc(x.name):'')}))})}
 async function tb2load(){try{Tb2=await (await api('/api/torbypass')).json();tb2render()}catch(e){}}
 let Ts=null;
 function tsrender(force){const el=$('ts');if(!Ts||guard(el,force))return;
  const f=Ts.findings||[];
  $('tsbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>{let what;
-  if(x.ja3_name){what='<b class="err">TLS fingerprint matches known '+esc(x.ja3_name)+' client</b>'+(x.name?' <span class="mut">(server name: '+esc(x.name)+')</span>':'')+' <span class="mut">JA3 '+esc(x.ja3)+'</span>'}
-  else if(x.name===x.dst){what='sent the address itself as the TLS server name'}
-  else{what='no server name (SNI) at all'}
-  return '<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.dst)+'</td><td class="mut">'+what+'</td></tr>'}).join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">Almost every browser and app sends the hostname it wants in the clear, in the TLS ClientHello, even though everything after it is encrypted. A connection with no server name, or one whose server name is literally the destination address, is unusual (a few IoT devices and hand-configured tools do this on purpose). The ClientHello is also fingerprinted (JA3) and checked against an operator-supplied blocklist; a match is flagged here even when the server name looks ordinary, since it is a stronger signal than SNI alone. Needs no decryption; TLS 1.3 still hides the certificate itself, so this cannot also check for a self-signed cert.'+(Ts.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'tsrender',{sev:!Ts.capture_ok?'bad':f.length?'warn':'ok',label:!Ts.capture_ok?'Not running':f.length?'To look at':'Quiet',
+  tip:'A connection with no TLS server name, or one whose server name is literally the destination address, is unusual (a few IoT devices and hand-configured tools do this on purpose). The ClientHello is also fingerprinted (JA3) and checked against an operator-supplied blocklist. Needs no decryption.',
+  rows:f.map(x=>{const w=x.ja3_name?'matches known '+esc(x.ja3_name)+' client':x.name===x.dst?'sent the address as the server name':'no server name (SNI)';return {k:x.t+x.src+x.dst,t:x.t,sev:x.ja3_name?'bad':'warn',title:'<b>'+esc(x.src)+'</b> &rarr; '+esc(x.dst),detail:w+(x.name&&x.ja3_name?' &middot; server name '+esc(x.name):'')+(x.ja3?' &middot; JA3 '+esc(x.ja3):'')+(x.mac?' &middot; '+esc(x.mac):'')}})})}
 async function tsload(){try{Ts=await (await api('/api/tlssni')).json();tsrender()}catch(e){}}
 let Tc=null;
 function tcrender(force){const el=$('tc');if(!Tc||guard(el,force))return;
  const f=Tc.findings||[];
  const alerts=f.filter(x=>x.kind==='tls_cert_selfsigned').length;
  $('tcbadge').innerHTML=f.length?'<span class="'+(alerts?'err':'mut')+'" style="text-transform:none;letter-spacing:0">&bull; '+(alerts?alerts+' alert'+(alerts>1?'s':''):f.length+' to look at')+'</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>{let what;
-  if(x.kind==='tls_cert_selfsigned'){what='<b class="err">self-signed certificate</b> where '+esc(x.was||'a CA')+' signed before'}
-  else if(x.kind==='tls_cert_mismatch'){what='certificate does not cover the name <span class="mut">(issued by '+esc(x.now)+')</span>'}
-  else if(x.kind==='tls_cert_issuer'){what='issuer changed: '+esc(x.was)+' &rarr; '+esc(x.now)}
-  else if(x.kind==='tls_downgrade'){what='negotiated '+esc(x.now)+' where it always did '+esc(x.was)}
-  else{what=esc(x.kind)}
-  return '<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'<div class="mut">'+esc(x.dst)+'</div></td><td class="mut">'+what+(x.print?'<div class="mut" style="font-size:11px">sha256 '+esc(x.print.slice(0,16))+'&hellip;</div>':'')+'</td></tr>'}).join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">The server\'s side of a TLS handshake is partly in the clear too: every version says which TLS version was agreed, and TLS 1.2 sends the certificate itself in plaintext. For each hostname devices ask for, the box remembers the certificate\'s fingerprint and issuer and the best TLS version seen, and flags what an interception in the path looks like: a public-CA name turning self-signed (alert), a certificate that no longer covers its name, an issuer changing organisation, or a TLS 1.3 name talked down to 1.2. Renewals and first sightings are recorded silently. Nothing is decrypted; TLS 1.3 hides its certificate, so an interceptor that speaks 1.3 is invisible here.'+(Tc.capture_ok?'':' <span class="err">watcher not running</span>')+' <span class="mut">'+Tc.names+' name'+(Tc.names===1?'':'s')+' on file</span></div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'tcrender',{sev:alerts?'bad':f.length?'warn':Tc.capture_ok?'ok':'bad',label:!Tc.capture_ok?'Not running':alerts?'Alerts':f.length?'To look at':'Quiet',chips:chip(Tc.names+' name'+(Tc.names===1?'':'s'),'','certificates on file'),
+  tip:'For each hostname devices ask for, the box remembers the certificate fingerprint and issuer and the best TLS version seen, and flags what an interception looks like: a public-CA name turning self-signed, a certificate that no longer covers its name, an issuer changing, or a TLS 1.3 name talked down to 1.2. Nothing is decrypted.',
+  rows:f.map(x=>{let w;
+   if(x.kind==='tls_cert_selfsigned')w='self-signed certificate where '+esc(x.was||'a CA')+' signed before';
+   else if(x.kind==='tls_cert_mismatch')w='certificate does not cover the name (issued by '+esc(x.now)+')';
+   else if(x.kind==='tls_cert_issuer')w='issuer changed: '+esc(x.was)+' &rarr; '+esc(x.now);
+   else if(x.kind==='tls_downgrade')w='negotiated '+esc(x.now)+' where it always did '+esc(x.was);
+   else w=esc(x.kind);
+   return {k:x.t+x.src+x.name,t:x.t,sev:x.kind==='tls_cert_selfsigned'?'bad':'warn',title:'<b>'+esc(x.name)+'</b> '+(x.kind==='tls_cert_selfsigned'?'self-signed':x.kind==='tls_cert_mismatch'?'wrong certificate':x.kind==='tls_cert_issuer'?'issuer changed':x.kind==='tls_downgrade'?'downgraded':esc(x.kind)),detail:w+' &middot; '+esc(x.src)+(x.mac?' ('+esc(x.mac)+')':'')+' &middot; '+esc(x.dst)+(x.print?' &middot; sha256 '+esc(x.print.slice(0,16))+'&hellip;':'')}})})}
 async function tcload(){try{Tc=await (await api('/api/tlscert')).json();tcrender()}catch(e){}}
 let Dx=null;
 function dxrender(force){const el=$('dx');if(!Dx||guard(el,force))return;
  const f=Dx.findings||[];
  $('dxbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'</td><td class="mut">'+(x.kind==='dns_xcheck_exists'?'one resolver says it exists, the other says it does not':'one resolver gave an unroutable address')+'<div>'+esc(x.first)+': '+esc((x.answer1||[]).join(' '))+'</div><div>'+esc(x.second)+': '+esc((x.answer2||[]).join(' '))+'</div></td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">One in fifty encrypted answers is put to the other configured resolver as well, and the two are compared. Two honest resolvers name different CDN addresses all the time, so a plain difference is only counted. What is flagged is a disagreement in shape: one says the name exists and the other says it does not, or one hands back a private or unroutable address where the other hands back a public one. It cannot say which resolver is wrong, only that they disagree.</div><div class="mut">'+Dx.sampled+' checked &middot; '+Dx.agree+' agreed &middot; '+Dx.differ+' differed (CDN-shaped) &middot; '+Dx.flagged+' flagged &middot; '+Dx.failed+' unanswered</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'dxrender',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',chips:chip(Dx.sampled+' checked','','answers compared with a second resolver')+(Dx.flagged?chip(Dx.flagged+' flagged','warn'):''),
+  tip:'One in fifty encrypted answers is put to the other configured resolver as well, and the two are compared. Agreed '+Dx.agree+', differed (CDN-shaped) '+Dx.differ+', flagged '+Dx.flagged+', unanswered '+Dx.failed+'. What is flagged is a disagreement in shape: one says the name exists and the other does not, or one hands back an unroutable address.',
+  rows:f.map(x=>({k:x.t+x.client+x.name,t:x.t,title:'<b>'+esc(x.client)+'</b> '+esc(x.name),detail:(x.kind==='dns_xcheck_exists'?'one resolver says it exists, the other says it does not':'one resolver gave an unroutable address')+'<br>'+esc(x.first)+': '+esc((x.answer1||[]).join(' '))+'<br>'+esc(x.second)+': '+esc((x.answer2||[]).join(' '))+(x.mac?'<br>'+esc(x.mac):'')}))})}
 async function dxload(){try{Dx=await (await api('/api/dnsxcheck')).json();dxrender()}catch(e){}}
 let La=null;
 function larender(force){const el=$('la');if(!La||guard(el,force))return;
  const f=La.findings||[];const look=f.filter(x=>x.kind!=='lan_service_new').length;
  $('labadge').innerHTML=look?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+look+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
  const what={lan_service_new:'new service',lan_host_conflict:'answered for a name another address held',lan_ssdp_elsewhere:'UPnP description at another address'};
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td class="mut">'+(what[x.kind]||esc(x.kind))+'<div>'+esc(x.name)+(x.was?' <span class="mut">(was '+esc(x.was)+')</span>':'')+'</div></td></tr>').join('');
- const devs=(La.devices||[]).map(d=>'<tr><td><b>'+esc(d.ip)+'</b>'+(d.host?'<div class="mut">'+esc(d.host)+'</div>':'')+(d.server?'<div class="mut">'+esc(d.server)+'</div>':'')+'</td><td class="mut">'+(d.services||[]).map(s=>esc(s.type)+(s.instance?' <span class="mut">'+esc(s.instance)+'</span>':'')+(s.port?':'+s.port:'')).join('<br>')+(d.searches?'<div>searched for everything (ssdp:all) '+d.searches+'&times;</div>':'')+'</td><td class="mut">'+esc(when(d.last))+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">What devices say they are, read from their own mDNS (Bonjour) and SSDP (UPnP) announcements. These are multicast, so they reach the bridge even from devices the radio relays directly. A device announcing a service it never announced before is noted; two addresses answering for the same .local name, or a UPnP announcement whose description lives at another address, are worth a look. Nothing is verified and nothing is asked: a device can announce whatever it likes.'+(La.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'')+(devs?'<table>'+devs+'</table>':'<div class="mut">no announcements seen yet</div>')}
+ const lan=(La.devices||[]);
+ det(el,'larender',{sev:!La.capture_ok?'bad':look?'warn':'ok',label:!La.capture_ok?'Not running':look?'To look at':'Quiet',chips:chip(lan.length+' devices','','devices seen announcing'),
+  tip:'What devices say they are, read from their own mDNS (Bonjour) and SSDP (UPnP) announcements. A device announcing a service it never announced before is noted; two addresses answering for the same .local name, or a UPnP announcement whose description lives at another address, are worth a look. Nothing is verified.',
+  rows:f.map(x=>({k:x.t+x.ip+x.kind,t:x.t,sev:x.kind==='lan_service_new'?'':'warn',title:'<b>'+esc(x.ip)+'</b> '+(what[x.kind]||esc(x.kind)),detail:esc(x.name)+(x.was?' (was '+esc(x.was)+')':'')+(x.mac?' &middot; '+esc(x.mac):'')})),
+  foot:dsec('Devices',lan.length,lan.map(d=>dfind('larender',{k:'d'+d.ip,t:d.last,sev:'',title:'<b>'+esc(d.ip)+'</b> '+esc(d.host||d.server||''),detail:(d.services||[]).map(s=>esc(s.type)+(s.instance?' '+esc(s.instance):'')+(s.port?':'+s.port:'')).join('<br>')+(d.searches?'<br>searched for everything (ssdp:all) '+d.searches+'&times;':'')})).join(''))})}
 async function laload(){try{La=await (await api('/api/lanannounce')).json();larender()}catch(e){}}
 let Df=null;
 function dfrender(force){const el=$('df');if(!Df||guard(el,force))return;
  const f=Df.findings||[];
  $('dfbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.mac)+'</b></td><td class="mut">was '+esc(x.was)+'<br>now '+esc(x.now)+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">A device\'s DHCP client advertises, in the clear, a fingerprint shaped by its OS and network stack. One that holds steady and then suddenly changes is usually new firmware, but can mean a different device is now answering for that address.'+(Df.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'dfrender',{sev:!Df.capture_ok?'bad':f.length?'warn':'ok',label:!Df.capture_ok?'Not running':f.length?'To look at':'Quiet',
+  tip:'A device\'s DHCP client advertises, in the clear, a fingerprint shaped by its OS and network stack. One that holds steady and then suddenly changes is usually new firmware, but can mean a different device is now answering for that address.',
+  rows:f.map(x=>({k:x.t+x.mac,t:x.t,title:'<b>'+esc(x.mac)+'</b> fingerprint changed',detail:'was '+esc(x.was)+'<br>now '+esc(x.now)}))})}
 async function dfload(){try{Df=await (await api('/api/dhcpfp')).json();dfrender()}catch(e){}}
 let Dm=null;
 function dmrender(force){const el=$('dm');if(!Dm||guard(el,force))return;
  const f=Dm.findings||[];
  const al=f.filter(x=>x.corroborated).length;
  $('dmbadge').innerHTML=al?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+al+' confirmed</span>':f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+' &rarr; '+esc(x.lan_ip)+'</td><td>'+(x.corroborated?'<b class="err">alongside an ARP impersonation</b>':'<span class="mut">on its own</span>')+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">A public DNS name that resolves to an address on this network is never something this router does on purpose. On its own it is worth a look; happening within 10 minutes of the ARP watch seeing someone impersonate an address is a much stronger sign of an active man-in-the-middle.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'dmrender',{sev:al?'bad':f.length?'warn':'ok',label:al?'Confirmed':f.length?'To look at':'Quiet',
+  tip:'A public DNS name that resolves to an address on this network is never something this router does on purpose. On its own it is worth a look; within 10 minutes of the ARP watch seeing someone impersonate an address it is a much stronger sign of an active man-in-the-middle.',
+  rows:f.map(x=>({k:x.t+x.client+x.name,t:x.t,sev:x.corroborated?'bad':'warn',title:'<b>'+esc(x.client)+'</b> '+esc(x.name)+' &rarr; '+esc(x.lan_ip),detail:(x.corroborated?'alongside an ARP impersonation':'on its own')+(x.mac?' &middot; '+esc(x.mac):'')}))})}
 async function dmload(){try{Dm=await (await api('/api/dnsmitm')).json();dmrender()}catch(e){}}
 let Tt=null;
 function ttrender(force){const el=$('tt');if(!Tt||guard(el,force))return;
@@ -573,12 +589,13 @@ function ttrender(force){const el=$('tt');if(!Tt||guard(el,force))return;
  const f=Tt.findings||[],devs=Tt.devices||[];
  const behind=devs.filter(d=>d.behind>0).length;
  $('ttbadge').innerHTML=behind?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+behind+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
  const what={ttl_forwarding:'forwarding for something behind it',ttl_two_stacks:'two operating systems on one address'};
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b> <span class="mut">'+esc(x.mac)+'</span></td><td>'+(what[x.kind]||esc(x.kind))+'<div class="mut">'+esc(x.note)+'</div></td><td>'+((Tt.ignore||[]).includes(x.mac)?'':'<button onclick="ttignore(\''+esc(x.mac)+'\')">Mark expected</button>')+'</td></tr>').join('');
- const dv=devs.map(d=>'<tr><td><b>'+esc(d.ip)+'</b><div class="mut">'+esc(d.mac)+'</div></td><td>'+d.direct+' direct'+(d.behind?', <b class="err">'+d.behind+' from behind it</b>':'')+'<div class="mut">'+esc(Object.entries(d.classes||{}).map(([k,v])=>'TTL '+k+' &times;'+v).join(', '))+'</div></td><td class="mut">'+esc(when(d.last))+'</td></tr>').join('');
- const ig=(Tt.ignore||[]).map(m=>esc(m)+' <button onclick="ttunignore(\''+m+'\')">watch again</button>').join(' &middot; ');
- el.innerHTML='<div class="mut" style="margin:6px 0">Every operating system starts its packets with a fixed TTL and every router takes one off, so a connection arriving one short has crossed a router behind the device: a phone re-sharing this hotspot, a travel router, a hidden second machine. A laptop running containers or a virtual machine looks the same, which is why it is only "to look at". Counts are for the last 10 minutes, from the first packet of each connection.'+(Tt.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'')+(dv?'<table style="margin-top:8px">'+dv+'</table>':'<div class="mut">no connections seen yet</div>')+(ig?'<div class="mut" style="margin-top:6px">expected: '+ig+'</div>':'')}
+ const ig=(Tt.ignore||[]);
+ det(el,'ttrender',{sev:!Tt.capture_ok?'bad':behind?'warn':'ok',label:!Tt.capture_ok?'Not running':behind?'To look at':'Quiet',
+  tip:'Every operating system starts its packets with a fixed TTL and every router takes one off, so a connection arriving one short has crossed a router behind the device: a phone re-sharing this hotspot, a travel router, a hidden second machine. A laptop running containers looks the same. Counts are for the last 10 minutes.',
+  rows:f.map(x=>({k:x.t+x.mac,t:x.t,title:'<b>'+esc(x.ip)+'</b> '+(what[x.kind]||esc(x.kind)),detail:esc(x.mac)+' &middot; '+esc(x.note),act:ig.includes(x.mac)?'':'<button onclick="ttignore(\''+esc(x.mac)+'\')">Mark expected</button>'})),
+  foot:dsec('Devices',devs.length,devs.map(d=>dfind('ttrender',{k:'d'+d.mac,t:d.last,sev:d.behind?'warn':'',title:'<b>'+esc(d.ip)+'</b> '+d.direct+' direct'+(d.behind?' &middot; '+d.behind+' from behind':''),detail:esc(d.mac)+' &middot; '+esc(Object.entries(d.classes||{}).map(([k,v])=>'TTL '+k+' &times;'+v).join(', '))})).join(''))+
+   dsec('Expected',ig.length,'<div class="chips" style="margin-top:8px">'+ig.map(m=>'<button class="chip" onclick="ttunignore(\''+m+'\')">'+esc(m)+' &times;</button>').join('')+'</div>')})}
 async function ttload(){try{Tt=await (await api('/api/ttl')).json();ttrender()}catch(e){}}
 async function ttdo(b){const r=await apost('ttl/ignore',b);$('ttmsg').textContent=r.j.error||'';ttload()}
 function ttignore(mac){if(confirm('Mark this device as expected to forward for others? It will no longer raise hidden-router events. (A router or a container host you run on purpose.)'))ttdo({mac,ignore:true})}
@@ -588,18 +605,18 @@ function atrender(force){const el=$('at');if(!At||guard(el,force))return;
  if(At.available===false){el.textContent='The stock admin tripwire is off on this build.';return}
  const k=At.knocks||[];
  $('atbadge').innerHTML=At.sources?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+At.sources+' source'+(At.sources===1?'':'s')+' this hour</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=k.slice(0,30).map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td class="mut">port '+x.port+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">'+(At.armed?'<b style="color:var(--ac)">armed</b>: the stock admin is switched off, so a knock on its ports '+esc(At.ports)+' has no honest reason':'<span class="mut">not armed</span>: the stock admin is still on, so its ports carry real traffic and a knock means nothing')+'. Read off the wire before the firewall rejects it; nothing listens and nothing is sent.'+(At.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing has knocked</div>')}
+ det(el,'atrender',{sev:!At.capture_ok?'bad':!At.armed?'':At.sources?'bad':'ok',label:!At.capture_ok?'Not running':!At.armed?'Not armed':At.sources?'Knocked':'Armed',chips:At.armed?chip('ports '+esc(At.ports),'','stock admin ports'):'',
+  tip:(At.armed?'Armed: the stock admin is switched off, so a knock on its ports has no honest reason':'Not armed: the stock admin is still on, so its ports carry real traffic and a knock means nothing')+'. Read off the wire before the firewall rejects it; nothing listens and nothing is sent.',
+  rows:k.slice(0,30).map(x=>({k:x.t+x.ip,t:x.t,sev:'bad',title:'<b>'+esc(x.ip)+'</b> port '+x.port,detail:x.mac?esc(x.mac):''}))})}
 async function atload(){try{At=await (await api('/api/admintrip')).json();atrender()}catch(e){}}
 let Rb=null;
 function rbrender(force){const el=$('rb');if(!Rb||guard(el,force))return;
  if(Rb.available===false){el.textContent='Rebinding refusal needs the DNS filter.';return}
  $('rbbadge').innerHTML=Rb.refused?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+Rb.refused+' refused</span>':'';
- const al=(Rb.allow||[]).map(p=>'<span><code>'+esc(p)+'</code> <button onclick="rballow(\''+esc(p)+'\',true)">remove</button></span>').join(' &middot; ');
- el.innerHTML='<div class="row"><span>'+(Rb.enabled?'<b style="color:var(--ac)">on</b>':'<span class="mut">off</span>')+'</span><button class="'+(Rb.enabled?'':'on')+'" onclick="rbset('+(!Rb.enabled)+')">'+(Rb.enabled?'Switch off':'Switch on')+'</button></div>'+
-  '<div class="mut" style="margin:6px 0">A public name that resolves to a private address (this network, loopback, link-local, the Tor bridge range) is refused instead of answered: that answer is how a web page rebinds itself to a device on your LAN and talks to it as if it were its own server. Nothing on this router ever resolves a public name to a private address on purpose; the ARP / DNS correlation card still records every one it sees. '+Rb.refused+' refused since the last start.</div>'+
-  '<div class="row"><input id="rbin" placeholder="*.example.com (a name allowed to do this)"><button onclick="rballow($(\'rbin\').value,false)">Allow</button></div>'+(al?'<div style="margin-top:6px">allowed: '+al+'</div>':'')}
+ const rl=Rb.allow||[];
+ det(el,'rbrender',{sev:Rb.enabled?'ok':'',label:Rb.enabled?'On':'Off',chips:chip(Rb.refused+' refused','','since the last start'),sw:sw(Rb.enabled,'rbset('+(!Rb.enabled)+')','Rebinding refusal'),
+  tip:'A public name that resolves to a private address (this network, loopback, link-local) is refused instead of answered: that answer is how a web page rebinds itself to a device on your LAN. Nothing on this router resolves a public name to a private address on purpose.',
+  foot:dsec('Allowed',rl.length,'<div class="row" style="margin-top:8px"><input id="rbin" aria-label="Name" placeholder="*.example.com" style="flex:1;min-width:0"><button class="on" onclick="rballow($(\'rbin\').value,false)">Allow</button></div>'+(rl.length?'<div class="chips" style="margin-top:8px">'+rl.map(p=>'<button class="chip" onclick="rballow(\''+esc(p)+'\',true)">'+esc(p)+' &times;</button>').join('')+'</div>':''))})}
 async function rbload(){try{Rb=await (await api('/api/rebind')).json();rbrender()}catch(e){}}
 async function rbdo(p,b){const r=await apost(p,b);$('rbmsg').textContent=r.j.error||'';rbload()}
 function rbset(on){rbdo('rebind/set',{enabled:on})}
@@ -622,21 +639,31 @@ function actoggle(id){const a=(Ac.actions||[]).find(x=>x.id===id);if(!a)return;c
 function acrun(id){const a=(Ac.actions||[]).find(x=>x.id===id);if(!a)return;const c=a.action==='reboot'?acconfirm('reboot'):'';if(a.action==='reboot'&&c!=='reboot')return;if(a.action!=='reboot'&&!confirm('Run "'+a.name+'" now?'))return;acdo('actions/run',{id,confirm:c||''})}
 function acdel(id){if(confirm('Delete this scheduled action?'))acdo('actions/delete',{id})}
 let Ev=null;
+let EvOpen={},EvAll=false,NtD=null;
+function evrel(t){const d=Date.now()/1000-t;return d<90?'now':d<5400?Math.round(d/60)+'m':d<172800?Math.round(d/3600)+'h':Math.round(d/86400)+'d'}
+function evtog(k){EvOpen[k]=!EvOpen[k];evrender(true)}
+function ntset(k,v){NtD[k]=v;NtD.dirty=true;evrender(true)}
 function evrender(force){const el=$('ev');if(!Ev||guard(el,force))return;
- $('evbadge').innerHTML=Ev.unseen?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+Ev.unseen+' to look at</span>':'';
- const ic={alert:'<span class="err"><b>&#10007;</b></span>',attention:'<span class="err">&#9888;</span>',info:'<span class="mut">&middot;</span>'};
- const rows=(Ev.events||[]).slice(0,30).map(e=>'<tr><td style="width:1.5em">'+(ic[e.sev]||'')+'</td><td class="mut" style="white-space:nowrap">'+esc(new Date(e.t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))+'</td><td'+(e.seen||e.sev==='info'?' class="mut"':'')+'>'+esc(e.text)+'</td></tr>').join('')||'<tr><td class="mut">nothing has happened</td></tr>';
  const n=Ev.notify||{},ch=Ev.chain||{};
- const chain=ch.length?'<div class="mut" style="margin:4px 0">Log chain '+(ch.ok?'<b style="color:var(--ac)">intact</b>':'<b class="err">broken at event '+ch.broken_at+'</b>')+(ch.since?' since '+esc(new Date(ch.since*1000).toLocaleDateString()):'')+', '+ch.length+' linked'+(ch.head?' &middot; head <code title="copy this somewhere else to compare later">'+esc(ch.head.slice(0,16))+'&hellip;</code>':'')+'</div>':'';
- el.innerHTML='<div class="row"><button onclick="evact(\'events/seen\')">Mark all seen</button><button onclick="evact(\'events/clear\')">Clear</button><span class="mut">New devices, outages, DNS failures, overheating, failed logins, Wi-Fi drops and more.</span></div>'+
-  '<table style="margin:8px 0">'+rows+'</table>'+chain+
-  '<div style="margin-top:10px"><b>Push to your phone (ntfy)</b> '+(n.enabled?'<b style="color:var(--ac)">on</b> &rarr; '+esc(n.where||''):'<span class="mut">off</span>')+'</div>'+
-  '<div class="mut" style="margin:4px 0">Only generic sentences leave the house (no names, MACs or keys). Self-hosted ntfy keeps it all local.</div>'+
-  '<div class="row"><input id="nt_url" type="password" autocomplete="off" placeholder="'+(n.url_set?'an address is saved (leave blank to keep it)':'https://ntfy.sh/your-secret-topic')+'"><select id="nt_min"><option value="alert"'+(n.min==='alert'?' selected':'')+'>only alerts</option><option value="attention"'+((n.min||'attention')==='attention'?' selected':'')+'>alerts and things to look at</option><option value="info"'+(n.min==='info'?' selected':'')+'>everything</option></select><label><input type="checkbox" id="nt_on" '+(n.enabled?'checked':'')+'> send</label></div>'+
-  '<div class="row" style="margin-top:6px"><button class="on" onclick="ntsave()">Save</button><button onclick="nttest()"'+(n.url_set?'':' disabled')+'>Send a test</button><button onclick="ntclear()"'+(n.url_set?'':' disabled')+'>Remove the address</button>'+(n.last_error?'<span class="err">last push failed: '+esc(n.last_error)+'</span>':'')+'</div>'}
+ if(!NtD||!NtD.dirty)NtD={min:n.min||'attention',on:!!n.enabled,url:'',dirty:false};
+ const al=(Ev.events||[]).some(e=>!e.seen&&e.sev==='alert');
+ $('evbadge').innerHTML=Ev.unseen?chip(Ev.unseen,al?'bad':'warn','to look at'):'';
+ const all=Ev.events||[],list=EvAll?all.slice(0,60):all.slice(0,10);
+ const rows=list.map(e=>'<div class="ev'+(e.seen||e.sev==='info'?'':' un')+'" onclick="evtog('+e.id+')"><span class="dot'+(e.sev==='alert'?' bad':e.sev==='attention'?' warn':'')+'"></span><span class="et'+(EvOpen[e.id]?' open':'')+'">'+esc(e.text)+'</span><span class="mut ts" title="'+esc(new Date(e.t*1000).toLocaleString())+'">'+evrel(e.t)+'</span></div>').join('')||'<div class="mut" style="padding:6px 0">&mdash;</div>';
+ const chain=ch.length?chip(ch.ok?'log intact':'log broken',ch.ok?'':'bad',(ch.ok?'The event log chain is intact':'Broken at event '+ch.broken_at)+(ch.since?', since '+new Date(ch.since*1000).toLocaleDateString():'')+', '+ch.length+' linked'+(ch.head?', head '+ch.head.slice(0,16):'')):'';
+ el.innerHTML='<div class="row"><button class="ib" aria-label="Mark all seen" title="Mark all seen" onclick="evact(\'events/seen\')">'+ic('check')+'</button><span style="flex:1"></span>'+chain+'</div>'+
+  '<div style="margin-top:6px">'+rows+'</div>'+
+  (all.length>10?'<div class="row" style="margin-top:8px"><button class="chip" onclick="EvAll=!EvAll;evrender(true)">'+(EvAll?'Fewer':'More')+'<span class="cnt">'+Math.min(all.length,60)+'</span></button></div>':'')+
+  '<details style="margin-top:12px"><summary><b>Push</b> <span class="dot'+(n.enabled&&n.url_set?(n.last_error?' bad':' ok'):'')+'" style="display:inline-block"></span>'+(n.last_error?chip('failed','bad',n.last_error):'')+'</summary>'+
+  row2('Send',sw(NtD.on,"ntset('on',"+(!NtD.on)+")",'Send pushes'))+
+  '<div class="row" style="margin-top:12px"><input id="nt_url" type="password" autocomplete="off" aria-label="Address" placeholder="'+(n.url_set?'saved, blank keeps it':'https://ntfy.sh/your-secret-topic')+'" title="Only generic sentences leave the house: no names, MACs or keys. Self-hosted ntfy keeps it all local." value="'+esc(NtD.url)+'" oninput="NtD.url=this.value;NtD.dirty=true" style="flex:1;min-width:0">'+(n.where?chip(esc(n.where)):'')+'</div>'+
+  '<div class="row" style="margin-top:12px">'+seg('Send from',[['alert','Alerts'],['attention','Attention'],['info','All']],NtD.min,v=>"ntset('min','"+v+"')")+'</div>'+
+  '<div class="row" style="margin-top:12px"><button class="on" onclick="ntsave()">Save</button><button onclick="nttest()"'+(n.url_set?'':' disabled')+'>Test</button>'+(n.url_set?'<button style="color:var(--bad);border-color:var(--bad)" onclick="ntclear()">Remove</button>':'')+'</div></details>'+
+  '<details style="margin-top:12px"><summary><b>Log</b></summary><div class="row" style="margin-top:8px"><button style="color:var(--bad);border-color:var(--bad)" onclick="evact(\'events/clear\')">Clear all events</button></div></details>'}
+const row2=(lab,ctl)=>'<div class="row" style="margin-top:12px"><span>'+lab+'</span><span style="flex:1"></span>'+ctl+'</div>';
 async function evload(){try{Ev=await (await api('/api/events')).json();evrender()}catch(e){}}
 async function evact(p){const r=await apost(p,{});$('evmsg').textContent=r.j.error||'';evload()}
-async function ntsave(){const r=await apost('notify/set',{url:$('nt_url').value.trim(),min:$('nt_min').value,enabled:$('nt_on').checked});$('evmsg').textContent=r.j.error||r.j.status||'';if(r.ok)$('nt_url').value='';evload()}
+async function ntsave(){const d=NtD,r=await apost('notify/set',{url:($('nt_url').value||d.url||'').trim(),min:d.min,enabled:d.on});$('evmsg').textContent=r.j.error||r.j.status||'';if(r.ok){NtD=null}evload()}
 async function nttest(){const r=await apost('notify/test',{});$('evmsg').textContent=r.j.error||r.j.status||''}
 async function ntclear(){if(!confirm('Remove the saved address and switch pushes off?'))return;const r=await apost('notify/clear',{});$('evmsg').textContent=r.j.error||r.j.status||'';evload()}
 let Xp=null;
@@ -693,6 +720,8 @@ const GR_DEFS=[
  {id:'dns',title:'DNS lookups per minute',unit:'',fmt:v=>Math.round(v)+'',series:[{k:'q',name:'Asked',c:'--s1',m:1},{k:'blk',name:'Blocked',c:'--s2',m:1}]},
  {id:'cl',title:'Devices on the Wi-Fi',unit:'',fmt:v=>Math.round(v)+'',series:[{k:'clients',name:'Devices',c:'--s1',m:1}],step:true,area:true,int:true},
  {id:'tmp',title:'Temperature',axis:()=>({u:'\u00b0C',div:1}),fmt:v=>Math.round(v)+'°C',series:[{k:'temp',name:'Hottest sensor',c:'--s1',m:1}],area:true,auto:true}];
+function sparkSvg(arr){const d=(arr||[]).map(v=>v==null?0:v);if(d.length<2)return '';const mx=Math.max(1e-9,...d),w=300,h=46,pts=d.map((v,i)=>[(i*w/(d.length-1)).toFixed(1),(h-2-v/mx*(h-6)).toFixed(1)].join(','));
+ return '<svg class="spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><path d="M0,'+h+' L'+pts.join(' L')+' L'+w+','+h+'Z" fill="var(--ax)" opacity=".35"/><polyline points="'+pts.join(' ')+'" fill="none" stroke="var(--ac)" stroke-width="2"/></svg>'}
 function fmtBits(bps){bps=bps*8;return bps>=1e6?(bps/1e6).toFixed(bps>=1e7?0:1)+' Mbit/s':bps>=1e3?Math.round(bps/1e3)+' kbit/s':Math.round(bps)+' bit/s'}
 function niceMax(v){if(v<=0)return 1;const e=Math.pow(10,Math.floor(Math.log10(v))),f=v/e;return (f<=1?1:f<=2?2:f<=5?5:10)*e}
 function gtime(t,long){const d=new Date(t*1000);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+(long?', '+d.toLocaleDateString([],{weekday:'short'}):'')}
@@ -808,7 +837,7 @@ function devinfo(d,dnsBy){const c=dnsBy[d.ip]||{};const orig=d.name||d.hostname|
   const ip=d.ip?esc(d.ip)+((d.ipv6||[]).length?' <span class="mut" title="'+esc(d.ipv6.join('\n'))+'">+IPv6</span>':''):'<span class="mut">-</span>';
 
   return {c,orig,nm,flags,conn}}
-async function dvload(){try{Dv=await (await api('/api/devices')).json();egrender()}catch(e){}}
+async function dvload(){try{Dv=await (await api('/api/devices')).json();egrender();brender();frender()}catch(e){}}
 async function dvact(p,b){const r=await apost(p,b);$('egmsg').textContent=r.j.error||'';setTimeout(()=>{dvload();bload();fload()},1200)}
 async function dvwake(mac){const r=await apost('devices/wake',{mac});$('egmsg').textContent=r.j.error||r.j.status||''}
 function dvpause(mac,nm){if(confirm('Cut the internet for '+nm+' for 30 minutes? Its LAN access, address and this page keep working.'))dvact('fw/pause',{mac,minutes:30})}
@@ -921,37 +950,45 @@ function crender(force){const el=$('cell');if(!Ce||guard(el,force))return;const 
   ((c.missing||[]).length?'<div class="err">could not read: '+esc(c.missing.join(', '))+'</div>':'')}
 async function cload(){try{Ce=await (await api('/api/cell')).json();CeS=await (await api('/status.json')).json();crender()}catch(e){}}
 let Fw=null;const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-function devopts(sel){const seen={},o=[];(Dh&&Dh.reservations||[]).forEach(r=>{seen[r.mac]=1;o.push([r.mac,r.name])});(Dh&&Dh.devices||[]).forEach(d=>{if(!seen[d.mac]){seen[d.mac]=1;o.push([d.mac,d.name||d.ip||d.mac])}});return '<option value="">'+sel+'</option>'+o.map(x=>'<option value="'+x[0]+'">'+esc(x[1])+'  '+esc(x[0])+'</option>').join('')}
 function frender(force){const a=$('fws'),b=$('fwd');if(!Fw||guard(a,force)||guard(b,force))return;
  const nm=m=>{const r=(Dh&&Dh.reservations||[]).find(x=>x.mac===m);return r?r.name:m};
- const pz=(Fw.paused||[]).map(p=>'<tr><td>'+esc(p.name||p.mac)+'</td><td>paused until '+esc(p.until)+'</td><td><button onclick="fresume(\''+p.mac+'\')">Resume</button></td></tr>').join('');
- const sc=(Fw.sched||[]).map(x=>'<tr><td>'+esc(x.name||x.mac)+'</td><td>'+x.days.map(d=>DAYS[d]).join(' ')+'</td><td>'+esc(x.from)+' to '+esc(x.to)+'</td><td>'+(x.enabled?(x.active?'<span class="err">internet cut now</span>':'on'):'<span class="mut">off</span>')+'</td><td><button onclick="fsoff('+x.id+','+(x.enabled?0:1)+')">'+(x.enabled?'Turn off':'Turn on')+'</button> <button onclick="fsdel('+x.id+')">Delete</button></td></tr>').join('');
- a.innerHTML='<div class="mut">Schedule time: '+esc(Fw.now)+'. Paused devices keep LAN access, lose internet.</div>'+
-  '<table style="margin:8px 0">'+(pz||'')+(sc||'')+((pz||sc)?'':'<tr><td class="mut">no pauses or schedules</td></tr>')+'</table>'+
-  '<div class="row"><select id="f_pdev">'+devopts('Pause a device...')+'</select><select id="f_pmin"><option value="30">30 min</option><option value="60">1 hour</option><option value="180">3 hours</option><option value="480">8 hours</option><option value="1440">24 hours</option></select><button class="on" onclick="fpause()">Pause internet</button></div>'+
-  '<div class="row" style="margin-top:8px"><select id="f_sdev">'+devopts('Schedule for...')+'</select><input id="f_from" value="22:00" style="max-width:70px"><span class="mut">to</span><input id="f_to" value="06:00" style="max-width:70px"></div>'+
-  '<div class="row" style="margin-top:4px">'+DAYS.map((d,i)=>'<label class="mut"><input type="checkbox" class="f_day" value="'+i+'" '+'checked'+'> '+d+'</label>').join(' ')+'<button class="on" onclick="fsadd()">Add schedule</button></div>'+
-  '<div class="mut" style="margin-top:4px">Days = start day (22:00 Fri runs into Sat morning).</div>';
+ const dl=((Dv&&Dv.devices)||[]).filter(d=>d.mac).map(d=>[d.mac,d.label||d.name||d.hostname||d.ip||d.mac]),dn=m=>(dl.find(x=>x[0]===m)||[0,nm(m)])[1],sel=Fd.dev;
+ const pz2=(Fw.paused||[]).map(p=>'<div class="rl"><span class="dot warn"></span><span class="t">'+esc(p.name||dn(p.mac))+'</span>'+chip(esc(p.until),'warn','paused until')+'<button class="ib" aria-label="Resume" onclick="fresume(\''+p.mac+'\')">'+ic('play')+'</button></div>').join('');
+ const sc2=(Fw.sched||[]).map(x=>'<div class="rl"><span class="dot'+(x.enabled?(x.active?' bad':' ok'):'')+'" title="'+(x.active?'internet cut now':'')+'"></span><span class="t">'+esc(x.name||dn(x.mac))+'<div class="days" style="margin-top:4px" title="start days">'+DAYS.map((d,i)=>'<i class="'+(x.days.indexOf(i)>=0?'on':'')+'">'+d[0]+'</i>').join('')+'</div></span>'+chip(esc(x.from)+'&ndash;'+esc(x.to))+sw(x.enabled,'fsoff('+x.id+','+(x.enabled?0:1)+')','Schedule on')+'<button class="ib" aria-label="Delete" onclick="fsdel('+x.id+')">'+ic('x')+'</button></div>').join('');
+ const act=(Fw.sched||[]).some(x=>x.enabled&&x.active),n2=(Fw.paused||[]).length+(Fw.sched||[]).length;
+ $('fwbadge').innerHTML=n2?chip(n2,act?'bad':'',act?'internet cut now':'pauses and schedules'):'';
+ a.innerHTML=(pz2||sc2?pz2+sc2:'<div class="mut" style="padding:6px 0">&mdash;</div>')+
+  '<details style="margin-top:12px"><summary><b>New</b></summary>'+
+  '<div class="scroll" style="margin-top:8px">'+dl.map(d=>'<button type="button" class="chip'+(sel===d[0]?' on':'')+'" onclick="fdsel(\''+d[0]+'\')">'+esc(d[1])+'</button>').join('')+'</div>'+
+  '<div class="row" style="margin-top:4px"><span class="mut">Pause</span><span class="seg" role="group" aria-label="Pause internet">'+[[30,'30m'],[60,'1h'],[180,'3h'],[480,'8h'],[1440,'24h']].map(o=>'<button type="button"'+(sel?'':' disabled style="opacity:.45"')+' onclick="fpause('+o[0]+')">'+o[1]+'</button>').join('')+'</span></div>'+
+  '<div class="sub"><div class="row"><span class="mut">Schedule</span><input type="time" aria-label="From" style="width:104px;flex:none" value="'+esc(Fd.from)+'" oninput="Fd.from=this.value"><span class="mut">&ndash;</span><input type="time" aria-label="To" style="width:104px;flex:none" value="'+esc(Fd.to)+'" oninput="Fd.to=this.value"></div>'+
+  '<div class="scroll" style="margin-top:8px" title="Days = start day (22:00 Fri runs into Sat morning)">'+DAYS.map((d,i)=>'<button type="button" class="chip'+(Fd.days.indexOf(i)>=0?' on':'')+'" onclick="fdday('+i+')">'+d[0]+'</button>').join('')+'</div>'+
+  '<div class="row" style="margin-top:6px"><button class="on" onclick="fsadd()">Add schedule</button>'+(sel?'':'<span class="mut">pick a device</span>')+'</div></div></details>';
  const dz=(Fw.dest||[]).map(d=>'<tr><td>'+esc(d.cidr)+'</td><td class="mut">'+esc(d.note||'')+'</td><td><button onclick="fddel(\''+d.cidr+'\')">Unblock</button></td></tr>').join('')||'<tr><td class="mut">none</td></tr>';
  b.innerHTML='<table style="margin:8px 0">'+dz+'</table><div class="row"><input id="f_cidr" placeholder="203.0.113.7 or 203.0.113.0/24" style="max-width:230px"><input id="f_note" placeholder="note (optional)" maxlength="60" style="max-width:200px"><button class="on" onclick="fdadd()">Block</button></div><div class="mut" style="margin-top:4px">IPv4 or IPv6, /8 or narrower. Local network cannot be blocked.</div>'}
 async function fload(){try{Fw=await (await api('/api/fw')).json();frender()}catch(e){}}
 async function fdo(path,body,box){const r=await apost(path,body);$(box).textContent=r.j.error||'';fload();return r}
-function fpause(){const m=$('f_pdev').value;if(!m){$('fmsg').textContent='Pick a device.';return}fdo('fw/pause',{mac:m,minutes:parseInt($('f_pmin').value)},'fmsg')}
+let Fd={dev:'',days:[0,1,2,3,4,5,6],from:'22:00',to:'06:00'};
+function fdsel(m){Fd.dev=Fd.dev===m?'':m;frender(true)}
+function fdday(i){const k=Fd.days.indexOf(i);if(k>=0)Fd.days.splice(k,1);else Fd.days.push(i);frender(true)}
+function fpause(min){if(!Fd.dev){$('fmsg').textContent='Pick a device.';return}fdo('fw/pause',{mac:Fd.dev,minutes:min},'fmsg')}
 function fresume(m){fdo('fw/resume',{mac:m},'fmsg')}
-function fsadd(){const m=$('f_sdev').value;if(!m){$('fmsg').textContent='Pick a device.';return}const days=[...document.querySelectorAll('.f_day')].filter(x=>x.checked).map(x=>parseInt(x.value));fdo('fw/sched/set',{mac:m,days,from:$('f_from').value.trim(),to:$('f_to').value.trim(),enabled:true},'fmsg')}
+function fsadd(){if(!Fd.dev){$('fmsg').textContent='Pick a device.';return}if(!Fd.days.length){$('fmsg').textContent='Pick at least one day.';return}fdo('fw/sched/set',{mac:Fd.dev,days:Fd.days.slice().sort(),from:Fd.from.trim(),to:Fd.to.trim(),enabled:true},'fmsg')}
 function fsdel(id){if(confirm('Delete this schedule?'))fdo('fw/sched/delete',{id},'fmsg')}
 function fsoff(id,on){const x=Fw.sched.find(s=>s.id===id);if(x)fdo('fw/sched/set',{id,mac:x.mac,days:x.days,from:x.from,to:x.to,note:x.note,enabled:!!on},'fmsg')}
 function fdadd(){fdo('fw/dest/add',{cidr:$('f_cidr').value,note:$('f_note').value},'gmsg')}
 function fddel(c){if(confirm('Unblock '+c+'?'))fdo('fw/dest/delete',{cidr:c},'gmsg')}
 let Bl=null;
 function brender(force){const el=$('blk');if(!Bl||guard(el,force))return;
- const rows=(Bl.blocked||[]).map(b=>'<tr><td>'+esc(b.name||'(unknown)')+'</td><td class="mut">'+esc(b.mac)+'</td><td>'+(b.online?'<span class="err">on the Wi-Fi, but cut off</span>':'<span class="mut">cut off</span>')+'</td><td><button onclick="bdel(\''+b.mac+'\')">Unblock</button></td></tr>').join('')||'<tr><td class="mut">nobody is blocked</td></tr>';
- const cand=(Dh&&Dh.devices||[]).filter(d=>d.wifi&&!(Bl.blocked||[]).some(b=>b.mac===d.mac));
- el.innerHTML='<table style="margin:8px 0">'+rows+'</table><div class="row"><select id="b_pick"><option value="">Block a connected device...</option>'+cand.map(d=>'<option value="'+d.mac+'">'+esc(d.name||d.ip||'?')+'  '+esc(d.mac)+'</option>').join('')+'</select><input id="b_mac" placeholder="or a MAC: aa:bb:cc:dd:ee:ff" style="max-width:210px"><button class="on" onclick="badd()">Block</button></div>'+
-  '<div class="mut" style="margin-top:4px">Blocked = no address, DNS, internet or LAN. Kicked off Wi-Fi on sight. Cannot block yourself. Persists across reboots.</div>'}
+ const bl=Bl.blocked||[];$('blbadge').innerHTML=bl.length?chip(bl.length,'bad','blocked: no address, DNS, internet or LAN; kicked off Wi-Fi on sight'):'';
+ const rows=bl.map(b=>'<div class="rl"><span class="dot bad"></span><span class="t">'+esc(b.name||'(unknown)')+'</span>'+chip(esc(b.mac.slice(-5)),'',b.mac)+(b.online?chip('on Wi-Fi','warn','on the Wi-Fi, but cut off'):'')+'<button class="ib" aria-label="Unblock" onclick="bdel(\''+b.mac+'\')">'+ic('restore')+'</button></div>').join('')||'<div class="mut" style="padding:6px 0">&mdash;</div>';
+ const cand=((Dv&&Dv.devices)||[]).filter(d=>d.wifi&&d.mac&&!bl.some(b=>b.mac===d.mac));
+ el.innerHTML=rows+
+  (cand.length?'<div class="mut" style="margin-top:12px">Block</div><div class="scroll" style="margin-top:6px">'+cand.map(d=>'<button type="button" class="chip" onclick="bblock(\''+d.mac+'\')">'+esc(d.label||d.name||d.hostname||d.ip||d.mac)+'</button>').join('')+'</div>':'')+
+  '<details style="margin-top:12px"><summary><b>By MAC</b></summary><div class="row" style="margin-top:8px"><input id="b_mac" aria-label="MAC" placeholder="aa:bb:cc:dd:ee:ff" style="flex:1;min-width:0"><button class="on" onclick="badd()">Block</button></div></details>'}
 async function bload(){try{Bl=await (await api('/api/wifi/macfilter')).json();brender()}catch(e){}}
-async function badd(){const mac=($('b_mac').value.trim()||$('b_pick').value).toLowerCase();if(!mac){$('bmsg').textContent='Pick a device or type a MAC.';return}
- if(!confirm('Cut '+mac+' off the network? '))return;const r=await apost('wifi/macfilter/add',{mac});$('bmsg').textContent=r.j.error||r.j.status||'';setTimeout(bload,1500)}
+async function badd(){const mac=$('b_mac').value.trim().toLowerCase();if(!mac){$('bmsg').textContent='Type a MAC.';return}bblock(mac)}
+async function bblock(mac){if(!confirm('Cut '+mac+' off the network? '))return;const r=await apost('wifi/macfilter/add',{mac});$('bmsg').textContent=r.j.error||r.j.status||'';setTimeout(bload,1500)}
 async function bdel(mac){if(!confirm('Let '+mac+' back onto the network? '))return;const r=await apost('wifi/macfilter/remove',{mac});$('bmsg').textContent=r.j.error||r.j.status||'';setTimeout(bload,1500)}
 let Pl=null;
 function prender(force){const el=$('pool');if(!Pl||guard(el,force))return;
@@ -969,11 +1006,12 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
 (function(){
  let st={};try{st=JSON.parse(localStorage.getItem('cc')||'{}')}catch(e){}
  const save=()=>{try{localStorage.setItem('cc',JSON.stringify(st))}catch(e){}};
+ const DETS=[['ARP watch','ARP'],['Rogue DHCP','DHCP'],['Steering watch','Steer'],['Canary','Canary'],['MAC churn','MAC'],['DNS canary','DNS'],['NXDOMAIN flood','NXD'],['Beacon patterns','Beacon'],['Tor / proxy bypass','Bypass'],['Bare-IP TLS','TLS'],['Certificate change','Cert'],['DHCP fingerprint drift','Finger'],['Resolver cross-check','XCheck'],['LAN announcements','LAN'],['ARP / DNS correlation','Corr'],['Hidden router','Router'],['Stock admin tripwire','Admin'],['Rebinding refusal','Rebind']];
  const cards=[...document.querySelectorAll('.card')];
- function setClosed(c,h,k,closed){c.classList.toggle('closed',closed);h.setAttribute('aria-expanded',closed?'false':'true');if(closed)st[k]=1;else delete st[k]}
+ function setClosed(c,h,k,closed){c.classList.toggle('closed',closed);h.setAttribute('aria-expanded',closed?'false':'true');if(closed)st[k]=1;else st[k]=0}
  cards.forEach(c=>{const h=c.querySelector(':scope>h2');if(!h)return;const k=(h.firstChild&&h.firstChild.textContent||'').trim();if(!k)return;
   h.classList.add('cc');h.setAttribute('role','button');h.tabIndex=0;
-  setClosed(c,h,k,!!st[k]);
+  setClosed(c,h,k,k in st?!!st[k]:DETS.some(d=>d[0]===k));
   const tog=()=>{setClosed(c,h,k,!c.classList.contains('closed'));save()};
   h.addEventListener('click',tog);h.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tog()}})});
  window.ccAll=closed=>{cards.forEach(c=>{const h=c.querySelector(':scope>h2.cc');if(h)setClosed(c,h,(h.firstChild.textContent||'').trim(),closed)});save();secs.forEach(s=>setSecClosed(s,s.textContent.trim(),closed));saveSec()};
@@ -988,10 +1026,10 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
   s.addEventListener('click',tog);s.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tog()}})});
 
  // tabs: the same cards, grouped so one thumb-reachable view shows at a time
- const IC={bridge:'M2 18h20M4 18v-4c0-4 3.5-7 8-7s8 3 8 7v4M8 18v-5M12 18v-6M16 18v-5',devices:'M4 5h16v11H4zM8 20h8M12 16v4',eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',pause:'M8 5v14M16 5v14',play:'M7 4l13 8-13 8z',block:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8',pen:'M4 20l4-1 11-11-3-3L5 16l-1 4z',chev:'M6 9l6 6 6-6',check:'M5 12l5 5 9-10',chart:'M4 20V10M10 20V4M16 20v-8M22 20H2',shield:'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',lock:'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',globe:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',wall:'M3 5h18v14H3zM3 10h18M3 15h18M9 5v5M15 10v5M9 15v4',tower:'M12 13v8M8 21h8M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M12 11.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',wifi:'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01'};
+ const IC={bridge:'M2 18h20M4 18v-4c0-4 3.5-7 8-7s8 3 8 7v4M8 18v-5M12 18v-6M16 18v-5',devices:'M4 5h16v11H4zM8 20h8M12 16v4',eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',pause:'M8 5v14M16 5v14',play:'M7 4l13 8-13 8z',block:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8',pen:'M4 20l4-1 11-11-3-3L5 16l-1 4z',chev:'M6 9l6 6 6-6',check:'M5 12l5 5 9-10',x:'M6 6l12 12M18 6L6 18',restore:'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3',chart:'M4 20V10M10 20V4M16 20v-8M22 20H2',shield:'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',lock:'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',globe:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',wall:'M3 5h18v14H3zM3 10h18M3 15h18M9 5v5M15 10v5M9 15v4',tower:'M12 13v8M8 21h8M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M12 11.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',wifi:'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01'};
  const ic=n=>'<svg class="i" viewBox="0 0 24 24"><path d="'+IC[n]+'"/></svg>';window.ic=ic;
  const SECS={'Bridge control':['none','bridge'],'Monitoring':['watch','watch'],'Security':['watch','watch'],'DNS':['watch','watch'],'Devices':['none','devices'],'Network':['more','more'],'System':['more','more']};
- const CARDS={'Devices':'bridge','Blocked devices':'devices','Internet schedules':'devices','Wi-Fi':'devices','Cellular':'bridge'};
+ const CARDS={'Devices':'bridge','Blocked devices':'devices','Internet schedules':'devices','Wi-Fi':'devices','Cellular':'bridge','Detectors':'watch'};
  const main=document.querySelector('main');
  const hero=main.querySelector('.card.hero');
  const lights=document.createElement('div');lights.className='lights';lights.id='lights';hero.after(lights);
@@ -1025,6 +1063,16 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
  lightsRender();setInterval(lightsRender,1500);
  const gt=document.getElementById('gtog'),gr=document.getElementById('gr');let gopen=false;try{gopen=localStorage.getItem('gr')==='1'}catch(e){}
  const gset=o=>{gopen=o;gr.hidden=!o;gt.setAttribute('aria-expanded',o);gt.innerHTML=ic('chart')+'<span class="cv" style="display:inline-flex;transform:rotate('+(o?180:0)+'deg)">'+ic('chev')+'</span>';try{localStorage.setItem('gr',o?'1':'0')}catch(e){}};gt.onclick=()=>gset(!gopen);gset(gopen);
+ // wall of lights: one tile per detector, coloured from the badge that detector already fills in
+ const titleOf=c=>{const h=c.querySelector(':scope>h2');return h&&h.firstChild?h.firstChild.textContent.trim():''};
+ const dcards=DETS.map(d=>cards.find(c=>titleOf(c)===d[0]));
+ dcards.forEach((c,i)=>{if(c)c.id='d-'+i});
+ const wall=document.getElementById('wall');let lastW='';
+ function wallRender(){let w=0,b=0;const h=DETS.map((d,i)=>{const c=dcards[i],bd=c&&c.querySelector('h2 [id$="badge"]'),t=bd?bd.innerHTML.trim():'',k=!t?0:/class="err"/.test(t)?2:1;if(k===1)w++;if(k===2)b++;
+   return '<button type="button" class="tile'+(k===1?' warn':k===2?' bad':'')+'" title="'+d[0]+'" onclick="goCard(\'watch\',\'d-'+i+'\')"><i></i>'+d[1]+'</button>'}).join('');
+  const bh=(b?chip(b,'bad','alerts'):'')+(w?chip(w,'warn','to look at'):'');
+  if(h+bh!==lastW){lastW=h+bh;wall.innerHTML=h;document.getElementById('dtbadge').innerHTML=bh}}
+ wallRender();setInterval(wallRender,1500);
  // every <details> remembers open/closed across re-renders and page reloads
  let dst={};try{dst=JSON.parse(localStorage.getItem('dt')||'{}')}catch(e){}
  let dapplying=false;
