@@ -85,6 +85,7 @@ var (
 	adminTripOn     = flag.Bool("admin-tripwire", true, "raise an event when something knocks on the switched-off stock admin's ports 81 and 444 (stock admin tripwire)")
 	steerWatchOn    = flag.Bool("steer-watch", true, "watch the bridge for IPv6 router advertisements and ICMP redirects from anything other than this Orbic (steering watch)")
 	steerFile       = flag.String("steer-file", "/data/proxy/steer.json", "routers the owner allowed to advertise (their MAC addresses)")
+	searchFile      = flag.String("search-file", "/data/proxy/search.json", "metasearch settings (on/off, the proxy and DNS paths, the engines)")
 	rebindFile      = flag.String("rebind-file", "/data/proxy/rebind.json", "DNS rebinding refusal settings (on/off, the names allowed to resolve to a private address)")
 	dhcpFPWatchOn   = flag.Bool("dhcp-fp-watch", true, "watch the bridge for DHCP fingerprint drift (option 55 shape changing on a MAC that had settled)")
 	rogueWatchOn    = flag.Bool("rogue-dhcp", true, "watch the bridge for DHCP replies from any server other than this Orbic")
@@ -467,6 +468,7 @@ func main() {
 		dnsMITMMgr = newDNSMITMWatch()
 		rebindMgr = newRebindGuard(*rebindFile)
 	}
+	searchMgrG = newSearchMgr(*searchFile)
 	macChurnMgr = newMACChurnWatch()
 	torBypassMgr = newTorBypassWatch(*torExitFile)
 	beaconMgr = newBeaconWatch("/data/proxy/beacon.json")
