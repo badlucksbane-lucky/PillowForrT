@@ -118,6 +118,7 @@ func (u *listUpdater) UpdateAll(force bool) map[string]error {
 func (u *listUpdater) Schedule() {
 	go func() {
 		time.Sleep(45 * time.Second)
+		u.f.WaitLoaded(10 * time.Minute) // a list not yet read from disk looks missing, and would be downloaded again
 		for {
 			missing := false
 			for _, l := range u.f.Lists() {

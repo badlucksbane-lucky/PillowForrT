@@ -96,6 +96,8 @@ type Filter struct {
 	custom     *customRules
 	allowGlob  []string
 	pauseUntil time.Time
+	ready      chan struct{} // closed when every list on disk has been read (LoadLists)
+	readyOnce  sync.Once
 }
 
 func NewFilter(dir string) *Filter {
@@ -103,7 +105,7 @@ func NewFilter(dir string) *Filter {
 	for _, sp := range defaultLists {
 		en[sp.Name] = sp.Default
 	}
-	return &Filter{dir: dir, lists: map[string]*listData{}, mode: "on", allow: map[string]struct{}{}, devMode: map[string]string{}, enabled: en, custom: newCustomRules(dir)}
+	return &Filter{dir: dir, lists: map[string]*listData{}, mode: "on", allow: map[string]struct{}{}, devMode: map[string]string{}, enabled: en, custom: newCustomRules(dir), ready: make(chan struct{})}
 }
 
 var skipNames = map[string]bool{
@@ -222,6 +224,9 @@ func loadCompiled(path string, max int) (hashSet, error) {
 	}
 	defer fh.Close()
 	var h hashSet
+	if fi, err := fh.Stat(); err == nil { // a name and its newline average about 18 bytes: size the slice once instead of growing it by append
+		h = make(hashSet, 0, min(int(fi.Size()/16), max))
+	}
 	sc := bufio.NewScanner(fh)
 	sc.Buffer(make([]byte, 64*1024), 1<<20)
 	for sc.Scan() {
@@ -286,8 +291,25 @@ func (f *Filter) saveState() {
 	}
 }
 
-// Load reads the saved mode, the allow-list and every compiled list that exists on disk. Missing pieces are not errors.
+// Load reads everything: LoadBase, then LoadLists. Startup does the two apart (see main.go), so that DNS is answering while the lists are still being read.
 func (f *Filter) Load() {
+	f.LoadBase()
+	f.LoadLists()
+}
+
+// WaitLoaded blocks until LoadLists has finished, or the timeout passes. It reports whether the lists are all in.
+func (f *Filter) WaitLoaded(timeout time.Duration) bool {
+	select {
+	case <-f.ready:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
+// LoadBase reads the saved mode, the per-device modes, the always-allow list and the owner's own rules: small files, a moment's work. After it the filter can answer
+// (with no block list in it yet).
+func (f *Filter) LoadBase() {
 	os.MkdirAll(f.dir, 0o755)
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -330,32 +352,6 @@ func (f *Filter) Load() {
 			}
 		}
 	}
-	total := 0
-	for _, sp := range defaultLists {
-		if _, err := os.Stat(f.listPath(sp.Name)); err != nil {
-			continue
-		}
-		set, err := loadCompiled(f.listPath(sp.Name), maxListEntries)
-		l := f.lists[sp.Name]
-		if l == nil {
-			l = &listData{Name: sp.Name}
-			f.lists[sp.Name] = l
-		}
-		if err != nil || len(set) == 0 {
-			continue
-		}
-		if total+len(set) > maxTotalEntries {
-			l.Err = "not loaded: the lists together would pass the memory budget"
-			continue
-		}
-		total += len(set)
-		l.Wild, l.set, l.Entries = sp.Wildcard, set, len(set)
-		if l.Updated.IsZero() {
-			if fi, err := os.Stat(f.listPath(sp.Name)); err == nil {
-				l.Updated = fi.ModTime()
-			}
-		}
-	}
 	f.custom = newCustomRules(f.dir)
 	if b, err := os.ReadFile(f.allowPath()); err == nil {
 		for _, ln := range strings.Split(string(b), "\n") {
@@ -364,6 +360,47 @@ func (f *Filter) Load() {
 			}
 		}
 		f.rebuildAllowGlobs()
+	}
+}
+
+// LoadLists reads every compiled list on disk, one at a time, and puts each into service as soon as it is read, without holding the lock while it reads (a list takes a
+// few seconds on the box's one slow core, and all of them together more than that). Until a list is in, names on it are not blocked: for those seconds the filter fails open
+// on the block lists only, where holding DNS back until they are all read would leave the whole house without name lookups after every restart. A list the updater has
+// already replaced meanwhile is left alone.
+func (f *Filter) LoadLists() {
+	defer f.readyOnce.Do(func() { close(f.ready) })
+	for _, sp := range defaultLists {
+		fi, err := os.Stat(f.listPath(sp.Name))
+		if err != nil {
+			continue
+		}
+		set, err := loadCompiled(f.listPath(sp.Name), maxListEntries)
+		f.mu.Lock()
+		l := f.lists[sp.Name]
+		if l == nil {
+			l = &listData{Name: sp.Name}
+			f.lists[sp.Name] = l
+		}
+		if err != nil || len(set) == 0 || l.set != nil {
+			f.mu.Unlock()
+			continue
+		}
+		total := len(set)
+		for n, o := range f.lists {
+			if n != sp.Name {
+				total += o.Entries
+			}
+		}
+		if total > maxTotalEntries {
+			l.Err = "not loaded: the lists together would pass the memory budget"
+			f.mu.Unlock()
+			continue
+		}
+		l.Wild, l.set, l.Entries = sp.Wildcard, set, len(set)
+		if l.Updated.IsZero() {
+			l.Updated = fi.ModTime()
+		}
+		f.mu.Unlock()
 	}
 }
 

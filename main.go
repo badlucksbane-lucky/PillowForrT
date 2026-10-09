@@ -404,8 +404,13 @@ func main() {
 	if *dnsListen != "" {
 		uiTokenFile = *uiTokenFlag
 		flt := NewFilter(*dnsDir)
-		flt.Load()
-		debug.FreeOSMemory() // hand the lists' parse garbage back to the OS now, not whenever the scavenger gets to it
+		flt.LoadBase()
+		go func() { // the block lists come in one by one while DNS is already answering (see LoadLists)
+			t0 := time.Now()
+			flt.LoadLists()
+			debug.FreeOSMemory() // hand the lists' parse garbage back to the OS now, not whenever the scavenger gets to it
+			log.Printf("block lists read: %d names in %v", flt.TotalEntries(), time.Since(t0).Round(100*time.Millisecond))
+		}()
 		up := newUpstream(upstreamConfig{DoHURLs: strings.Split(*dnsDoH, ","), Roots: rootPool(), Dial: ownDial, TimeoutFor: ownTimeout, RouteGen: ownRouteGen, BootDial: dialUpstream})
 		dnsProxy = &DNSProxy{Filter: flt, Up: up, Cache: newDNSCache(2000), Stats: NewDNSStats(), BlockTTL: 60, Neigh: newNeighbours()}
 		dnsUpdater = newListUpdater(flt)

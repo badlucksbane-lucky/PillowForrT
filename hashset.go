@@ -2,6 +2,7 @@ package main
 
 import (
 	"hash/maphash"
+	"slices"
 	"sort"
 )
 
@@ -15,14 +16,18 @@ var hashSeed = maphash.MakeSeed()
 
 func hashName(s string) uint64 { return maphash.String(hashSeed, s) }
 
-// sealHashSet sorts and de-duplicates a slice of name hashes into a set (the streaming loaders build the raw slice themselves).
+// sealHashSet sorts and de-duplicates a slice of name hashes into a set (the streaming loaders build the raw slice themselves). The result is cut to its exact size:
+// a slice grown by append keeps up to a quarter more room than it uses, which on the box is megabytes of heap for nothing.
 func sealHashSet(h hashSet) hashSet {
-	sort.Slice(h, func(i, j int) bool { return h[i] < h[j] })
+	slices.Sort(h)
 	out := h[:0]
 	for i, v := range h {
 		if i == 0 || v != h[i-1] {
 			out = append(out, v)
 		}
+	}
+	if cap(out) > len(out)+len(out)/16 {
+		return append(hashSet(nil), out...)
 	}
 	return out[:len(out):len(out)]
 }
@@ -33,14 +38,7 @@ func newHashSet(names []string) hashSet {
 	for i, n := range names {
 		h[i] = hashName(n)
 	}
-	sort.Slice(h, func(i, j int) bool { return h[i] < h[j] })
-	out := h[:0]
-	for i, v := range h {
-		if i == 0 || v != h[i-1] {
-			out = append(out, v)
-		}
-	}
-	return out[:len(out):len(out)]
+	return sealHashSet(h)
 }
 
 func (h hashSet) has(name string) bool {
