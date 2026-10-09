@@ -1,8 +1,67 @@
-# Handoff: PillowForrT, 2026-10-09
+# Handoff: PillowForrT, 2026-10-09 (updated after the performance audit)
 
-Written at the end of a long session. **Playback works. The box (an Orbic RC400L) freezes and drops connections at random, and has cold-rebooted. Tor has been switched off for every playback test.** The freeze is the open problem; everything else below is context for it.
+**Playback works. The box (an Orbic RC400L) used to freeze, drop connections and cold-reboot at random, and Tor has been off for every playback test.** A performance and stability audit on 2026-10-09 found the idle load (the daemon at 40 to 50 % CPU, GC pinned against its memory limit) and fixed it, plus seven other choke points; see "Audit and fixes" below. **The freezes are not proven fixed**: the box also restarted six times in 16 minutes after the audit's second deploy (four confirmed as cold reboots by the watcher, a fifth by its uptime), with healthy vitals just before each death, and that is unexplained. See "The reboot cluster".
 
 ## Next session: start here
+
+1. **Read "The reboot cluster" first**, then ask Ben what he was doing between 07:45 and 08:06 on the box's clock (EDT) on 2026-10-09: playing from the Pixel, moving the unit, unplugging or replugging power. Ask what powers the box (its battery or a charger) and what powers the Pi, since the Pi rebooted too.
+2. Check the watcher (`pgrep -x watch.sh`; restart command under "Freeze investigation: progress") and read `~/freeze-watch/watch.log` for `up` dropping since 2026-10-09 06:58 (Pi clock).
+3. Ask Ben to play a stream from the Pixel with you watching the vitals line (`ssh pillowforrt 'grep "vitals load" /data/proxy/tinyfwd.log | tail'`), to see CPU, heap and `gcs=` under real load now that the idle problem is fixed. Nobody has done that with the audit's fixes in place and the box staying up.
+4. Open audit items are listed under "Still open from the audit". Ask before deploying anything; a freeze needs a power cycle.
+
+## Audit and fixes (2026-10-09)
+
+Eight commits, all deployed to the box, **none pushed** (`origin` is behind by eight). The binary on the box is the build of `30dab50`, sha256 starting `5772f759f08848795fd11cef8d9f19261e763b3e66f48ed9100ad41b507f3129` (full hash in `./build.sh` output).
+
+| Commit | What | Measured effect |
+|---|---|---|
+| `2b94e26` | wireguard-go packet buffers 64 KB to 1700 bytes (**local patch to the vendored library**, see below); `vitals.go` wired in: a `vitals` line every 15 s and `/api/debug/heap`, `/api/debug/goroutines` | idle tunnel 25.4 MB to 0.9 MB of heap; daemon idle CPU about 50 % to 5 to 8 %; heap 54 to 64 MB to 19 to 25 MB; `gcs=` 2 to 3 per 15 s |
+| `5e7fd15` | bridge: WebSocket frame built in place (no per-chunk copy), page frames read into one reused buffer, message cap 512 to 128 KB | not measured under load |
+| `af399a1` | bridge: 2.5 MB/s total cap, no new peer connection or lookup above load 4.0, two lookups at once, repeat lookups answered from a 90 s cache | not measured under load |
+| `352dd2d` | DNS stub starts before the block lists are read (they load one by one in the background); hash sets built pre-sized and exact | on the A7 the lists take **9.1 to 9.4 s** to read (a DNS blackout on every restart before this); live list heap 16.0 to 13.7 MB, peak 47 to 34 MB (measured on a fast core) |
+| `f273760` | proxy: at most 256 open connections (128 per device), 503 with `Retry-After` beyond; CONNECT keeps the answer flowing after the client half-closes; TCP keepalive on the client side | unit tests only |
+| `92f4eb4` | DNS: next DoH resolver asked after 400 ms or at once on failure (hedged); identical in-flight lookups share one request; a failed lookup is remembered 5 s per route | unit tests only |
+| `f7feed9` | firewall: rules loaded only when they changed or the hooks are gone (a read-only check every 15 s, full re-assert every 5 min) instead of replacing both tables every 15 s | pause on a fake MAC applied and expired correctly; a deleted hook came back within 10 s |
+| `30dab50` | log: rotates at 512 KB (one `.1` copy), client aborts not logged, repeated proxy and TLS-handshake errors said once per 10 min or per minute with a count | old 3.8 MB log moved to `tinyfwd.log.1` (still world-writable, delete it when no longer needed) |
+
+### What the audit measured
+
+- **The cause of the idle load:** the block lists hold 16 MB live (1.71M names, 8-byte hashes; all lists but nsfw are enabled), the idle WireGuard tunnel held 25.4 MB, base about 5 MB: about 46 MB before any client, against `debug.SetMemoryLimit(48<<20)` in `main.go`. The GC ran against its limit. The first guess in this file (30 MB of lists) was wrong: lists are 16 MB.
+- **Shell-outs are not the load:** the daemon's reaped children cost 12 CPU ticks in 30 s (0.4 %).
+- **ARMv7 crypto:** Go has no assembly for AES or ChaCha on 32-bit ARM. On a 32-bit ARM build on the Pi, ChaCha20-Poly1305 ran 2.7x faster than AES-GCM (48.6 against 18.2 MB/s), and Go already prefers ChaCha when the server has no AES hardware, so TLS is on the fast one. Every bridged byte is still sealed twice in pure Go (WireGuard, then TLS): my extrapolation to the A7 is about 3 to 4 MB/s of bridge throughput with nothing else running. **That is an estimate, never measured on the box.** It is why the bridge cap is 2.5 MB/s.
+- **Load average is a poor health signal on this box:** `kworker/u2:1` sits in uninterruptible I/O wait permanently (+1.0 load), and other kernel workers and `spi1` block in bursts (load spikes of 8 to 14 with the daemon at 4 to 14 % CPU). Use the daemon's `cpu=`, `heap=` and `gcs=` in the vitals line instead. The cause of the I/O waits is unknown (the kernel has no per-process I/O accounting).
+- **Process launches:** `/proc/stat` `processes` shows about 20 a second on the box, but it counts threads too and is dominated by vendor kernel `DIAG_*` threads respawning and the `wps-guard.sh` and `wpad-guard.sh` loops, not by the daemon.
+- **Kernel 3.18, no BPF JIT:** the roughly ten AF_PACKET watchers run interpreted filters on every bridge packet. Small, not measured.
+
+### Things to know
+
+- **Vendor patch:** `vendor/golang.zx2c4.com/wireguard/device/queueconstants_default.go` has `MaxSegmentSize = 1700` (upstream `(1<<16)-1`). Safe while no UDP GRO is in play (kernel 3.18; GRO needs 5.0+). `go mod vendor` undoes it: reapply it and re-run the idle memory check.
+- **Filter fails open while the lists load:** for the first 9 s after a restart, names on the block lists are not blocked (the allow-list and your own rules apply at once). `Filter.LoadBase` and `LoadLists` in `filter.go`; the list updater waits for `LoadLists` before it checks for missing lists.
+- **Tunables** (variables, easy to change): `btRate` 2.5e6, `btBurst`, `btLoadLimit` 4.0, `btLookups` capacity 2, `btCacheTTL` 90 s (`btbridge.go`); `proxyMaxConns` 256, `proxyMaxPerClient` 128 (`proxylimit.go`); `HedgeAfter` 400 ms, `dnsFailTTL` 5 s (`dnsproxy.go`); `fwReassertEvery` 5 min (`fwrules.go`); `logMax` 512 KB (`lograte.go`). If a stream stutters while the CPU has room, the bridge cap is the first suspect.
+- **Failed lookups are remembered 5 s per route**, so a name that failed stays refused up to 5 s after the upstream recovers. The memory is keyed by route generation, so a route change (tunnel up, kill tier moved) clears its meaning.
+- **A blocked name still makes some apps retry** through the proxy (the stub answers 0.0.0.0, the proxy refuses it); the log now says it once per 10 minutes.
+
+### Still open from the audit
+
+- `scanProcs` (`system.go`) reads three files per process every 20 s; one read of `/proc/PID/stat` would do.
+- `egress.Sample` re-parses the whole conntrack table every 10 s with a map per line (`egress.go`); allocation heavy when flows are many.
+- 13 filter lists are searched one after another per DNS query (up to about 4 suffix levels each, binary search over 0.5M hashes); one merged hash table would be one lookup.
+- Event store rewrites its whole file on every batch; `macfilter` runs a long shell pipeline every 20 s (read-mostly, but still about 8 launches).
+- The race detector does not run on the Pi (its 39-bit address range is unsupported), so the concurrent code added this session (hedging, coalescing, the limiters) is tested but not race-checked.
+
+## The reboot cluster (2026-10-09, unexplained)
+
+All times below are the **box's clock (EDT)**; the Pi's clock (CDT, `~/freeze-watch/watch.log`) is one hour earlier.
+
+- The daemon was deployed at **07:45:34** (commit `5e7fd15`, the bridge write path). Vitals were healthy until **07:49:38** (CPU 11 %, load 1.29, 61.7 MB available, 109 goroutines).
+- Then the box restarted at **07:50:28, 07:51:26, 07:53:52, 07:58:00, 08:05:41 and 08:06:43**. Before each, the last vitals line was healthy (CPU 6 to 15 %, load 1.3 to 2.3, 62 to 70 MB free); nothing ramped. The watcher confirmed four of them as **cold reboots** (box uptime dropped from 6148 s to 44, then 40, 44, 38); the 08:05 start is a fifth by the box's current uptime (it booted at about 08:05:06); 08:06:43 is a daemon restart 62 s later. The daemon's vitals started up again about 55 s after each.
+- The **Pi rebooted too** at 07:58:01 box time (06:58:01 Pi clock), and the watcher died with it. That is **within one second of the box daemon's fourth start (07:58:00)**: look for something on the box that power-cycles or reboots the Pi (USB port power, a script), or for both losing power together. The cause is unknown (no journal from the previous boot; throttled flags are clean now). The Pi's watcher was restarted at about 16:52 Pi clock and was logging again.
+- Since the 08:05 boot the box has **not rebooted** in 9.8 hours, through five more deploys. Every later start in the log is a deploy.
+- No dmesg from before the 08:05 boot survives (no pstore), and the PMIC power-on reason was not read. The current-boot dmesg matched none of the power, reset, watchdog or battery patterns I grepped; `/sys/class/power_supply/usb` shows online with an odd `VOLTAGE_NOW=-19`.
+- **I do not know what happened.** Healthy vitals just before a sudden death, a Pi reboot at the same time, and a stable stretch afterwards all fit a **power problem** (the box runs on its battery, about 3.7 V; an unplug, a loose cable, a battery cutting out) better than a software fault, but nothing proves it. It may also have been a playback test from the Pixel with the new bridge code: whether anyone was playing between 07:45 and 08:06 is not recorded. Ask Ben. If he was playing, the bridge write-path change (`5e7fd15`) is the one to suspect, and the unit tests do not cover real load.
+- Cheap things that would help: read the PMIC reason right after a boot (`dmesg | grep -i pon`), record battery voltage and charger state in the watcher, and note on the watcher which USB or power source feeds the Pi.
+
+## Original plan (2026-10-09 morning; steps 3 to 5 are done, see the audit)
 
 **First task: find out why the box freezes.** Do this before any new feature. Ben decided on 2026-10-09 that this is the priority.
 
@@ -18,7 +77,7 @@ Written at the end of a long session. **Playback works. The box (an Orbic RC400L
 | | |
 |---|---|
 | Repo | `github.com/badlucksbane-lucky/PillowForrT` (`origin`, public, full history). The old repo is the `stone-of-heimdall` remote, untouched. |
-| Head | `c35387f` (docs only). The binary on the box is the build of `8d9d761`, sha256 starting `96c6a98d01dde6db`. Everything is pushed. |
+| Head | `30dab50` plus this file. The binary on the box is the build of `30dab50`, sha256 starting `5772f759f08848795fd`. Eight commits (`2b94e26` to `30dab50`) are **not pushed**. |
 | Web page | `https://pillowforrt.lan/` (also `pillowforrt`). SSH alias `pillowforrt`. Local config in `~/.pillowforrt` (`tls.pem` pinned certificate, `ui.token`). |
 | Certificate | Self-signed, marked as a CA limited by critical name constraints to this box's own names and two addresses (Android's installer only installs a CA). SHA-256 begins `4C:A4:AD:90`. Valid 800 days from 2026-10-09. |
 | Deploy | `./build.sh` then `scripts/deploy-tinyfwd.sh` (rolls back by itself if the daemon doesn't answer). Always ask Ben before committing or deploying: he says "commit, build and deploy" each time. |
