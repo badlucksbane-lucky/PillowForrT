@@ -144,6 +144,7 @@ func (u *webUI) handler() http.Handler {
 	mux.HandleFunc("/browse", u.browsePage)
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, btSWJS) })
 	mux.HandleFunc("/bt/btclient.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, btClientJS) })
+	mux.HandleFunc("/bt/audio.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, btAudioJS) })
 	mux.HandleFunc("/opensearch.xml", serveOpenSearch)
 	mux.HandleFunc("/api/", u.apiAuthed(handleAPI))
 	mux.HandleFunc("/status.json", func(w http.ResponseWriter, r *http.Request) { secureHeaders(w); serveStatus(w, r) })

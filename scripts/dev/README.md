@@ -8,6 +8,7 @@ Config comes from `~/.pillowforrt/`: `tls.pem` (the box's certificate, to pin) a
 | `cdp.mjs` | Tiny Chrome DevTools Protocol driver the others import (also works against Chrome on Android over `adb forward`). |
 | `live-proxy.mjs` | Serves the real browse page locally and forwards `/api/*` and the bridge WebSocket to the box with the token added. |
 | `live-play.mjs` | Plays a torrent in desktop Chromium through the proxy and prints peers and playhead over time. Default: Sintel. |
+| `audio-test.mjs` | Plays a local E-AC-3/AC-3 file through `btclient/audio.js` in desktop Chromium (same CSP as the page) and checks sound before and after a seek and silence on pause. |
 | `bridge-test.mjs` | Dials peers through the box's bridge over TLS and sends a real BitTorrent handshake to each. |
 
 ```sh

@@ -238,8 +238,8 @@ func TestBrowsePolicy(t *testing.T) {
 			t.Errorf("policy lacks %q", want)
 		}
 	}
-	if strings.Contains(csp, " * ") || strings.Contains(csp, "http:") || strings.Contains(csp, "unsafe-eval") {
-		t.Error("policy is wider than the named sources")
+	if strings.Contains(csp, " * ") || strings.Contains(csp, "http:") || strings.Contains(csp, "'unsafe-eval'") {
+		t.Error("policy is wider than the named sources (only 'wasm-unsafe-eval' and blob: workers, for the audio decoder)")
 	}
 	if !strings.Contains(w.Body.String(), "id=\"sheet\"") || w.Header().Get("Referrer-Policy") != "no-referrer" {
 		t.Error("page or headers wrong")

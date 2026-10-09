@@ -32,6 +32,9 @@ import (
 //go:embed btclient/btclient.js
 var btClientJS []byte
 
+//go:embed btclient/audio.js
+var btAudioJS []byte
+
 //go:embed btclient/sw.js
 var btSWJS []byte
 

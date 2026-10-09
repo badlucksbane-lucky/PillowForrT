@@ -254,9 +254,12 @@ async function engine(){if(BT.client)return BT.client;
  await navigator.serviceWorker.ready;
  if(!navigator.serviceWorker.controller)await new Promise(r=>{navigator.serviceWorker.addEventListener('controllerchange',r,{once:true});setTimeout(r,3000)});
  const c=new WebTorrent({tracker:false,lsd:false,secure:0,maxConns:60,uploadLimit:1024});c.on('error',()=>{});c.createServer({controller:reg});BT.client=c;return c}
+// AC-3 and E-AC-3 sound the browser cannot decode: /bt/audio.js (Mediabunny + the FFmpeg decoder in WASM) decodes it in the page and plays it through Web Audio, clocked to the video
+async function softAudio(v,a,aud){aud.textContent='Decoding '+a.name+' in the page…';aud.hidden=false;await loadScript('/bt/audio.js');
+ const h=await PFAudio.attach(v,m=>{aud.textContent=m;aud.hidden=false});if(!v.isConnected){h.dispose();return}BT.audio=h;aud.hidden=true}
 const playerEl=$('#player'),pv=$('#pv'),pstat=$('#pstat'),ppick=$('#ppick');
 const fmtSpeed=n=>n>1048576?(n/1048576).toFixed(1)+' MB/s':Math.round(n/1024)+' KB/s';
-function stopPlayer(){BT.timers.forEach(clearInterval);BT.timers=[];if(BT.ac){BT.ac.abort();BT.ac=null}
+function stopPlayer(){BT.timers.forEach(clearInterval);BT.timers=[];if(BT.audio){BT.audio.dispose();BT.audio=null}if(BT.ac){BT.ac.abort();BT.ac=null}
  const v=pv.querySelector('video');if(v){v.pause();v.removeAttribute('src');v.load()}
  if(BT.cur){try{BT.cur.destroy({destroyStore:true})}catch(e){}BT.cur=null}}
 function closePlayer(fromPop){if(!playerEl.classList.contains('open'))return;stopPlayer();pv.replaceChildren();ppick.hidden=true;playerEl.classList.remove('open');playerEl.inert=true;document.body.classList.toggle('lock',sheet.classList.contains('open'));if(!fromPop&&history.state&&history.state.player)history.back()}
@@ -289,7 +292,7 @@ async function play(hash,name,mg){
   const vids=t.files.filter(f=>/\.(mp4|m4v|mkv|webm|mov|avi|ts)$/i.test(f.name)).sort((a,b)=>b.length-a.length);
   if(!vids.length){say('This torrent has no video file',true);return}
   const start=f=>{file=f;ppick.hidden=true;t.files.forEach(x=>{if(x!==f)x.deselect()});
-   const v=h('video',{controls:true,playsinline:true,autoplay:true});v.addEventListener('error',()=>{note='the browser cannot play this file (codec or container)';v.remove()});v.addEventListener('loadedmetadata',()=>{fetch(v.currentSrc,{headers:{Range:'bytes=0-131071'},referrerPolicy:'no-referrer'}).then(r=>r.arrayBuffer()).then(b=>{const a=firstAudio(new Uint8Array(b));if(!audioPlays(a,v)){aud.textContent='No sound on this device: the audio track is '+a.name+', which this browser cannot play. The picture will play. Pick a release with AAC audio.';aud.hidden=false}}).catch(()=>{})},{once:true});pv.replaceChildren(v);f.streamTo(v);v.play().catch(()=>{});draw()};
+   const v=h('video',{controls:true,playsinline:true,autoplay:true});v.addEventListener('error',()=>{note='the browser cannot play this file (codec or container)';v.remove()});v.addEventListener('loadedmetadata',()=>{fetch(v.currentSrc,{headers:{Range:'bytes=0-131071'},referrerPolicy:'no-referrer'}).then(r=>r.arrayBuffer()).then(b=>{const a=firstAudio(new Uint8Array(b));if(!audioPlays(a,v)){const nosound=why=>{aud.textContent='No sound on this device: the audio track is '+a.name+', which this browser cannot play'+(why?' ('+why+')':'')+'. The picture will play. Pick a release with AAC audio.';aud.hidden=false};if(a.can==='ac-3'||a.can==='ec-3')softAudio(v,a,aud).catch(e=>nosound(e&&e.message));else nosound()}}).catch(()=>{})},{once:true});pv.replaceChildren(v);f.streamTo(v);v.play().catch(()=>{});draw()};
   const big=vids.filter(f=>f.length>=vids[0].length*.3);
   if(big.length>1){ppick.hidden=false;ppick.replaceChildren(...big.map(f=>h('button',{text:f.name+'  ·  '+size(f.length),onclick:()=>start(f)})))}else start(vids[0])});
  draw()}

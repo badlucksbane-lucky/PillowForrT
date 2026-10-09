@@ -4,7 +4,9 @@
   "description": "Browser torrent client for the browse page: WebTorrent with its TCP peers carried over a WebSocket to the box (see net-shim.js). Build: ./build.sh",
   "type": "module",
   "dependencies": {
+    "@mediabunny/ac3": "1.61.3",
     "events": "3.3.0",
+    "mediabunny": "1.61.3",
     "path-browserify": "1.0.1",
     "webtorrent": "3.0.21"
   },
