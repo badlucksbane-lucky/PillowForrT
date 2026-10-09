@@ -114,6 +114,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 <div class="card empty" id="c-px"><h2>Proxy</h2><div id="pxpol"></div></div>
 <div class="card" id="c-mv"><h2>Mullvad <span id="vpnbadge"></span></h2><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div></div>
 <div class="card" id="c-tor"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
+<div class="card" id="c-search"><h2>Search</h2><div id="se" class="mut">loading</div><div id="semsg" class="msg"></div></div>
 <div class="card" id="c-wall"><h2>Detectors <span id="dtbadge"></span></h2><div class="wall" id="wall"></div></div>
 <div class="sec">Monitoring</div>
 <div class="card"><h2>Events <span id="evbadge"></span></h2><div id="ev" class="mut">loading</div><div id="evmsg" class="msg"></div></div>
@@ -621,6 +622,18 @@ async function rbload(){try{Rb=await (await api('/api/rebind')).json();rbrender(
 async function rbdo(p,b){const r=await apost(p,b);$('rbmsg').textContent=r.j.error||'';rbload()}
 function rbset(on){rbdo('rebind/set',{enabled:on})}
 function rballow(pattern,remove){if(!pattern)return;if(!remove&&!confirm('Allow '+pattern+' to resolve to a private address? Only do this for a service you know does it by design (Plex does).'))return;rbdo('rebind/allow',{pattern,remove})}
+let Se=null;
+function serender(force){const el=$('se');if(!Se||guard(el,force))return;
+ if(Se.available===false){el.textContent='Search is not on this build.';return}
+ const M=[['direct','Direct'],['mullvad','Mullvad'],['tor','Tor'],['tormullvad','Tor+Mullvad']];
+ const seg=k=>'<span class="seg full" role="radiogroup" aria-label="'+k+'">'+M.map(m=>{const why=Se.ready[m[0]];return '<button type="button" class="'+(Se[k]===m[0]?'on':'')+'"'+(why?' style="opacity:.55" title="'+esc(why)+'"':'')+' onclick="seset({'+k+':\''+m[0]+'\'})">'+m[1]+'</button>'}).join('')+'</span>';
+ const bad=Se.ready[Se.proxy]||Se.ready[Se.dns],leak=Se.proxy!=='direct'&&Se.dns==='direct';
+ el.innerHTML='<div class="row"><span class="dot'+(!Se.enabled?'':bad?' bad':' ok')+'"></span><b>'+(Se.enabled?'On':'Off')+'</b>'+(Se.enabled&&bad?chip('path down','bad',bad):'')+(Se.enabled&&leak?chip('DNS direct','warn','Names are looked up outside the proxy'):'')+'<span style="flex:1"></span>'+(Se.enabled?'<button type="button" class="on" onclick="window.open(\'/search\',\'_blank\',\'noopener\')">Open</button>':'')+sw(Se.enabled,'seset({enabled:'+!Se.enabled+'})','Search')+'</div>'+
+  '<div class="row" style="margin-top:10px"><span class="mut" style="min-width:48px">Proxy</span>'+seg('proxy')+'</div>'+
+  '<div class="row" style="margin-top:8px"><span class="mut" style="min-width:48px">DNS</span>'+seg('dns')+'</div>'+
+  '<div class="chips" style="margin-top:10px">'+Se.engines.map(e=>'<button type="button" class="chip'+(e.on?' on':'')+'" aria-pressed="'+e.on+'" onclick="seset({engine:\''+e.id+'\',on:'+!e.on+'})">'+esc(e.name)+'</button>').join('')+'</div>'}
+async function seload(){try{Se=await (await api('/api/search')).json();serender()}catch(e){}}
+async function seset(b){const r=await apost('search/set',b);$('semsg').textContent=r.j.error||'';if(r.ok){Se=r.j;serender(true)}}
 let Ac=null;
 function acrender(force){const el=$('ac');if(!Ac||guard(el,force))return;
  const dn=d=>d.length===7?'every day':d.length===5&&!d.includes(0)&&!d.includes(6)?'weekdays':d.map(x=>DAYS[x]).join(' ');
@@ -1001,7 +1014,7 @@ async function psave(){const hrs=parseFloat($('p_l').value);if(!(hrs>0)){$('pmsg
  if(!confirm('Restart DHCP and DNS (a few seconds) to use '+$('p_a').value+' to '+$('p_b').value+', leases '+hrs+' h? A backup of the stock config is saved first, and the old pool comes back if dnsmasq does not.'))return;
  const r=await apost('dhcp/pool/set',{start:$('p_a').value.trim(),end:$('p_b').value.trim(),lease_secs:Math.round(hrs*3600)});$('pmsg').textContent=r.j.error||r.j.status||'';setTimeout(()=>{Pl=null;pload();dload()},5000)}
 let tickN=0;
-async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();dnsPath(V.own);vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Tc)tcload();if(tickN%3===0||!Dx)dxload();if(tickN%3===0||!La)laload();if(tickN%3===0||!Df)dfload();if(tickN%3===0||!Dm)dmload();if(tickN%3===0||!Tt)ttload();if(tickN%3===0||!At)atload();if(tickN%3===0||!St)stload();if(tickN%6===0||!Rb)rbload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===3||!Xp)xpload();if(tickN%3===2||!Tw)twload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
+async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();dnsPath(V.own);vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Tc)tcload();if(tickN%3===0||!Dx)dxload();if(tickN%3===0||!La)laload();if(tickN%3===0||!Df)dfload();if(tickN%3===0||!Dm)dmload();if(tickN%3===0||!Tt)ttload();if(tickN%3===0||!At)atload();if(tickN%3===0||!St)stload();if(tickN%6===0||!Rb)rbload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%6===5||!Se)seload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===3||!Xp)xpload();if(tickN%3===2||!Tw)twload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
 
 (function(){
  let st={};try{st=JSON.parse(localStorage.getItem('cc')||'{}')}catch(e){}
