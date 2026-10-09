@@ -47,6 +47,91 @@ const (
 	wsMaxMessage = 128 << 10 // a BitTorrent message is a 16 KB block plus a few bytes; this leaves room for large extension messages
 )
 
+// Limits that keep the player from starving the rest of the box (one Cortex-A7 core: every bridged byte is sealed twice in pure Go, by WireGuard and by TLS).
+var (
+	btRate      = 2.5e6 // bytes a second from all peers together to the pages; the peers' TCP windows fill and they slow down, so this costs a little speed and not the DNS
+	btBurst     = 128e3
+	btLoadLimit = 4.0 // no new peer connection (and no new lookup) while the one-minute load average is above this; connections already open carry on
+	btLoadNow   = loadAvg1
+	btLimit     = &btLimiter{rate: &btRate, burst: &btBurst}
+	btLookups   = make(chan struct{}, 2) // peer lookups at once: each is up to 12 tracker sockets plus a DHT walk for 25 s
+)
+
+// btLimiter is a token bucket shared by every bridge connection.
+type btLimiter struct {
+	mu          sync.Mutex
+	rate, burst *float64
+	tokens      float64
+	last        time.Time
+}
+
+// wait takes n bytes from the bucket, sleeping if it is overdrawn.
+func (l *btLimiter) wait(n int) {
+	l.mu.Lock()
+	now := time.Now()
+	if l.last.IsZero() {
+		l.tokens = *l.burst
+	} else {
+		l.tokens += now.Sub(l.last).Seconds() * *l.rate
+	}
+	if l.tokens > *l.burst {
+		l.tokens = *l.burst
+	}
+	l.last = now
+	l.tokens -= float64(n)
+	var d time.Duration
+	if l.tokens < 0 {
+		d = time.Duration(-l.tokens / *l.rate * float64(time.Second))
+	}
+	l.mu.Unlock()
+	if d > 0 {
+		time.Sleep(d)
+	}
+}
+
+// btPeerCache remembers what a lookup found for a short while, so a page that asks again (it re-announces while it has few peers) is answered without another round of trackers and DHT.
+var btPeerCache = struct {
+	sync.Mutex
+	m map[[20]byte]btCached
+}{m: map[[20]byte]btCached{}}
+
+type btCached struct {
+	peers []string
+	at    time.Time
+}
+
+const (
+	btCacheTTL  = 90 * time.Second
+	btCacheKeep = 16
+	btCacheMax  = 120 // peers kept for one hash
+)
+
+func btCacheGet(h [20]byte) ([]string, bool) {
+	btPeerCache.Lock()
+	defer btPeerCache.Unlock()
+	c, ok := btPeerCache.m[h]
+	return c.peers, ok && time.Since(c.at) < btCacheTTL
+}
+
+func btCachePut(h [20]byte, peers []string) {
+	if len(peers) > btCacheMax {
+		peers = peers[:btCacheMax]
+	}
+	btPeerCache.Lock()
+	defer btPeerCache.Unlock()
+	if len(btPeerCache.m) >= btCacheKeep {
+		for k, c := range btPeerCache.m {
+			if time.Since(c.at) >= btCacheTTL {
+				delete(btPeerCache.m, k)
+			}
+		}
+		if len(btPeerCache.m) >= btCacheKeep {
+			btPeerCache.m = map[[20]byte]btCached{}
+		}
+	}
+	btPeerCache.m[h] = btCached{peers: peers, at: time.Now()}
+}
+
 // ---- the peers this box handed out ----
 
 type btAllowList struct {
@@ -296,6 +381,10 @@ func (m *btMgr) conn(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	if btLoadNow() > btLoadLimit {
+		http.Error(w, "the box is busy", http.StatusServiceUnavailable)
+		return
+	}
 	peer := r.URL.Query().Get("peer")
 	host, ps, err := net.SplitHostPort(peer)
 	ip := net.ParseIP(host)
@@ -338,6 +427,7 @@ func (m *btMgr) conn(w http.ResponseWriter, r *http.Request) {
 			tc.SetReadDeadline(time.Now().Add(btIdle))
 			n, err := tc.Read(buf[wsMaxHeader:])
 			if n > 0 {
+				btLimit.wait(n)
 				hl := wsHeader(buf[:wsMaxHeader], 0x2, n)
 				wmu.Lock()
 				_, werr := c.Write(buf[wsMaxHeader-hl : wsMaxHeader+n])
@@ -405,11 +495,32 @@ func (m *btMgr) peers(w http.ResponseWriter, r *http.Request) {
 	fl, _ := w.(http.Flusher)
 	var mu sync.Mutex
 	enc := json.NewEncoder(w)
+	if cached, fresh := btCacheGet(hash); fresh && len(cached) > 0 { // asked again soon: the same answer, no new round of trackers
+		btAllowed.add(cached)
+		enc.Encode(btFound{Peers: cached, Src: "cache"})
+		enc.Encode(map[string]bool{"done": true})
+		return
+	}
+	select {
+	case btLookups <- struct{}{}:
+		defer func() { <-btLookups }()
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		writeJSON(w, 503, map[string]string{"error": "other lookups are running; trying again shortly"})
+		return
+	}
+	if btLoadNow() > btLoadLimit {
+		w.Header().Set("Content-Type", "application/json")
+		writeJSON(w, 503, map[string]string{"error": "the box is busy"})
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 	defer cancel()
+	var found []string
 	btPeers(ctx, hash, r.URL.Query()["tr"], func(f btFound) {
 		mu.Lock()
 		defer mu.Unlock()
+		found = append(found, f.Peers...)
 		enc.Encode(f)
 		if fl != nil {
 			fl.Flush()
@@ -417,6 +528,9 @@ func (m *btMgr) peers(w http.ResponseWriter, r *http.Request) {
 	})
 	mu.Lock()
 	enc.Encode(map[string]bool{"done": true})
+	if len(found) > 0 {
+		btCachePut(hash, found)
+	}
 	mu.Unlock()
 }
 
