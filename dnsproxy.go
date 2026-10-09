@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -206,6 +207,8 @@ type upstreamConfig struct {
 	Roots      *x509.CertPool
 	DoHTimeout time.Duration
 	ProbeEvery time.Duration
+	// HedgeAfter is how long the first resolver may take before the next one is asked as well, with the first still running; whichever answers first wins (0 = 400 ms).
+	HedgeAfter time.Duration
 	Dial       func(ctx context.Context, network, addr string) (net.Conn, error)
 	// optional: the timeout to use now (a slower route needs longer), and a number that changes when the route does, so connections opened under the old route are closed
 	TimeoutFor func() time.Duration
@@ -241,6 +244,9 @@ func newUpstream(cfg upstreamConfig) *Upstream {
 	}
 	if cfg.ProbeEvery == 0 {
 		cfg.ProbeEvery = 15 * time.Second
+	}
+	if cfg.HedgeAfter == 0 {
+		cfg.HedgeAfter = 400 * time.Millisecond
 	}
 	tr := &http.Transport{
 		TLSClientConfig:       &tls.Config{RootCAs: cfg.Roots, MinVersion: tls.VersionTLS12},
@@ -298,26 +304,66 @@ func (u *Upstream) doh(q []byte) ([]byte, string, error) {
 			u.client.CloseIdleConnections()
 		}
 	}
+	// Ask the first resolver; if it is slow (or fails) ask the next as well, without stopping the first; the first good answer wins and the rest are cancelled. One after another, a
+	// dead first resolver cost every lookup its whole timeout (up to 20 s on a slow route) before the second was even tried.
+	urls := u.cfg.DoHURLs
+	type result struct {
+		b   []byte
+		url string
+		err error
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := make(chan result, len(urls)) // buffered: a cancelled attempt that finishes late must not block
+	next, pending := 0, 0
+	var hedge <-chan time.Time
+	launch := func() {
+		url := urls[next]
+		next++
+		pending++
+		hedge = time.After(u.cfg.HedgeAfter)
+		go func() { b, err := u.dohOneCtx(ctx, url, q); ch <- result{b, url, err} }()
+	}
+	if len(urls) == 0 {
+		return nil, "", errors.New("no DoH resolver is configured")
+	}
+	launch()
 	var last error
-	for _, url := range u.cfg.DoHURLs {
-		b, err := u.dohOne(url, q)
-		if err == nil {
-			return b, url, nil
+	for pending > 0 {
+		select {
+		case r := <-ch:
+			pending--
+			if r.err == nil {
+				return r.b, r.url, nil
+			}
+			last = r.err
+			if next < len(urls) && pending == 0 { // everything asked so far has failed: the next one now, not after the hedge delay
+				launch()
+			}
+		case <-hedge:
+			if next < len(urls) {
+				launch()
+			} else {
+				hedge = nil
+			}
 		}
-		last = err
 	}
 	return nil, "", last
 }
 
 // dohOne asks one DoH resolver. The resolver cross-check (dnsxcheck.go) uses it to ask the resolver that did not answer a query.
 func (u *Upstream) dohOne(url string, q []byte) ([]byte, error) {
+	return u.dohOneCtx(context.Background(), url, q)
+}
+
+func (u *Upstream) dohOneCtx(parent context.Context, url string, q []byte) ([]byte, error) {
 	body := append([]byte(nil), q...)
 	setID(body, 0) // RFC 8484: id 0 makes the request cache-friendly; the caller restores the client's id
 	to := u.cfg.DoHTimeout
 	if u.cfg.TimeoutFor != nil {
 		to = u.cfg.TimeoutFor()
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), to)
+	ctx, cancel := context.WithTimeout(parent, to)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/dns-message")
@@ -447,9 +493,81 @@ type DNSProxy struct {
 	Tor      *torMgr     // optional: .onion names, and every name a Tor device asks, are answered by Tor and never go to a public resolver
 	warnMu   sync.Mutex
 	warnAt   map[string]time.Time
+	flight   dnsFlight
+	fails    dnsFails
 }
 
 const hardBlockWarnEvery = 10 * time.Minute
+
+// dnsFlight makes identical lookups that are in flight at once share one upstream request: a page that asks for the same name from a dozen connections (or a device that retries
+// at once) costs one DoH request, not a dozen on a slow core.
+type dnsFlight struct {
+	mu sync.Mutex
+	m  map[string]*flightCall
+}
+
+type flightCall struct {
+	done      chan struct{}
+	resp      []byte
+	via, from string
+	err       error
+}
+
+// do runs fn once per key at a time; the callers that arrive meanwhile wait for its answer, and each gets its own copy of it.
+func (f *dnsFlight) do(key string, fn func() ([]byte, string, string, error)) ([]byte, string, string, error) {
+	f.mu.Lock()
+	if f.m == nil {
+		f.m = map[string]*flightCall{}
+	}
+	if c, ok := f.m[key]; ok {
+		f.mu.Unlock()
+		<-c.done
+		return append([]byte(nil), c.resp...), c.via, c.from, c.err
+	}
+	c := &flightCall{done: make(chan struct{})}
+	f.m[key] = c
+	f.mu.Unlock()
+	c.resp, c.via, c.from, c.err = fn()
+	f.mu.Lock()
+	delete(f.m, key)
+	f.mu.Unlock()
+	close(c.done)
+	return append([]byte(nil), c.resp...), c.via, c.from, c.err
+}
+
+// dnsFailTTL is how long a lookup that failed is remembered: devices retry a failed name within moments, and each retry would otherwise wait out every resolver's timeout again.
+const dnsFailTTL = 5 * time.Second
+
+type dnsFails struct {
+	mu sync.Mutex
+	m  map[string]failEntry
+}
+
+type failEntry struct {
+	err   error
+	until time.Time
+}
+
+func (d *dnsFails) get(key string, now time.Time) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if e, ok := d.m[key]; ok {
+		if now.Before(e.until) {
+			return e.err
+		}
+		delete(d.m, key)
+	}
+	return nil
+}
+
+func (d *dnsFails) put(key string, err error, now time.Time) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.m == nil || len(d.m) >= 256 {
+		d.m = map[string]failEntry{}
+	}
+	d.m[key] = failEntry{err, now.Add(dnsFailTTL)}
+}
 
 // hardBlock records that a Tor or Mullvad device's lookup was refused because the encrypted path for it is not working. Nothing is sent in the clear instead (the device gets SERVFAIL),
 // and the owner is told once per path per ten minutes, so a long outage is one event and not a flood.
@@ -570,15 +688,25 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 	}
 	var resp []byte
 	var via, fromURL string
-	switch {
-	case viaVPN:
-		resp, err = p.VPN.ResolveDNS(q)
-		via = "vpn"
-	case ownBootstrapName(dq.Name) && ownBlocked():
-		resp, fromURL, err = p.Up.ResolveBootstrap(q)
-		via = "doh"
-	default:
-		resp, via, fromURL, err = p.Up.ResolveFrom(q)
+	failKey := key // a failure is remembered per route: when the route changes (the tunnel comes up, the kill tier moves) what failed before may work now
+	if p.Up.cfg.RouteGen != nil {
+		failKey += "|" + strconv.FormatUint(p.Up.cfg.RouteGen(), 10)
+	}
+	if err = p.fails.get(failKey, t0); err == nil {
+		resp, via, fromURL, err = p.flight.do(key, func() ([]byte, string, string, error) {
+			switch {
+			case viaVPN:
+				b, e := p.VPN.ResolveDNS(q)
+				return b, "vpn", "", e
+			case ownBootstrapName(dq.Name) && ownBlocked():
+				b, u, e := p.Up.ResolveBootstrap(q)
+				return b, "doh", u, e
+			}
+			return p.Up.ResolveFrom(q)
+		})
+		if err != nil {
+			p.fails.put(failKey, err, time.Now())
+		}
 	}
 	if err != nil {
 		if viaVPN || p.VPN.ExitFor(client) == "mullvad" {
