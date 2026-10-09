@@ -18,10 +18,12 @@ button.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 .strip .a{display:flex;align-items:center;gap:8px;padding:6px 12px 12px;flex-wrap:wrap}.strip .more{padding:0 12px 12px}.strip .more .row{margin-top:10px}
 .seg.full{display:flex;width:100%}.seg.full button{flex:1;padding:0 4px}
 .ib{width:44px;min-height:44px;padding:0;display:inline-flex;align-items:center;justify-content:center}.ib.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}.ib.bad.on{background:var(--bad);border-color:var(--bad)}
+.cnt.bad{color:var(--bad);border-color:var(--bad)}.cnt.warn{color:var(--warn);border-color:var(--warn)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}.chip{min-height:40px;padding:0 12px;border-radius:20px;font-size:14px}.chip .cnt{margin-left:6px}
 input.ed{font:inherit;flex:1;min-width:0;height:44px;border:1px solid var(--ac);border-radius:10px;padding:0 10px;background:var(--bg);color:var(--fg)}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.dot{background:var(--ln)}.dot.ok{background:var(--okc)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.sw{position:relative;width:60px;height:36px;border-radius:18px;background:var(--ln);border:0;padding:0;flex:none;min-height:0;transition:background .15s}.sw::before{content:"";position:absolute;top:4px;left:4px;width:28px;height:28px;border-radius:50%;background:var(--card);transition:transform .15s}.sw.on{background:var(--ac)}.sw.on::before{transform:translateX(24px)}
 .scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch}.scroll .chip{flex:none}.chip.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
+.ev{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--ln);cursor:pointer}.ev:last-child{border:0}.ev .dot{margin-top:6px}.ev .et{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ev .et.open{white-space:normal;word-break:break-word}.ev.un .et{font-weight:600}.ev .ts{flex:none;font-size:13px}
 .wall{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .tile{aspect-ratio:1;border-radius:14px;border:1px solid var(--ln);background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:12px;color:var(--mut);padding:4px;min-height:0}
 .tile i{width:16px;height:16px;border-radius:50%;background:var(--okc)}.tile.warn i{background:var(--warn)}.tile.bad i{background:var(--bad)}
@@ -638,21 +640,31 @@ function actoggle(id){const a=(Ac.actions||[]).find(x=>x.id===id);if(!a)return;c
 function acrun(id){const a=(Ac.actions||[]).find(x=>x.id===id);if(!a)return;const c=a.action==='reboot'?acconfirm('reboot'):'';if(a.action==='reboot'&&c!=='reboot')return;if(a.action!=='reboot'&&!confirm('Run "'+a.name+'" now?'))return;acdo('actions/run',{id,confirm:c||''})}
 function acdel(id){if(confirm('Delete this scheduled action?'))acdo('actions/delete',{id})}
 let Ev=null;
+let EvOpen={},EvAll=false,NtD=null;
+function evrel(t){const d=Date.now()/1000-t;return d<90?'now':d<5400?Math.round(d/60)+'m':d<172800?Math.round(d/3600)+'h':Math.round(d/86400)+'d'}
+function evtog(k){EvOpen[k]=!EvOpen[k];evrender(true)}
+function ntset(k,v){NtD[k]=v;NtD.dirty=true;evrender(true)}
 function evrender(force){const el=$('ev');if(!Ev||guard(el,force))return;
- $('evbadge').innerHTML=Ev.unseen?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+Ev.unseen+' to look at</span>':'';
- const ic={alert:'<span class="err"><b>&#10007;</b></span>',attention:'<span class="err">&#9888;</span>',info:'<span class="mut">&middot;</span>'};
- const rows=(Ev.events||[]).slice(0,30).map(e=>'<tr><td style="width:1.5em">'+(ic[e.sev]||'')+'</td><td class="mut" style="white-space:nowrap">'+esc(new Date(e.t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}))+'</td><td'+(e.seen||e.sev==='info'?' class="mut"':'')+'>'+esc(e.text)+'</td></tr>').join('')||'<tr><td class="mut">nothing has happened</td></tr>';
  const n=Ev.notify||{},ch=Ev.chain||{};
- const chain=ch.length?'<div class="mut" style="margin:4px 0">Log chain '+(ch.ok?'<b style="color:var(--ac)">intact</b>':'<b class="err">broken at event '+ch.broken_at+'</b>')+(ch.since?' since '+esc(new Date(ch.since*1000).toLocaleDateString()):'')+', '+ch.length+' linked'+(ch.head?' &middot; head <code title="copy this somewhere else to compare later">'+esc(ch.head.slice(0,16))+'&hellip;</code>':'')+'</div>':'';
- el.innerHTML='<div class="row"><button onclick="evact(\'events/seen\')">Mark all seen</button><button onclick="evact(\'events/clear\')">Clear</button><span class="mut">New devices, outages, DNS failures, overheating, failed logins, Wi-Fi drops and more.</span></div>'+
-  '<table style="margin:8px 0">'+rows+'</table>'+chain+
-  '<div style="margin-top:10px"><b>Push to your phone (ntfy)</b> '+(n.enabled?'<b style="color:var(--ac)">on</b> &rarr; '+esc(n.where||''):'<span class="mut">off</span>')+'</div>'+
-  '<div class="mut" style="margin:4px 0">Only generic sentences leave the house (no names, MACs or keys). Self-hosted ntfy keeps it all local.</div>'+
-  '<div class="row"><input id="nt_url" type="password" autocomplete="off" placeholder="'+(n.url_set?'an address is saved (leave blank to keep it)':'https://ntfy.sh/your-secret-topic')+'"><select id="nt_min"><option value="alert"'+(n.min==='alert'?' selected':'')+'>only alerts</option><option value="attention"'+((n.min||'attention')==='attention'?' selected':'')+'>alerts and things to look at</option><option value="info"'+(n.min==='info'?' selected':'')+'>everything</option></select><label><input type="checkbox" id="nt_on" '+(n.enabled?'checked':'')+'> send</label></div>'+
-  '<div class="row" style="margin-top:6px"><button class="on" onclick="ntsave()">Save</button><button onclick="nttest()"'+(n.url_set?'':' disabled')+'>Send a test</button><button onclick="ntclear()"'+(n.url_set?'':' disabled')+'>Remove the address</button>'+(n.last_error?'<span class="err">last push failed: '+esc(n.last_error)+'</span>':'')+'</div>'}
+ if(!NtD||!NtD.dirty)NtD={min:n.min||'attention',on:!!n.enabled,url:'',dirty:false};
+ const al=(Ev.events||[]).some(e=>!e.seen&&e.sev==='alert');
+ $('evbadge').innerHTML=Ev.unseen?chip(Ev.unseen,al?'bad':'warn','to look at'):'';
+ const all=Ev.events||[],list=EvAll?all.slice(0,60):all.slice(0,10);
+ const rows=list.map(e=>'<div class="ev'+(e.seen||e.sev==='info'?'':' un')+'" onclick="evtog('+e.id+')"><span class="dot'+(e.sev==='alert'?' bad':e.sev==='attention'?' warn':'')+'"></span><span class="et'+(EvOpen[e.id]?' open':'')+'">'+esc(e.text)+'</span><span class="mut ts" title="'+esc(new Date(e.t*1000).toLocaleString())+'">'+evrel(e.t)+'</span></div>').join('')||'<div class="mut" style="padding:6px 0">&mdash;</div>';
+ const chain=ch.length?chip(ch.ok?'log intact':'log broken',ch.ok?'':'bad',(ch.ok?'The event log chain is intact':'Broken at event '+ch.broken_at)+(ch.since?', since '+new Date(ch.since*1000).toLocaleDateString():'')+', '+ch.length+' linked'+(ch.head?', head '+ch.head.slice(0,16):'')):'';
+ el.innerHTML='<div class="row"><button class="ib" aria-label="Mark all seen" title="Mark all seen" onclick="evact(\'events/seen\')">'+ic('check')+'</button><span style="flex:1"></span>'+chain+'</div>'+
+  '<div style="margin-top:6px">'+rows+'</div>'+
+  (all.length>10?'<div class="row" style="margin-top:8px"><button class="chip" onclick="EvAll=!EvAll;evrender(true)">'+(EvAll?'Fewer':'More')+'<span class="cnt">'+Math.min(all.length,60)+'</span></button></div>':'')+
+  '<details style="margin-top:12px"><summary><b>Push</b> <span class="dot'+(n.enabled&&n.url_set?(n.last_error?' bad':' ok'):'')+'" style="display:inline-block"></span>'+(n.last_error?chip('failed','bad',n.last_error):'')+'</summary>'+
+  row2('Send',sw(NtD.on,"ntset('on',"+(!NtD.on)+")",'Send pushes'))+
+  '<div class="row" style="margin-top:12px"><input id="nt_url" type="password" autocomplete="off" aria-label="Address" placeholder="'+(n.url_set?'saved, blank keeps it':'https://ntfy.sh/your-secret-topic')+'" title="Only generic sentences leave the house: no names, MACs or keys. Self-hosted ntfy keeps it all local." value="'+esc(NtD.url)+'" oninput="NtD.url=this.value;NtD.dirty=true" style="flex:1;min-width:0">'+(n.where?chip(esc(n.where)):'')+'</div>'+
+  '<div class="row" style="margin-top:12px">'+seg('Send from',[['alert','Alerts'],['attention','Attention'],['info','All']],NtD.min,v=>"ntset('min','"+v+"')")+'</div>'+
+  '<div class="row" style="margin-top:12px"><button class="on" onclick="ntsave()">Save</button><button onclick="nttest()"'+(n.url_set?'':' disabled')+'>Test</button>'+(n.url_set?'<button style="color:var(--bad);border-color:var(--bad)" onclick="ntclear()">Remove</button>':'')+'</div></details>'+
+  '<details style="margin-top:12px"><summary><b>Log</b></summary><div class="row" style="margin-top:8px"><button style="color:var(--bad);border-color:var(--bad)" onclick="evact(\'events/clear\')">Clear all events</button></div></details>'}
+const row2=(lab,ctl)=>'<div class="row" style="margin-top:12px"><span>'+lab+'</span><span style="flex:1"></span>'+ctl+'</div>';
 async function evload(){try{Ev=await (await api('/api/events')).json();evrender()}catch(e){}}
 async function evact(p){const r=await apost(p,{});$('evmsg').textContent=r.j.error||'';evload()}
-async function ntsave(){const r=await apost('notify/set',{url:$('nt_url').value.trim(),min:$('nt_min').value,enabled:$('nt_on').checked});$('evmsg').textContent=r.j.error||r.j.status||'';if(r.ok)$('nt_url').value='';evload()}
+async function ntsave(){const d=NtD,r=await apost('notify/set',{url:($('nt_url').value||d.url||'').trim(),min:d.min,enabled:d.on});$('evmsg').textContent=r.j.error||r.j.status||'';if(r.ok){NtD=null}evload()}
 async function nttest(){const r=await apost('notify/test',{});$('evmsg').textContent=r.j.error||r.j.status||''}
 async function ntclear(){if(!confirm('Remove the saved address and switch pushes off?'))return;const r=await apost('notify/clear',{});$('evmsg').textContent=r.j.error||r.j.status||'';evload()}
 let Xp=null;
