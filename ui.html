@@ -857,7 +857,7 @@ function dur2(s){const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.f
 function yrender(force){const el=$('sys');if(!Sy||guard(el,force))return;const y=Sy;
  const row=(k,v,x)=>'<tr><td class="mut">'+k+'</td><td>'+v+'</td><td class="mut">'+(x||'')+'</td></tr>';
  const dk=(y.disks||[]).map(d=>{const used=d.total_b-d.free_b,pc=Math.round(used*100/d.total_b);return row(esc(d.name),cb(used)+' of '+cb(d.total_b)+' ('+pc+'%)',esc(d.note||''))}).join('');
- const tp=(y.temps||[]).map(t=>esc(t.name.replace('tsens_tz_sensor','cpu ').replace('pa_therm','radio '))+' '+Math.round(t.c)+'&deg;').join(' &middot; ');
+ const tp=(y.temps||[]).map(t=>esc(t.name==='tsens_tz_sensor4'?'cpu':t.name.replace('tsens_tz_sensor','chip ').replace('pa_therm','radio '))+' '+Math.round(t.c)+'&deg;').join(' &middot; ');
  const sv=(y.services||[]).map(x=>'<tr><td>'+esc(x.name)+'</td><td>'+(x.up?'<span style="color:var(--ac)">running</span>':'<span class="mut">not running</span>')+'</td><td class="mut">'+esc(x.note||'')+'</td></tr>').join('');
  const b=y.battery||{};
  el.innerHTML='<table>'+row('Firmware',esc(y.firmware||'?'),esc(y.product||'')+', kernel '+esc(y.kernel||'?'))+row('tinyfwd',esc(y.tinyfwd),'this page and the proxy')+row('Time',esc(y.now),'schedules use this zone; the box'+"'"+'s own clock is Eastern')+
