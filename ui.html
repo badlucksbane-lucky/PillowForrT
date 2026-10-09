@@ -972,7 +972,7 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
  const IC={bridge:'M2 18h20M4 18v-4c0-4 3.5-7 8-7s8 3 8 7v4M8 18v-5M12 18v-6M16 18v-5',devices:'M4 5h16v11H4zM8 20h8M12 16v4',eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',pause:'M8 5v14M16 5v14',play:'M7 4l13 8-13 8z',block:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8',pen:'M4 20l4-1 11-11-3-3L5 16l-1 4z',chev:'M6 9l6 6 6-6',check:'M5 12l5 5 9-10',shield:'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',lock:'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',globe:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',wall:'M3 5h18v14H3zM3 10h18M3 15h18M9 5v5M15 10v5M9 15v4',wifi:'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01'};
  const ic=n=>'<svg class="i" viewBox="0 0 24 24"><path d="'+IC[n]+'"/></svg>';window.ic=ic;
  const SECS={'Bridge control':['none','bridge'],'Monitoring':['watch','watch'],'Security':['watch','watch'],'DNS':['watch','watch'],'Devices':['none','devices'],'Network':['more','more'],'System':['more','more']};
- const CARDS={'Devices':'devices','Blocked devices':'devices','Internet schedules':'devices','Wi-Fi':'bridge'};
+ const CARDS={'Devices':'bridge','Blocked devices':'devices','Internet schedules':'devices','Wi-Fi':'bridge'};
  const main=document.querySelector('main');
  const hero=main.querySelector('.card.hero');
  const lights=document.createElement('div');lights.className='lights';lights.id='lights';hero.after(lights);
@@ -987,7 +987,8 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
   nav.firstChild.innerHTML=TABS.map(x=>'<button type="button" class="'+(x[0]===t?'on':'')+'" data-t="'+x[0]+'">'+ic(x[2])+x[1]+'</button>').join('');
   if(!keep){try{localStorage.setItem('tab',t)}catch(e){}scrollTo(0,0)}}
  nav.addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(b)showTab(b.dataset.t)});
- window.goCard=(t,id)=>{showTab(t);const c=document.getElementById(id);if(c){if(c.classList.contains('closed')){const h=c.querySelector(':scope>h2.cc');if(h)h.click()}c.scrollIntoView({behavior:'smooth',block:'start'})}};
+ window.goCard=(t,id)=>{if(cur!==t)showTab(t,true);const c=document.getElementById(id);if(c){if(c.classList.contains('closed')){const h=c.querySelector(':scope>h2.cc');if(h)h.click()}c.scrollIntoView({behavior:'smooth',block:'start'})}};
+ document.head.insertAdjacentHTML('beforeend','<style>.card{scroll-margin-top:8px}</style>');
  let t0='bridge';try{t0=location.hash.slice(1)||localStorage.getItem('tab')||'bridge'}catch(e){}
  if(!TABS.some(x=>x[0]===t0))t0='bridge';showTab(t0,true);
  // status lights from the live data the cards already load
@@ -997,7 +998,7 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
   ['shield','Ads',!AdS?'':!AdS.enabled?'bad':AdS.mode==='off'?'':AdS.paused?'warn':'ok','bridge','c-ad'],
   ['lock','Mullvad',!V||V.available===false?'':V.up?'ok':V.enabled?'warn':'','bridge','c-px'],
   ['globe','Tor',!Tr||Tr.available===false?'':Tr.blocked?'bad':Tr.ready?'ok':Tr.enabled?'warn':'','bridge','c-px'],
-  ['wall','Firewall',!Eg?'':Eg.mode==='enforce'?'ok':Eg.mode==='monitor'?'warn':'','devices','c-dev']];
+  ['wall','Firewall',!Eg?'':Eg.mode==='enforce'?'ok':Eg.mode==='monitor'?'warn':'','bridge','c-dev']];
   const h=L.map(x=>'<button type="button" class="light '+x[2]+'" onclick="goCard(\''+x[3]+'\',\''+x[4]+'\')"><span class="c">'+ic(x[0])+'</span>'+x[1]+'</button>').join('');
   if(h!==lastL){lastL=h;lights.innerHTML=h}}
  lightsRender();setInterval(lightsRender,1500);
