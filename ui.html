@@ -383,39 +383,33 @@ const LH_DEFS=[{id:'lha',title:'Connect time',axis:()=>({u:'ms',div:1}),fmt:v=>M
  {id:'lhl',title:'Failed checks',axis:()=>({u:'%',div:1}),fmt:v=>v.toFixed(v<10?1:0)+'%',series:[{k:'loss',name:'Failed',c:'--s1',m:1}],area:true}];
 function lhrender(force){const el=$('lh');if(!Lh||guard(el,force))return;
  if(Lh.available===false){el.textContent='The history is not available on this build.';return}
- el.replaceChildren();
- const bar=document.createElement('div');bar.className='row range';
- [[24,'Last 24 hours'],[168,'Last 7 days'],[720,'Last 30 days']].forEach(([h,t])=>{const b=document.createElement('button');b.type='button';b.className=LhH===h?'sel':'';b.textContent=(LhH===h?'\u2713 ':'')+t;b.onclick=()=>{LhH=h;lhload()};bar.appendChild(b)});
- const s=document.createElement('span');s.className='mut';s.textContent=Lh.probes?Lh.probes+' checks, '+Lh.loss_pct.toFixed(2)+'% failed, average '+Math.round(Lh.avg_ms)+' ms':'no checks in this range yet';bar.appendChild(s);el.appendChild(bar);
- $('lhbadge').innerHTML=Lh.outage_now?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; down now</span>':'';
- const n=document.createElement('div');n.className='mut';n.style.margin='6px 0';n.textContent='TCP to 1.1.1.1 every 30 s; 5 s timeout = failed. Hourly, kept ~35 days. 3 failures = outage.';el.appendChild(n);
- if(Lh.probes)LH_DEFS.forEach(d=>el.appendChild(gchart(d,Lh)));
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- if((Lh.days||[]).length){const t=document.createElement('table');t.style.marginTop='8px';t.innerHTML='<tr><th>Day</th><th>Checks</th><th>Failed</th><th>Average</th><th>Worst</th><th>Outages</th></tr>'+Lh.days.map(d=>'<tr><td>'+esc(d.day)+'</td><td class="mut">'+d.probes+'</td><td'+(d.loss_pct>=2?' class="err"':'')+'>'+d.loss_pct.toFixed(2)+'%</td><td>'+Math.round(d.avg_ms)+' ms</td><td class="mut">'+Math.round(d.max_ms)+' ms</td><td>'+(d.outages||'')+'</td></tr>').join('');el.appendChild(t)}
- if((Lh.outages||[]).length){const o=document.createElement('div');o.className='mut';o.style.marginTop='6px';o.textContent='Outages: '+Lh.outages.map(x=>when(x.start)+(x.open?' (still down)':', '+(x.secs>=120?Math.round(x.secs/60)+' min':x.secs+' s'))).join('; ');el.appendChild(o)}}
+ $('lhbadge').innerHTML=Lh.outage_now?chip('down now','bad'):'';
+ const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}),dur=x=>x.secs>=120?Math.round(x.secs/60)+' min':x.secs+' s';
+ const days=Lh.days||[],outs=Lh.outages||[];
+ el.innerHTML='<div class="row"><span class="dot'+(Lh.outage_now?' bad':Lh.probes?' ok':'')+'"></span><span style="font-size:27px;font-weight:650;line-height:1">'+(Lh.probes?Math.round(Lh.avg_ms):'-')+'</span><span class="mut">ms</span><span style="flex:1"></span>'+seg('Range',[[24,'24h'],[168,'7d'],[720,'30d']],LhH,v=>'LhH='+v+';lhload()')+'</div>'+
+  (Lh.probes?'<div class="row" style="margin-top:12px">'+chip(Lh.loss_pct.toFixed(2)+'% failed',Lh.loss_pct>=2?'bad':'','checks that did not connect')+chip(outs.length+' outage'+(outs.length===1?'':'s'),outs.length?'warn':'','3 failed checks in a row')+chip(Lh.probes+' checks','','TCP to 1.1.1.1 every 30 s; a 5 s timeout counts as failed; kept about 35 days')+'</div>'+sparkSvg(Lh.avg):'<div class="mut" style="margin-top:10px">&mdash;</div>')+
+  (Lh.probes?'<details style="margin-top:12px"><summary><b>Charts</b></summary><div id="lhch"></div></details>':'')+
+  (days.length?'<details style="margin-top:12px"><summary><b>Days</b><span class="cnt">'+days.length+'</span></summary>'+days.map(d=>'<div class="rl"><span class="t">'+esc(d.day)+'</span>'+chip(Math.round(d.avg_ms)+' ms','','worst '+Math.round(d.max_ms)+' ms')+chip(d.loss_pct.toFixed(1)+'%',d.loss_pct>=2?'bad':'','failed')+(d.outages?chip(d.outages,'warn','outages'):'')+'</div>').join('')+'</details>':'')+
+  (outs.length?'<details style="margin-top:12px"><summary><b>Outages</b><span class="cnt">'+outs.length+'</span></summary>'+outs.map(x=>'<div class="rl"><span class="dot'+(x.open?' bad':' warn')+'"></span><span class="t">'+esc(when(x.start))+'</span>'+chip(x.open?'still down':dur(x),x.open?'bad':'')+'</div>').join('')+'</details>':'');
+ const ch=document.getElementById('lhch');if(ch)LH_DEFS.forEach(d=>ch.appendChild(gchart(d,Lh)))}
 async function lhload(){try{Lh=await (await api('/api/linkhist?hours='+LhH)).json();lhrender(true)}catch(e){}}
 let Sp=null,SpPoll=null;
 const SP_DEFS=[{id:'spd',title:'Speed test',axis:h=>h*8>=1e6?{u:'Mbit/s',div:125000}:{u:'kbit/s',div:125},fmt:v=>fmtBits(v),series:[{k:'down',name:'Download',c:'--s1',m:8},{k:'up',name:'Upload',c:'--s2',m:8}]},
  {id:'spl',title:'Time to first byte',axis:()=>({u:'ms',div:1}),fmt:v=>Math.round(v)+' ms',series:[{k:'lat',name:'First byte',c:'--s1',m:1}],area:true}];
 function sprender(force){const el=$('sp');if(!Sp||guard(el,force))return;
  if(Sp.available===false){el.textContent='Speed tests are not available on this build.';return}
- el.replaceChildren();
- const row=document.createElement('div');row.className='row';
- const l=Sp.last,when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const info=document.createElement('span');info.innerHTML=l?(l.err?'<b class="err">last test failed</b> <span class="mut">'+esc(l.err)+', '+esc(when(l.t))+'</span>':'<b>'+fmtBits(l.down)+'</b> down, <b>'+fmtBits(l.up)+'</b> up <span class="mut">'+esc(when(l.t))+(l.busy?' (the house was using the link)':'')+'</span>'):'<span class="mut">no test yet</span>';
- row.appendChild(info);
- const b=document.createElement('button');b.className='on';b.textContent=Sp.running?'Testing...':'Test now';b.disabled=!!Sp.running;b.onclick=spnow;row.appendChild(b);el.appendChild(row);
- const set=document.createElement('div');set.className='row';set.style.marginTop='6px';
- const sel=document.createElement('select');[1,3,6,12,24].forEach(h=>{const o=document.createElement('option');o.value=h;o.textContent='every '+h+' hour'+(h===1?'':'s');if(h===Sp.interval_h)o.selected=true;sel.appendChild(o)});
- sel.onchange=()=>spset(Sp.enabled,+sel.value);
- const tg=document.createElement('button');tg.textContent=Sp.enabled?'Switch off':'Switch on';tg.onclick=()=>spset(!Sp.enabled,Sp.interval_h);
- const m=document.createElement('span');m.className='mut';m.textContent='about '+Sp.data_per_day_mb.toFixed(0)+' MB of data a day';
- set.append(sel,tg,m);el.appendChild(set);
- const n=document.createElement('div');n.className='mut';n.style.margin='6px 0';n.textContent='1 MB down / 256 KB up over cellular, same size each time. Waits for idle link. < 30% of median raises an event.'+(Sp.median_down?' Median '+fmtBits(Sp.median_down)+', best '+fmtBits(Sp.best_down)+'.':'');el.appendChild(n);
- if(Sp.t.length>=2)SP_DEFS.forEach(d=>el.appendChild(gchart(d,Sp)));else if(Sp.count<2){const e=document.createElement('div');e.className='mut';e.textContent='The chart appears after the second test.';el.appendChild(e)}
- const hs=Sp.by_hour||[],mx=Math.max(...hs);
- if(mx>0&&Sp.count>=12){const h=document.createElement('div');h.style.marginTop='8px';h.innerHTML='<div class="mut">Median download by hour of the day (schedule time)</div><div style="display:flex;gap:2px;align-items:flex-end;height:44px">'+hs.map((v,i)=>'<div title="'+i+':00 &ndash; '+(v?fmtBits(v):'no data')+'" style="flex:1;background:'+(v?'var(--s1)':'transparent')+';height:'+(v?Math.max(3,Math.round(v/mx*42)):0)+'px;border-radius:3px 3px 0 0"></div>').join('')+'</div><div class="mut" style="display:flex;justify-content:space-between"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div>';el.appendChild(h)}
- if((Sp.errors||[]).length){const e=document.createElement('div');e.className='mut';e.style.marginTop='6px';e.textContent='Recent failures: '+Sp.errors.map(x=>when(x.t)+' '+x.err).join('; ');el.appendChild(e)}}
+ const l=Sp.last,hs=Sp.by_hour||[],mx=Math.max(0,...hs),when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+ const num=(arrow,v)=>'<div><div style="font-size:24px;font-weight:650;line-height:1.1">'+arrow+' '+(v!=null?fmtBits(v):'?')+'</div></div>';
+ el.innerHTML='<div class="row"><span class="dot'+(l?(l.err?' bad':' ok'):'')+'"></span>'+(l&&!l.err?'<span class="mut">'+evrel(l.t)+'</span>':'')+(l&&l.busy?chip('busy','warn','the house was using the link'):'')+(l&&l.err?chip('failed','bad',l.err+', '+when(l.t)):'')+'<span style="flex:1"></span>'+(Sp.running?chip('testing','warn'):'<button class="ib on" aria-label="Test now" title="Test now" onclick="spnow()">'+ic('play')+'</button>')+'</div>'+
+  (l&&!l.err?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">'+num('&darr;',l.down)+num('&uarr;',l.up)+'</div>':'<div class="mut" style="margin-top:10px">'+(l?'':'&mdash;')+'</div>')+
+  (Sp.median_down?'<div class="row" style="margin-top:12px">'+chip('median '+fmtBits(Sp.median_down),'','typical download; a test under 30% of it raises an event')+chip('best '+fmtBits(Sp.best_down))+'</div>':'')+
+  (Sp.t&&Sp.t.length>=2?sparkSvg(Sp.down):'')+
+  '<div class="row" style="margin-top:12px"><span>Auto</span>'+chip('~'+Sp.data_per_day_mb.toFixed(0)+' MB/day','','1 MB down and 256 KB up over cellular each time; waits for an idle link')+'<span style="flex:1"></span>'+sw(Sp.enabled,'spset('+(!Sp.enabled)+','+Sp.interval_h+')','Automatic speed tests')+'</div>'+
+  '<div class="row" style="margin-top:10px">'+seg('Test every',[[1,'1h'],[3,'3h'],[6,'6h'],[12,'12h'],[24,'24h']],Sp.interval_h,v=>'spset('+Sp.enabled+','+v+')')+'</div>'+
+  (Sp.t&&Sp.t.length>=2?'<details style="margin-top:12px"><summary><b>Charts</b></summary><div id="spch"></div></details>':'')+
+  (mx>0&&Sp.count>=12?'<details style="margin-top:12px"><summary><b>By hour</b></summary><div style="display:flex;gap:2px;align-items:flex-end;height:44px;margin-top:8px">'+hs.map((v,i)=>'<div title="'+i+':00 &ndash; '+(v?fmtBits(v):'no data')+'" style="flex:1;background:'+(v?'var(--s1)':'transparent')+';height:'+(v?Math.max(3,Math.round(v/mx*42)):0)+'px;border-radius:3px 3px 0 0"></div>').join('')+'</div><div class="mut" style="display:flex;justify-content:space-between"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>23h</span></div></details>':'')+
+  ((Sp.errors||[]).length?'<details style="margin-top:12px"><summary><b>Failures</b><span class="cnt">'+Sp.errors.length+'</span></summary>'+Sp.errors.map(x=>'<div class="rl"><span class="dot bad"></span><span class="t">'+esc(x.err)+'</span><span class="mut ts">'+evrel(x.t)+'</span></div>').join('')+'</details>':'');
+ const ch=document.getElementById('spch');if(ch)SP_DEFS.forEach(d=>ch.appendChild(gchart(d,Sp)))}
 async function spload(){try{Sp=await (await api('/api/speed')).json();sprender()}catch(e){}}
 async function spset(en,h){const r=await apost('speed/set',{enabled:en,interval_h:h});$('spmsg').textContent=r.j.error||'';spload()}
 async function spnow(){const r=await apost('speed/run',{});$('spmsg').textContent=r.j.error||'';if(!r.ok)return;Sp.running=true;sprender(true);clearInterval(SpPoll);let k=0;SpPoll=setInterval(async()=>{await spload();if(++k>14||!Sp.running){clearInterval(SpPoll)}},4000)}
@@ -721,6 +715,8 @@ const GR_DEFS=[
  {id:'dns',title:'DNS lookups per minute',unit:'',fmt:v=>Math.round(v)+'',series:[{k:'q',name:'Asked',c:'--s1',m:1},{k:'blk',name:'Blocked',c:'--s2',m:1}]},
  {id:'cl',title:'Devices on the Wi-Fi',unit:'',fmt:v=>Math.round(v)+'',series:[{k:'clients',name:'Devices',c:'--s1',m:1}],step:true,area:true,int:true},
  {id:'tmp',title:'Temperature',axis:()=>({u:'\u00b0C',div:1}),fmt:v=>Math.round(v)+'°C',series:[{k:'temp',name:'Hottest sensor',c:'--s1',m:1}],area:true,auto:true}];
+function sparkSvg(arr){const d=(arr||[]).map(v=>v==null?0:v);if(d.length<2)return '';const mx=Math.max(1e-9,...d),w=300,h=46,pts=d.map((v,i)=>[(i*w/(d.length-1)).toFixed(1),(h-2-v/mx*(h-6)).toFixed(1)].join(','));
+ return '<svg class="spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><path d="M0,'+h+' L'+pts.join(' L')+' L'+w+','+h+'Z" fill="var(--ax)" opacity=".35"/><polyline points="'+pts.join(' ')+'" fill="none" stroke="var(--ac)" stroke-width="2"/></svg>'}
 function fmtBits(bps){bps=bps*8;return bps>=1e6?(bps/1e6).toFixed(bps>=1e7?0:1)+' Mbit/s':bps>=1e3?Math.round(bps/1e3)+' kbit/s':Math.round(bps)+' bit/s'}
 function niceMax(v){if(v<=0)return 1;const e=Math.pow(10,Math.floor(Math.log10(v))),f=v/e;return (f<=1?1:f<=2?2:f<=5?5:10)*e}
 function gtime(t,long){const d=new Date(t*1000);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+(long?', '+d.toLocaleDateString([],{weekday:'short'}):'')}
