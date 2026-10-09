@@ -1,7 +1,14 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
@@ -121,5 +128,87 @@ func TestCertViewAndDownload(t *testing.T) {
 	m.names = append(m.names, "elsewhere")
 	if v := m.View(); len(v.Missing) != 1 || v.Missing[0] != "elsewhere" {
 		t.Errorf("missing %+v", v.Missing)
+	}
+}
+
+// The certificate is a CA so a phone's installer accepts it, and it can vouch for nothing but the box's own names and addresses.
+func TestCertIsConstrainedCA(t *testing.T) {
+	dir := t.TempDir()
+	names := []string{"orbic", "orbic.lan"}
+	ips := []net.IP{net.ParseIP("192.168.1.1")}
+	c, _, err := createCert(dir, names, ips, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca := c.Leaf
+	if !ca.IsCA || !ca.BasicConstraintsValid || ca.KeyUsage&x509.KeyUsageCertSign == 0 || !ca.PermittedDNSDomainsCritical {
+		t.Fatalf("not a constrained CA: %+v", ca)
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(ca)
+	// the box's own page still verifies against itself
+	for _, n := range []string{"orbic", "orbic.lan", "192.168.1.1"} {
+		if _, err := ca.Verify(x509.VerifyOptions{Roots: roots, DNSName: n}); err != nil {
+			t.Errorf("the box's own %s must verify: %v", n, err)
+		}
+	}
+	// a certificate this key signs for any other name or address is refused by the constraint
+	sign := func(dns string, ip net.IP) error {
+		k, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		tpl := &x509.Certificate{SerialNumber: big.NewInt(7), Subject: pkix.Name{CommonName: "x"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+			KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+		if dns != "" {
+			tpl.DNSNames = []string{dns}
+		}
+		if ip != nil {
+			tpl.IPAddresses = []net.IP{ip}
+		}
+		der, err := x509.CreateCertificate(rand.Reader, tpl, ca, &k.PublicKey, c.PrivateKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		leaf, _ := x509.ParseCertificate(der)
+		host := dns
+		if ip != nil {
+			host = ip.String()
+		}
+		_, err = leaf.Verify(x509.VerifyOptions{Roots: roots, DNSName: host})
+		return err
+	}
+	if err := sign("orbic", nil); err != nil {
+		t.Errorf("a leaf for the box's own name should verify: %v", err)
+	}
+	for _, bad := range []string{"bank.example", "www.google.com", "evil.orbic.example"} {
+		if sign(bad, nil) == nil {
+			t.Errorf("a certificate for %s must be refused by the name constraint", bad)
+		}
+	}
+	if sign("", net.ParseIP("8.8.8.8")) == nil {
+		t.Error("a certificate for a public address must be refused by the name constraint")
+	}
+}
+
+// A certificate made before it was a CA is replaced once; a current one is kept.
+func TestCertNonCAIsReplacedOnce(t *testing.T) {
+	dir := t.TempDir()
+	names := []string{"orbic"}
+	ips := []net.IP{net.ParseIP("192.168.1.1")}
+	k, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "orbic"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(700 * 24 * time.Hour),
+		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, BasicConstraintsValid: true, DNSNames: names, IPAddresses: ips}
+	der, _ := x509.CreateCertificate(rand.Reader, tpl, tpl, &k.PublicKey, k)
+	kb, _ := x509.MarshalECPrivateKey(k)
+	os.WriteFile(filepath.Join(dir, "cert.pem"), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644)
+	os.WriteFile(filepath.Join(dir, "key.pem"), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kb}), 0o600)
+	_, fp1, created, err := loadOrCreateCert(dir, names, ips, time.Now())
+	if err != nil || !created {
+		t.Fatalf("an old non-CA certificate should be replaced: created=%v err=%v", created, err)
+	}
+	if fp1 == fingerprint(der) {
+		t.Fatal("the fingerprint should have changed")
+	}
+	_, fp2, created, err := loadOrCreateCert(dir, names, ips, time.Now())
+	if err != nil || created || fp2 != fp1 {
+		t.Fatalf("the new certificate must be kept on the next start: created=%v err=%v", created, err)
 	}
 }

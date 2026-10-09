@@ -3,6 +3,11 @@ package main
 // The web page's certificate: self-signed, made on first start and kept (cert.pem, key.pem mode 0600) so a browser's "trust this" survives restarts. ECDSA P-256 (cheap on
 // this core). Valid 800 days (Apple will not trust a longer-lived certificate even when you install it yourself); remade, with a new fingerprint, only when it is about to
 // expire or no longer covers the names and addresses below.
+//
+// It is also marked as a certificate authority, limited to exactly those names and addresses (critical name constraints). Android's certificate installer will only install a file as
+// a CA certificate if it is one: a plain self-signed server certificate is treated as a user certificate and it asks for a private key. The limit is what makes that safe: a phone that
+// trusts it trusts it for this box's own names and nothing else, so the key, if it ever leaked, could not be used to impersonate any other site. A certificate made before this
+// (not a CA) is replaced once.
 
 import (
 	"crypto/ecdsa"
@@ -49,7 +54,7 @@ func covers(c *x509.Certificate, names []string, ips []net.IP) bool {
 func loadOrCreateCert(dir string, names []string, ips []net.IP, now time.Time) (cert tls.Certificate, fp string, created bool, err error) {
 	cp, kp := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem")
 	if c, e := tls.LoadX509KeyPair(cp, kp); e == nil {
-		if leaf, e := x509.ParseCertificate(c.Certificate[0]); e == nil && leaf.NotAfter.After(now.Add(60*24*time.Hour)) && covers(leaf, names, ips) {
+		if leaf, e := x509.ParseCertificate(c.Certificate[0]); e == nil && leaf.NotAfter.After(now.Add(60*24*time.Hour)) && covers(leaf, names, ips) && leaf.IsCA && leaf.PermittedDNSDomainsCritical {
 			c.Leaf = leaf
 			return c, fingerprint(leaf.Raw), false, nil
 		}
@@ -75,11 +80,18 @@ func createCert(dir string, names []string, ips []net.IP, now time.Time) (tls.Ce
 		Subject:               pkix.Name{CommonName: "orbic", Organization: []string{"Stone of Heimdall"}},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(800 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
+		IsCA:                  true,
+		MaxPathLen:            0,
+		MaxPathLenZero:        true,
 		DNSNames:              names,
 		IPAddresses:           ips,
+		// the whole of what this certificate may vouch for
+		PermittedDNSDomains:         names,
+		PermittedDNSDomainsCritical: true,
+		PermittedIPRanges:           hostNets(ips),
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
 	if err != nil {
@@ -102,4 +114,17 @@ func createCert(dir string, names []string, ips []net.IP, now time.Time) (tls.Ce
 	}
 	leaf, _ := x509.ParseCertificate(der)
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}, fingerprint(der), nil
+}
+
+// hostNets turns addresses into single-address networks, for a name constraint.
+func hostNets(ips []net.IP) []*net.IPNet {
+	var out []*net.IPNet
+	for _, ip := range ips {
+		if ip4 := ip.To4(); ip4 != nil {
+			out = append(out, &net.IPNet{IP: ip4, Mask: net.CIDRMask(32, 32)})
+		} else {
+			out = append(out, &net.IPNet{IP: ip, Mask: net.CIDRMask(128, 128)})
+		}
+	}
+	return out
 }
