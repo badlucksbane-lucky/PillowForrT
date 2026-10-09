@@ -17,13 +17,18 @@ import (
 
 type searchEngine struct {
 	ID, Name string
+	Kind     string // kindWeb or kindMagnet: which tab of the page runs it
 	fetch    func(ctx context.Context, c *http.Client, q string) ([]searchResult, error)
 }
 
 var searchEngines = []searchEngine{
-	{"wikipedia", "Wikipedia", fetchWikipedia},
-	{"duckduckgo", "DuckDuckGo", fetchDDG},
-	{"wiby", "Wiby", fetchWiby},
+	{ID: "wikipedia", Name: "Wikipedia", Kind: kindWeb, fetch: fetchWikipedia},
+	{ID: "duckduckgo", Name: "DuckDuckGo", Kind: kindWeb, fetch: fetchDDG},
+	{ID: "wiby", Name: "Wiby", Kind: kindWeb, fetch: fetchWiby},
+	{ID: "yts", Name: "YTS", Kind: kindMagnet, fetch: fetchYTS},
+	{ID: "eztv", Name: "EZTV", Kind: kindMagnet, fetch: fetchEZTV},
+	{ID: "piratebay", Name: "Pirate Bay", Kind: kindMagnet, fetch: fetchBay},
+	{ID: "nyaa", Name: "Nyaa", Kind: kindMagnet, fetch: fetchNyaa},
 }
 
 const (

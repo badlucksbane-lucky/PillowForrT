@@ -7,6 +7,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -27,11 +28,26 @@ button{font:inherit;min-height:44px;padding:0 18px;border:0;border-radius:22px;b
 .r{padding:12px 0;border-bottom:1px solid var(--ln)}.r:last-child{border:0}
 .r a.t{color:var(--ac);font-size:17px;text-decoration:none;word-break:break-word}.r a.t:visited{color:var(--mut)}.r a.t:hover{text-decoration:underline}
 .u{color:var(--mut);font-size:12px;word-break:break-all}.s{margin-top:2px}.e{color:var(--mut);font-size:11px;margin-top:2px}
+.tabs{display:flex;gap:16px;margin:4px 0 0 44px}.tabs a{color:var(--mut);text-decoration:none;padding:4px 0}.tabs a.on{color:var(--fg);border-bottom:2px solid var(--ac)}
 .err{color:var(--bad);margin:16px 0}a.home{color:var(--mut);text-decoration:none}
 </style>`
 
 // renderSearch writes the page. Every string that came from the URL or from an engine goes through html.EscapeString, and a result link has already passed normalizeResultURL
 // (http or https only), so nothing here can open a tag or an attribute.
+func tabOn(on bool) string {
+	if on {
+		return ` class="on"`
+	}
+	return ""
+}
+
+func hiddenKind(kind string) string {
+	if kind == kindMagnet {
+		return `<input type="hidden" name="t" value="m">`
+	}
+	return ""
+}
+
 func renderSearch(v searchView) string {
 	e := html.EscapeString
 	var b strings.Builder
@@ -40,7 +56,7 @@ func renderSearch(v searchView) string {
 		b.WriteString(e(v.Q) + " · ")
 	}
 	b.WriteString(`Search</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="search" type="application/opensearchdescription+xml" title="Heimdall search" href="/opensearch.xml">` + searchCSS + `</head><body><main>`)
-	b.WriteString(`<form action="/search" method="get" role="search"><a href="/ui" class="home" title="Dashboard"><img class="mark" src="/favicon.svg" alt="Dashboard"></a><input name="q" value="` + e(v.Q) + `" aria-label="Search" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200"`)
+	b.WriteString(`<div class="tabs"><a href="/search?q=` + url.QueryEscape(v.Q) + `"` + tabOn(v.Kind == kindWeb) + `>Web</a><a href="/search?t=m&q=` + url.QueryEscape(v.Q) + `"` + tabOn(v.Kind == kindMagnet) + `>Magnets</a></div><form action="/search" method="get" role="search">` + hiddenKind(v.Kind) + `<a href="/ui" class="home" title="Dashboard"><img class="mark" src="/favicon.svg" alt="Dashboard"></a><input name="q" value="` + e(v.Q) + `" aria-label="Search" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200"`)
 	if v.Q == "" {
 		b.WriteString(" autofocus")
 	}
@@ -64,6 +80,18 @@ func renderSearch(v searchView) string {
 		b.WriteString(`<div class="err">No results</div>`)
 	}
 	for _, r := range v.Results {
+		if r.Magnet != "" { // built in buildMagnet from a checked hash, so it is a magnet: link and nothing else
+			meta := "S " + strconv.Itoa(r.Seeds)
+			if r.Size != "" {
+				meta += " · " + r.Size
+			}
+			b.WriteString(`<div class="r"><a class="t" href="` + e(r.Magnet) + `">` + e(r.Title) + `</a><div class="u">` + e(meta))
+			if r.URL != "" {
+				b.WriteString(` · <a href="` + e(r.URL) + `" rel="noreferrer noopener">page</a>`)
+			}
+			b.WriteString(`</div><div class="e">` + e(strings.Join(r.Engines, " · ")) + `</div></div>`)
+			continue
+		}
 		b.WriteString(`<div class="r"><a class="t" href="` + e(r.URL) + `" rel="noreferrer noopener">` + e(r.Title) + `</a><div class="u">` + e(r.URL) + `</div>`)
 		if r.Snippet != "" {
 			b.WriteString(`<div class="s">` + e(r.Snippet) + `</div>`)
@@ -75,6 +103,7 @@ func renderSearch(v searchView) string {
 }
 
 type searchView struct {
+	Kind                 string
 	Q                    string
 	Err                  string
 	Off                  bool
@@ -111,13 +140,17 @@ func (u *webUI) searchPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := cleanQuery(r.URL.Query().Get("q"))
+	kind := kindWeb
+	if r.URL.Query().Get("t") == "m" {
+		kind = kindMagnet
+	}
 	cfg := m.Config()
-	v := searchView{Q: q}
+	v := searchView{Q: q, Kind: kind}
 	v.dots(cfg, m.Ready())
 	if !cfg.Enabled {
 		v.Err, v.Off = "Search is off", true
 	} else if q != "" {
-		o := m.Search(r.Context(), q)
+		o := m.Search(r.Context(), q, kind)
 		v.Err, v.Results, v.Engines = o.Err, o.Results, o.Engines
 		if o.Busy {
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -140,7 +173,11 @@ func serveOpenSearch(w http.ResponseWriter, r *http.Request) {
 type searchAPIEngine struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	Kind string `json:"kind"`
 	On   bool   `json:"on"`
+	LAN  bool   `json:"lan,omitempty"`
+	Host string `json:"host,omitempty"`
+	Key  bool   `json:"key,omitempty"`
 }
 
 func searchAPIView(m *searchMgr) map[string]any {
@@ -153,7 +190,14 @@ func searchAPIView(m *searchMgr) map[string]any {
 				on = true
 			}
 		}
-		es = append(es, searchAPIEngine{e.ID, e.Name, on})
+		es = append(es, searchAPIEngine{ID: e.ID, Name: e.Name, Kind: e.Kind, On: on})
+	}
+	for _, t := range cfg.Torznab {
+		host := ""
+		if u, err := url.Parse(t.URL); err == nil {
+			host = u.Host
+		}
+		es = append(es, searchAPIEngine{ID: "tz:" + t.Name, Name: t.Name, Kind: kindMagnet, On: t.On, LAN: true, Host: host, Key: t.Key != ""})
 	}
 	return map[string]any{"available": true, "enabled": cfg.Enabled, "proxy": cfg.Proxy, "dns": cfg.DNS, "engines": es, "ready": m.Ready()}
 }

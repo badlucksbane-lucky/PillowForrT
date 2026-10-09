@@ -65,10 +65,11 @@ func searchModeLabel(m string) string {
 }
 
 type searchCfg struct {
-	Enabled bool     `json:"enabled"`
-	Proxy   string   `json:"proxy"`
-	DNS     string   `json:"dns"`
-	Engines []string `json:"engines"`
+	Enabled bool         `json:"enabled"`
+	Proxy   string       `json:"proxy"`
+	DNS     string       `json:"dns"`
+	Engines []string     `json:"engines"`
+	Torznab []tzEndpoint `json:"torznab"` // Torznab servers on the LAN (Jackett, Prowlarr), searched directly and not through the proxy or DNS choice
 }
 
 type searchMgr struct {
@@ -108,6 +109,9 @@ func newSearchMgr(path string) *searchMgr {
 				c.DNS = spDirect
 			}
 			c.Engines = knownEngines(c.Engines)
+			if len(c.Torznab) > tzMax {
+				c.Torznab = c.Torznab[:tzMax]
+			}
 			m.cfg = c
 		}
 	}
@@ -140,15 +144,18 @@ func (m *searchMgr) Config() searchCfg {
 	defer m.mu.Unlock()
 	c := m.cfg
 	c.Engines = append([]string(nil), c.Engines...)
+	c.Torznab = append([]tzEndpoint(nil), c.Torznab...)
 	return c
 }
 
 type searchSet struct {
-	Enabled *bool   `json:"enabled"`
-	Proxy   *string `json:"proxy"`
-	DNS     *string `json:"dns"`
-	Engine  string  `json:"engine"`
-	On      *bool   `json:"on"`
+	Enabled *bool       `json:"enabled"`
+	Proxy   *string     `json:"proxy"`
+	DNS     *string     `json:"dns"`
+	Engine  string      `json:"engine"` // an engine id, or tz:<name> for a Torznab server
+	On      *bool       `json:"on"`
+	Remove  bool        `json:"remove"`
+	Tz      *tzEndpoint `json:"tz"` // add a Torznab server
 }
 
 func (m *searchMgr) Set(s searchSet) error {
@@ -166,7 +173,33 @@ func (m *searchMgr) Set(s searchSet) error {
 		}
 		m.cfg.DNS = *s.DNS
 	}
-	if s.Engine != "" {
+	if s.Tz != nil {
+		ep, err := checkTz(*s.Tz, m.cfg.Torznab)
+		if err != nil {
+			return err
+		}
+		m.cfg.Torznab = append(m.cfg.Torznab, ep)
+	}
+	if name, ok := strings.CutPrefix(s.Engine, "tz:"); ok {
+		var keep []tzEndpoint
+		found := false
+		for _, e := range m.cfg.Torznab {
+			if e.Name == name {
+				found = true
+				if s.Remove {
+					continue
+				}
+				if s.On != nil {
+					e.On = *s.On
+				}
+			}
+			keep = append(keep, e)
+		}
+		if !found {
+			return errors.New("unknown server")
+		}
+		m.cfg.Torznab = keep
+	} else if s.Engine != "" {
 		if len(knownEngines([]string{s.Engine})) == 0 || s.On == nil {
 			return errors.New("unknown engine")
 		}
@@ -389,6 +422,10 @@ type searchResult struct {
 	URL     string
 	Snippet string
 	Engines []string
+	Magnet  string // a magnet link built here from Hash (magnet results only)
+	Hash    string // the 40-hex info hash: two engines' copies of one torrent are one result
+	Seeds   int
+	Size    string
 	score   float64
 }
 
@@ -402,6 +439,7 @@ type engineStatus struct {
 
 type searchOutcome struct {
 	Query   string
+	Kind    string
 	Results []searchResult
 	Engines []engineStatus
 	Err     string
@@ -426,27 +464,51 @@ func cleanQuery(q string) string {
 }
 
 // Search runs one query. A path that is down is an error in the outcome, with no attempt made.
-func (m *searchMgr) Search(ctx context.Context, q string) searchOutcome {
+func (m *searchMgr) Search(ctx context.Context, q, kind string) searchOutcome {
 	cfg := m.Config()
-	out := searchOutcome{Query: q, Cfg: cfg}
+	out := searchOutcome{Query: q, Kind: kind, Cfg: cfg}
 	switch {
 	case !cfg.Enabled:
 		out.Err = "Search is off"
 		return out
 	case q == "":
 		return out
-	case len(cfg.Engines) == 0:
+	}
+	var on []searchEngine
+	for _, e := range searchEngines {
+		for _, id := range cfg.Engines {
+			if id == e.ID && e.Kind == kind {
+				on = append(on, e)
+			}
+		}
+	}
+	nPublic := len(on)
+	if kind == kindMagnet {
+		for _, ep := range cfg.Torznab {
+			if ep.On {
+				ep := ep
+				on = append(on, searchEngine{ID: "tz:" + ep.Name, Name: ep.Name, Kind: kindMagnet, fetch: func(ctx context.Context, _ *http.Client, q string) ([]searchResult, error) {
+					return fetchTorznab(ctx, m.lanClient(), ep, q)
+				}})
+			}
+		}
+	}
+	if len(on) == 0 {
 		out.Err = "No engine is switched on"
 		return out
 	}
+	var pathErr error // a path that is down stops the public engines only; a LAN server needs neither
 	st := m.state()
-	if err := searchPathReady(cfg.Proxy, st); err != nil {
-		out.Err = "Proxy " + searchModeLabel(cfg.Proxy) + ": " + err.Error()
-		return out
-	}
-	if err := searchPathReady(cfg.DNS, st); err != nil {
-		out.Err = "DNS " + searchModeLabel(cfg.DNS) + ": " + err.Error()
-		return out
+	if nPublic > 0 {
+		if err := searchPathReady(cfg.Proxy, st); err != nil {
+			pathErr = errors.New("Proxy " + searchModeLabel(cfg.Proxy) + ": " + err.Error())
+		} else if err := searchPathReady(cfg.DNS, st); err != nil {
+			pathErr = errors.New("DNS " + searchModeLabel(cfg.DNS) + ": " + err.Error())
+		}
+		if pathErr != nil && len(on) == nPublic {
+			out.Err = pathErr.Error()
+			return out
+		}
 	}
 	select {
 	case m.slots <- struct{}{}:
@@ -470,18 +532,15 @@ func (m *searchMgr) Search(ctx context.Context, q string) searchOutcome {
 		res []searchResult
 		st  engineStatus
 	}
-	var on []searchEngine
-	for _, e := range searchEngines {
-		for _, id := range cfg.Engines {
-			if id == e.ID {
-				on = append(on, e)
-			}
-		}
-	}
 	ch := make(chan got, len(on))
 	for i, e := range on {
 		go func(i int, e searchEngine) {
 			s := engineStatus{ID: e.ID, Name: e.Name}
+			if pathErr != nil && !strings.HasPrefix(e.ID, "tz:") {
+				s.Err = pathErr.Error()
+				ch <- got{i, nil, s}
+				return
+			}
 			t := time.Now()
 			res, err := e.fetch(ctx, cl, q)
 			s.MS = time.Since(t).Milliseconds()
@@ -499,6 +558,9 @@ func (m *searchMgr) Search(ctx context.Context, q string) searchOutcome {
 		per[g.i], out.Engines[g.i] = g.res, g.st
 	}
 	out.Results = mergeResults(per, on)
+	if kind == kindMagnet {
+		sort.SliceStable(out.Results, func(a, b int) bool { return out.Results[a].Seeds > out.Results[b].Seeds })
+	}
 	out.Elapsed = time.Since(t0)
 	return out
 }
@@ -557,8 +619,17 @@ func mergeResults(per [][]searchResult, engines []searchEngine) []searchResult {
 	var order []string
 	for i, list := range per {
 		for rank, r := range list {
+			if strings.TrimSpace(r.Title) == "" {
+				continue
+			}
 			clean, key, ok := normalizeResultURL(r.URL)
-			if !ok || strings.TrimSpace(r.Title) == "" {
+			if r.Hash != "" { // a torrent: one result per info hash, whichever engines have it
+				clean, key, ok = "", "ih:"+r.Hash, validHash(r.Hash)
+				if u, _, uok := normalizeResultURL(r.URL); uok {
+					clean = u
+				}
+			}
+			if !ok {
 				continue
 			}
 			add := 1.0 / float64(10+rank)
@@ -567,10 +638,13 @@ func mergeResults(per [][]searchResult, engines []searchEngine) []searchResult {
 				if len(r.Snippet) > len(e.Snippet) {
 					e.Snippet = r.Snippet
 				}
+				if r.Seeds > e.Seeds {
+					e.Seeds = r.Seeds
+				}
 				e.Engines = append(e.Engines, engines[i].Name)
 				continue
 			}
-			byKey[key] = &searchResult{Title: strings.TrimSpace(r.Title), URL: clean, Snippet: r.Snippet, Engines: []string{engines[i].Name}, score: add}
+			byKey[key] = &searchResult{Title: strings.TrimSpace(r.Title), URL: clean, Snippet: r.Snippet, Engines: []string{engines[i].Name}, score: add, Hash: r.Hash, Magnet: r.Magnet, Seeds: r.Seeds, Size: r.Size}
 			order = append(order, key)
 		}
 	}

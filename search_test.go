@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -93,16 +94,16 @@ func TestSearchFailsClosed(t *testing.T) {
 	m.state = func() ownState { return ownState{} }
 	m.cfg.Enabled = true
 	m.cfg.Proxy, m.cfg.DNS = spTor, spDirect
-	o := m.Search(context.Background(), "x")
+	o := m.Search(context.Background(), "x", kindWeb)
 	if !strings.Contains(o.Err, "Proxy Tor") || len(o.Results) != 0 {
 		t.Fatalf("proxy down: %+v", o)
 	}
 	m.cfg.Proxy, m.cfg.DNS = spDirect, spMullvad
-	if o = m.Search(context.Background(), "x"); !strings.Contains(o.Err, "DNS Mullvad") {
+	if o = m.Search(context.Background(), "x", kindWeb); !strings.Contains(o.Err, "DNS Mullvad") {
 		t.Fatalf("dns down: %+v", o)
 	}
 	m.cfg.Enabled = false
-	if o = m.Search(context.Background(), "x"); o.Err != "Search is off" {
+	if o = m.Search(context.Background(), "x", kindWeb); o.Err != "Search is off" {
 		t.Fatalf("off: %+v", o)
 	}
 }
@@ -204,5 +205,111 @@ func TestSearchAPI(t *testing.T) {
 	handleSearchAPI(w, httptest.NewRequest("POST", "/api/search/set", strings.NewReader(`{"dns":"x"}`)), "search/set")
 	if w.Code != 400 {
 		t.Fatalf("bad mode accepted: %d", w.Code)
+	}
+}
+
+func TestMagnetParsers(t *testing.T) {
+	y, err := parseYTS(fixture(t, "search_yts.json"))
+	if err != nil || len(y) < 3 || y[0].Hash == "" || !strings.HasPrefix(y[0].Magnet, "magnet:?xt=urn:btih:"+y[0].Hash) || y[0].Size == "" || !strings.HasPrefix(y[0].URL, "https://") {
+		t.Fatalf("yts: %d %v %+v", len(y), err, y)
+	}
+	z, err := parseEZTV(fixture(t, "search_eztv.json"), 0, 0)
+	if err != nil || len(z) < 3 || z[0].Seeds < 0 || !validHash(z[0].Hash) {
+		t.Fatalf("eztv: %d %v", len(z), err)
+	}
+	one, _ := parseEZTV(fixture(t, "search_eztv.json"), 1, 10)
+	if len(one) == 0 || len(one) >= len(z) || !strings.Contains(one[0].Title, "S01E10") {
+		t.Fatalf("eztv season filter: %d of %d", len(one), len(z))
+	}
+	bay, err := parseBay(fixture(t, "search_bay.json"))
+	if err != nil || len(bay) < 3 || bay[0].Title != "Ubuntu 22.04 LTS" || bay[0].Hash != "2c6b6858d61da9543d4231a71db4b1c9264b0685" || bay[0].Seeds != 31 || bay[0].Size != "3.4 GB" {
+		t.Fatalf("bay: %d %v %+v", len(bay), err, bay)
+	}
+	if r, _ := parseBay([]byte(`[{"id":"0","name":"No results returned","info_hash":"0000000000000000000000000000000000000000"}]`)); len(r) != 0 {
+		t.Fatalf("the no-results row should be dropped: %+v", r)
+	}
+	ny, err := parseNyaa(fixture(t, "search_nyaa.xml"))
+	if err != nil || len(ny) != 6 || ny[0].Seeds == 0 || !validHash(ny[0].Hash) || !strings.HasPrefix(ny[0].URL, "https://nyaa.si/view/") || !strings.Contains(ny[0].Size, "iB") {
+		t.Fatalf("nyaa: %d %v %+v", len(ny), err, ny)
+	}
+}
+
+func TestParseTorznab(t *testing.T) {
+	r, err := parseTorznab(fixture(t, "search_torznab.xml"))
+	if err != nil || len(r) != 2 {
+		t.Fatalf("want 2 with a hash, got %d %v", len(r), err)
+	}
+	if r[0].Hash != "2c6b6858d61da9543d4231a71db4b1c9264b0685" || r[0].Seeds != 321 || r[0].Size != "5.7 GB" || r[0].URL != "https://tracker.example/details/1" {
+		t.Fatalf("first: %+v", r[0])
+	}
+	if r[1].Hash != "a017ac9bf02de9e36f1f9177bdb60612186b0b0d" || r[1].Size != "1.0 MB" || r[1].URL != "" {
+		t.Fatalf("second: %+v", r[1])
+	}
+	if _, err := parseTorznab(fixture(t, "search_torznab_error.xml")); err == nil || !strings.Contains(err.Error(), "Incorrect user credentials") {
+		t.Fatalf("an error answer should be an error: %v", err)
+	}
+}
+
+func TestMagnetBuild(t *testing.T) {
+	m := buildMagnet("2C6B6858D61DA9543D4231A71DB4B1C9264B0685", "A & B <x>")
+	if !strings.HasPrefix(m, "magnet:?xt=urn:btih:2c6b6858d61da9543d4231a71db4b1c9264b0685&dn=A+%26+B+%3Cx%3E&tr=") || hashFromMagnet(m) != "2c6b6858d61da9543d4231a71db4b1c9264b0685" {
+		t.Fatalf("%s", m)
+	}
+	for _, bad := range []string{"", "zz", "2c6b6858d61da9543d4231a71db4b1c9264b068", "2c6b6858d61da9543d4231a71db4b1c9264b0685&x=y"} {
+		if buildMagnet(bad, "n") != "" {
+			t.Errorf("hash %q should not make a link", bad)
+		}
+	}
+}
+
+func TestMagnetMerge(t *testing.T) {
+	engs := []searchEngine{{ID: "a", Name: "A"}, {ID: "b", Name: "B"}}
+	h := "2c6b6858d61da9543d4231a71db4b1c9264b0685"
+	per := [][]searchResult{
+		{{Title: "Ubuntu", Hash: h, Magnet: buildMagnet(h, "Ubuntu"), Seeds: 5}},
+		{{Title: "Ubuntu again", Hash: h, Magnet: buildMagnet(h, "Ubuntu again"), Seeds: 50, URL: "https://x.example/p"}, {Title: "bad", Hash: "nothex"}},
+	}
+	m := mergeResults(per, engs)
+	if len(m) != 1 || m[0].Seeds != 50 || len(m[0].Engines) != 2 || m[0].Magnet == "" {
+		t.Fatalf("%+v", m)
+	}
+	out := renderSearch(searchView{Kind: kindMagnet, Q: "ubuntu", Results: m})
+	if !strings.Contains(out, `href="magnet:?xt=urn:btih:`) || !strings.Contains(out, "S 50") || !strings.Contains(out, `class="on">Magnets`) {
+		t.Fatalf("page: %s", out)
+	}
+}
+
+func TestCheckTz(t *testing.T) {
+	ok := tzEndpoint{Name: "Jackett", URL: "http://192.168.1.50:9117/api/v2.0/indexers/all/results/torznab/api", Key: "k"}
+	if e, err := checkTz(ok, nil); err != nil || !e.On {
+		t.Fatalf("good server refused: %v", err)
+	}
+	for name, e := range map[string]tzEndpoint{
+		"https":    {Name: "A", URL: "https://192.168.1.50/x"},
+		"name":     {Name: "A", URL: "http://jackett.lan:9117/x"},
+		"public":   {Name: "A", URL: "http://8.8.8.8/x"},
+		"loopback": {Name: "A", URL: "http://127.0.0.1:9117/x"},
+		"badname":  {Name: "<b>", URL: "http://192.168.1.50/x"},
+		"dupe":     {Name: "jackett", URL: "http://192.168.1.51/x"},
+	} {
+		if _, err := checkTz(e, []tzEndpoint{ok}); err == nil {
+			t.Errorf("%s should be refused", name)
+		}
+	}
+}
+
+func TestFetchTorznab(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.RawQuery
+		w.Write(fixture(t, "search_torznab.xml"))
+	}))
+	defer srv.Close()
+	r, err := fetchTorznab(context.Background(), srv.Client(), tzEndpoint{URL: srv.URL + "/api", Key: "sec ret"}, "ubuntu 24")
+	if err != nil || len(r) != 2 {
+		t.Fatalf("%d %v", len(r), err)
+	}
+	if !strings.Contains(got, "t=search") || !strings.Contains(got, "q=ubuntu+24") || !strings.Contains(got, "apikey=sec+ret") {
+		t.Fatalf("query was %q", got)
 	}
 }
