@@ -1147,6 +1147,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleTap(w, r)
 		return
 	}
+	if strings.HasPrefix(path, "debug/") {
+		handleDebug(w, r, path)
+		return
+	}
 	if path == "bt" || strings.HasPrefix(path, "bt/") {
 		handleBTAPI(w, r, path)
 		return

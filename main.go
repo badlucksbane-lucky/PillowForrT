@@ -399,7 +399,8 @@ func main() {
 		startDNSGuard() // before anything else is up: the redirect and the refusals are in place from the first second
 	}
 	debug.SetMemoryLimit(48 << 20)
-	debug.SetGCPercent(40) // the live heap is small, so a tighter target costs little CPU and keeps resident memory near the live size (default 100 let it sit at twice that)
+	debug.SetGCPercent(40) // a tighter target keeps resident memory near the live size (default 100 let it sit at twice that); the live set is the block lists (~16 MB) plus the tunnel, so watch gcs= in the vitals line
+	startVitals()
 	if *dnsListen != "" {
 		uiTokenFile = *uiTokenFlag
 		flt := NewFilter(*dnsDir)
