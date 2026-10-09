@@ -53,6 +53,6 @@ One unit, one model, one carrier. The first-install tool hasn't been run end to 
 
 Not anonymity. The carrier still knows where you are and when you're online. Mullvad sees what the carrier otherwise would. Doesn't cover physical access, someone on your Wi-Fi guessing the password, a device with its own radio, or holes in the old stock firmware underneath.
 
-https://github.com/badlucksbane-lucky/stone-of-heimdall
+https://github.com/badlucksbane-lucky/PillowForrT
 
 MIT. "Orbic" is their trademark, named only to say what hardware this runs on. Not affiliated with Orbic or any carrier.
