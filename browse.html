@@ -244,7 +244,7 @@ async function engine(){if(BT.client)return BT.client;
  const reg=await navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{throw new Error('The player needs this browser to trust the box certificate')});
  await navigator.serviceWorker.ready;
  if(!navigator.serviceWorker.controller)await new Promise(r=>{navigator.serviceWorker.addEventListener('controllerchange',r,{once:true});setTimeout(r,3000)});
- const c=new WebTorrent({tracker:false,lsd:false,secure:0,maxConns:40,uploadLimit:1024});c.on('error',()=>{});c.createServer({controller:reg});BT.client=c;return c}
+ const c=new WebTorrent({tracker:false,lsd:false,secure:0,maxConns:60,uploadLimit:1024});c.on('error',()=>{});c.createServer({controller:reg});BT.client=c;return c}
 const playerEl=$('#player'),pv=$('#pv'),pstat=$('#pstat'),ppick=$('#ppick');
 const fmtSpeed=n=>n>1048576?(n/1048576).toFixed(1)+' MB/s':Math.round(n/1024)+' KB/s';
 function stopPlayer(){BT.timers.forEach(clearInterval);BT.timers=[];if(BT.ac){BT.ac.abort();BT.ac=null}
@@ -275,7 +275,7 @@ async function play(hash,name,mg){
   try{const r=await fetch('/api/bt/peers?h='+hash,{credentials:'same-origin',signal:BT.ac.signal,referrerPolicy:'no-referrer'});if(!r.ok){let m='';try{m=(await r.json()).error}catch(e){}note=m||'bridge refused';return}
    const rd=r.body.getReader(),dec=new TextDecoder();let buf='';for(;;){const {value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;while((i=buf.indexOf('\n'))>=0){const ln=buf.slice(0,i);buf=buf.slice(i+1);try{const m=JSON.parse(ln);(m.peers||[]).forEach(p=>{try{t.addPeer(p)}catch(e){}})}catch(e){}}}}
   catch(e){}};
- t.on('infoHash',()=>{feed();let last=Date.now();BT.timers.push(setInterval(()=>{if(t.numPeers<4&&Date.now()-last>45000||Date.now()-last>240000){last=Date.now();feed()}},5000))});
+ t.on('infoHash',()=>{feed();let last=Date.now();BT.timers.push(setInterval(()=>{if(t.numPeers<10&&Date.now()-last>30000||Date.now()-last>240000){last=Date.now();feed()}},5000))});
  t.on('ready',()=>{
   const vids=t.files.filter(f=>/\.(mp4|m4v|mkv|webm|mov|avi|ts)$/i.test(f.name)).sort((a,b)=>b.length-a.length);
   if(!vids.length){say('This torrent has no video file',true);return}

@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -439,5 +440,56 @@ func TestCertInstallDER(t *testing.T) {
 	}
 	if _, err := certInstallDER([]byte("-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n")); err == nil {
 		t.Fatal("only a certificate may be handed out, never a key")
+	}
+}
+
+// The browser lets one WebSocket to a server be "connecting" at a time, so the bridge answers first and dials after: a slow or dead peer must not delay the upgrade.
+func TestBridgeAnswersBeforeDialing(t *testing.T) {
+	btTest(t)
+	m := &btMgr{enabled: true, state: func() ownState { return ownState{MullvadWanted: true, TunnelUp: true} }}
+	srv := httptest.NewServer(http.HandlerFunc(m.conn))
+	defer srv.Close()
+	peer := echoServer(t)
+	btAllowed.add([]string{peer})
+	origin := "https://" + srv.Listener.Addr().String()
+	real := btDialTCP
+	btDialTCP = func(ctx context.Context, addr string) (net.Conn, error) { // a slow peer
+		select {
+		case <-time.After(1200 * time.Millisecond):
+			return real(ctx, addr)
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	t0 := time.Now()
+	ws, st := wsDial(t, srv, "/api/bt/conn?peer="+peer, origin)
+	if !strings.Contains(st, "101") || time.Since(t0) > 600*time.Millisecond {
+		t.Fatalf("the upgrade must not wait for the dial: %q after %v", st, time.Since(t0))
+	}
+	ws.send([]byte("early bytes sent before the peer was dialled"))
+	if got := ws.recv(t, 44); string(got) != "early bytes sent before the peer was dialled" {
+		t.Fatalf("bytes sent during the dial must reach the peer once it is up: %q", got)
+	}
+}
+
+func TestBridgeDialFailureClosesTheSocket(t *testing.T) {
+	btTest(t)
+	m := &btMgr{enabled: true, state: func() ownState { return ownState{MullvadWanted: true, TunnelUp: true} }}
+	srv := httptest.NewServer(http.HandlerFunc(m.conn))
+	defer srv.Close()
+	btAllowed.add([]string{"8.8.8.8:6881"})
+	btDialTCP = func(ctx context.Context, addr string) (net.Conn, error) { return nil, errors.New("refused") }
+	ws, st := wsDial(t, srv, "/api/bt/conn?peer=8.8.8.8:6881", "https://"+srv.Listener.Addr().String())
+	if !strings.Contains(st, "101") {
+		t.Fatalf("handshake: %q", st)
+	}
+	ws.c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var h [2]byte
+	if _, err := io.ReadFull(ws.br, h[:]); err != nil || h[0]&0x0f != 0x8 {
+		t.Fatalf("an unreachable peer must end in a close frame: %v %v", h, err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if m.conns.Load() != 0 {
+		t.Fatalf("the slot must be freed: %d", m.conns.Load())
 	}
 }

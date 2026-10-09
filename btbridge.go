@@ -36,9 +36,9 @@ var btClientJS []byte
 var btSWJS []byte
 
 const (
-	btMaxConns   = 64
+	btMaxConns   = 96
 	btIdle       = 3 * time.Minute
-	btDialWait   = 12 * time.Second
+	btDialWait   = 8 * time.Second
 	btAllowTTL   = 30 * time.Minute
 	btAllowMax   = 3000
 	wsMaxMessage = 512 << 10
@@ -289,14 +289,8 @@ func (m *btMgr) conn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer m.conns.Add(-1)
-	ctx, cancel := context.WithTimeout(r.Context(), btDialWait)
-	tc, err := btDialTCP(ctx, peer)
-	cancel()
-	if err != nil {
-		http.Error(w, "peer unreachable", http.StatusBadGateway)
-		return
-	}
-	defer tc.Close()
+	// Answer the browser at once and dial afterwards. A browser lets only one WebSocket to the same server be "connecting" at a time, so dialling first made every dead peer (up to the
+	// dial timeout) hold up all the others behind it: in practice one peer at a time. The page's first bytes (the BitTorrent handshake) wait in the socket until the dial is done.
 	c, rw, err := wsAccept(w, r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -304,6 +298,16 @@ func (m *btMgr) conn(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.Close()
 	var wmu sync.Mutex
+	ctx, cancel := context.WithTimeout(context.Background(), btDialWait)
+	tc, err := btDialTCP(ctx, peer)
+	cancel()
+	if err != nil { // the peer is unreachable: say so by closing (1011), which the page treats as a failed peer
+		wmu.Lock()
+		wsWrite(c, 0x8, []byte{0x03, 0xf3})
+		wmu.Unlock()
+		return
+	}
+	defer tc.Close()
 	go func() { // peer -> page
 		buf := make([]byte, 16<<10)
 		for {
