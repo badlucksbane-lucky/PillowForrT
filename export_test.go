@@ -172,6 +172,8 @@ func TestEventStreamBacklogAndFollow(t *testing.T) {
 	old := events
 	defer func() { events = old }()
 	events = &eventStore{path: filepath.Join(dir, "ev.json"), cfgPath: filepath.Join(dir, "n.json"), known: filepath.Join(dir, "k.json"), lastOf: map[string]time.Time{}, now: time.Now, post: func(string, string, string, int) error { return nil }}
+	ev := events
+	t.Cleanup(func() { ev.Flush() }) // the file is written in the background: let it finish before the temporary directory goes
 	events.sink = exportSink
 	events.Add([]evt{{Kind: "a", Sev: sevInfo, Text: "one", Public: "p1"}, {Kind: "b", Sev: sevAlert, Text: "two", Public: "p2"}})
 
@@ -210,6 +212,8 @@ func TestHandleExportAPI(t *testing.T) {
 	defer func() { exports, events = oldX, oldE }()
 	exports = newExportStore(filepath.Join(dir, "export.json"))
 	events = &eventStore{path: filepath.Join(dir, "ev.json"), lastOf: map[string]time.Time{}, now: time.Now}
+	ev := events
+	t.Cleanup(func() { ev.Flush() }) // the file is written in the background: let it finish before the temporary directory goes
 	post := func(path, body string) *httptest.ResponseRecorder {
 		rr := httptest.NewRecorder()
 		handleExportAPI(rr, httptest.NewRequest("POST", "/api/"+path, strings.NewReader(body)), path)

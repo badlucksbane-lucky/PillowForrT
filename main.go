@@ -600,7 +600,14 @@ func main() {
 	}
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT)
-	go func() { <-sig; saveState(); os.Exit(0) }()
+	go func() {
+		<-sig
+		saveState()
+		if events != nil {
+			events.Flush() // the writer may still have the last events to put in the file
+		}
+		os.Exit(0)
+	}()
 	log.Printf("tinyfwd %s listening on %s, allow=%s", version, *listenAddr, *allowFlag)
 	log.Fatal(srv.ListenAndServe())
 }

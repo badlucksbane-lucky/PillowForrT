@@ -178,6 +178,7 @@ func newES(t *testing.T) (*eventStore, *[]string, *time.Time) {
 			mu.Unlock()
 			return nil
 		}}
+	t.Cleanup(s.Flush) // the file is written in the background: let it finish before the temporary directory goes
 	return s, &posts, &clock
 }
 
@@ -263,6 +264,7 @@ func TestEventChainLinksAndDetectsTampering(t *testing.T) {
 	}
 
 	// reload from the file: still intact
+	s.Flush() // the file is written in the background; Flush waits for it
 	r := &eventStore{path: s.path, cfgPath: s.cfgPath, lastOf: map[string]time.Time{}, now: s.now, post: s.post}
 	b, _ := os.ReadFile(s.path)
 	var f eventsFileV2
@@ -296,6 +298,7 @@ func TestEventChainLinksAndDetectsTampering(t *testing.T) {
 	lb, _ := json.Marshal(legacy)
 	os.WriteFile(s.path, lb, 0o600)
 	l := &eventStore{path: s.path, cfgPath: s.cfgPath, lastOf: map[string]time.Time{}, now: s.now, post: s.post}
+	t.Cleanup(l.Flush)
 	var arr []evt
 	json.Unmarshal(lb, &arr)
 	l.events = arr

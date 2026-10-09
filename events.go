@@ -313,6 +313,14 @@ type eventStore struct {
 	post    func(u, title, body string, prio int) error
 	now     func() time.Time
 	sink    func(evt) // called for each new event once it is stored (the export feed: stream, syslog, MQTT)
+
+	// persistence: see saveEvents
+	gen       uint64     // bumped by every change (guarded by mu)
+	savedGen  uint64     // the generation the file holds (guarded by mu)
+	fileMu    sync.Mutex // one file write at a time, and each takes its snapshot after getting this
+	saveOnce  sync.Once
+	saveReq   chan struct{}                                       // wakes the writer
+	writeFile func(path string, b []byte, mode os.FileMode) error // writeFileAtomic unless a test swaps it
 }
 
 func newEventStore() *eventStore {
@@ -339,10 +347,53 @@ func newEventStore() *eventStore {
 	return s
 }
 
+// saveEvents is called, with s.mu held, by everything that changes the log. It does not write: the whole log is a 30 to 45 KB file and a write to the box's flash takes 10 to 30 ms,
+// which used to be spent under the lock, on the goroutine of whoever added the event (the DNS handler for a refused lookup, a packet watcher's loop), with every other caller and
+// every page view waiting behind it. Now it only marks the log changed and wakes one writer goroutine; events that arrive while a write is going on are covered by the next one,
+// which writes them all.
 func (s *eventStore) saveEvents() {
-	b, _ := json.Marshal(eventsFileV2{Format: "orbic-events-2", Base: s.base, Since: s.since, Events: s.events})
-	writeFileAtomic(s.path, b, 0o600)
+	s.gen++
+	s.saveOnce.Do(func() {
+		s.saveReq = make(chan struct{}, 1)
+		go func() {
+			for range s.saveReq {
+				s.writeNow()
+			}
+		}()
+	})
+	select {
+	case s.saveReq <- struct{}{}:
+	default: // a wake-up is already waiting
+	}
 }
+
+// writeNow writes the log to its file if the file is out of date. The snapshot is taken only once the file lock is held, so a slow older write can never land after, and
+// over, a newer one; s.mu is held only for the copy, not for the marshalling or the write.
+func (s *eventStore) writeNow() {
+	s.fileMu.Lock()
+	defer s.fileMu.Unlock()
+	s.mu.Lock()
+	gen := s.gen
+	if gen == s.savedGen {
+		s.mu.Unlock()
+		return
+	}
+	snap := eventsFileV2{Format: "orbic-events-2", Base: s.base, Since: s.since, Events: append([]evt(nil), s.events...)}
+	s.mu.Unlock()
+	b, _ := json.Marshal(snap)
+	write := s.writeFile
+	if write == nil {
+		write = writeFileAtomic
+	}
+	if write(s.path, b, 0o600) == nil {
+		s.mu.Lock()
+		s.savedGen = gen
+		s.mu.Unlock()
+	}
+}
+
+// Flush returns when everything added so far is in the file (shutdown calls it; so do tests).
+func (s *eventStore) Flush() { s.writeNow() }
 
 // head is the hash the next event must carry: the newest hashed event's, else the base; called with the lock held.
 func (s *eventStore) head() string {
@@ -447,10 +498,15 @@ func (s *eventStore) allow(e evt) bool {
 func (s *eventStore) MarkSeen() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	changed := false
 	for i := range s.events {
-		s.events[i].Seen = true
+		if !s.events[i].Seen {
+			s.events[i].Seen, changed = true, true
+		}
 	}
-	s.saveEvents()
+	if changed {
+		s.saveEvents()
+	}
 }
 
 // MarkSeenKinds marks only the events of the given kinds as seen (an empty list marks every event, as MarkSeen does). It returns how many it changed.
@@ -472,7 +528,9 @@ func (s *eventStore) MarkSeenKinds(kinds []string) int {
 			n++
 		}
 	}
-	s.saveEvents()
+	if n > 0 {
+		s.saveEvents()
+	}
 	return n
 }
 
