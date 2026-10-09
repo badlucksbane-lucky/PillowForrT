@@ -20,7 +20,8 @@ button.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 .ib{width:44px;min-height:44px;padding:0;display:inline-flex;align-items:center;justify-content:center}.ib.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}.ib.bad.on{background:var(--bad);border-color:var(--bad)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}.chip{min-height:40px;padding:0 12px;border-radius:20px;font-size:14px}.chip .cnt{margin-left:6px}
 input.ed{font:inherit;flex:1;min-width:0;height:44px;border:1px solid var(--ac);border-radius:10px;padding:0 10px;background:var(--bg);color:var(--fg)}
-.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.dot{background:var(--ln)}.dot.ok{background:var(--okc)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.bar{height:4px;background:var(--ln);border-radius:2px;margin-top:6px}.bar>i{display:block;height:4px;background:var(--ac);border-radius:2px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.dot{background:var(--ln)}.dot.ok{background:var(--okc)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.kvr{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--ln)}.kvr:last-child{border:0}.kvr>span:last-child{text-align:right;min-width:0;word-break:break-all}
+.bar{height:4px;background:var(--ln);border-radius:2px;margin-top:6px}.bar>i{display:block;height:4px;background:var(--ac);border-radius:2px}
 input{font:inherit;padding:6px 8px;border:1px solid var(--ln);border-radius:8px;background:var(--bg);color:var(--fg);min-width:0;flex:1}
 .banner{padding:10px 12px;border-radius:8px;background:var(--warn);color:#000;margin:12px 0;font-weight:600}
 .err{color:var(--bad)}.mut{color:var(--mut)}.blk{color:var(--bad)}
@@ -901,20 +902,19 @@ async function yreboot(){const w=prompt('Reboot the Orbic? Every device loses Wi
 let Ce=null,CeS=null;
 function cb(n){if(n==null)return'?';const u=['B','KB','MB','GB','TB'];let i=0;n=Number(n);while(n>=1024&&i<4){n/=1024;i++}return (i?n.toFixed(n<10?2:1):n)+' '+u[i]}
 function crender(force){const el=$('cell');if(!Ce||guard(el,force))return;const c=Ce,s=CeS||{},u=s.usage||{},up=s.uplink||{},sy=s.system||{};
- const row=(k,v,x)=>'<tr><td class="mut">'+k+'</td><td>'+v+'</td><td class="mut">'+(x||'')+'</td></tr>';
- const yn=b=>b?'on':'off';
- $('cebadge').innerHTML=(c.up&&up.ok!==false?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; up'+(up.latency_ms?' '+Math.round(up.latency_ms)+' ms':'')+'</span>':'<span class="err" style="text-transform:none;letter-spacing:0">&bull; down</span>');
- el.innerHTML='<table>'+
-  row('Uplink',(c.up&&up.ok!==false?'<span style="color:var(--ac)">up</span>':'<span class="err">down</span>')+(up.latency_ms?', '+Math.round(up.latency_ms)+' ms to '+esc(up.target||''):''),up.consecutive_fails?up.consecutive_fails+' failed checks in a row':'')+
-  row('APN',esc(c.apn||'?'),'profile '+c.v4_profile+' (IPv4), '+c.v6_profile+' (IPv6); IPv4 '+yn(c.ipv4_enabled)+', IPv6 '+yn(c.ipv6_enabled))+
-  row('Roaming allowed',yn(c.roaming_allowed),'auto-connect '+yn(c.auto_connect)+', data switch '+yn(c.data_switch))+
-  row('IPv4 address',esc(c.ipv4||'none'),c.cgnat?'carrier-grade NAT: shared with other customers, nothing can reach in from outside':'')+
-  row('IPv6 address',esc(c.ipv6||'none'),'MTU '+(c.mtu||'?'))+
-  row('Carrier DNS',esc((c.carrier_dns||[]).join(', ')||'none'),'only a fallback: DNS goes out over DoH')+
-  row('This billing cycle',(u.down!=null?cb(u.down)+' down, '+cb(u.up)+' up':'?'),u.cycle?'since '+esc(u.cycle):'')+
-  row('Since boot',cb(c.rx_bytes)+' down, '+cb(c.tx_bytes)+' up',c.rx_packets+' / '+c.tx_packets+' packets; errors '+c.rx_errors+'/'+c.tx_errors+', drops '+c.rx_drops+'/'+c.tx_drops)+
-  row('Temperature',sy.temp_c_max!=null?sy.temp_c_max+' C':'?','')+
-  '</table>'+((c.missing||[]).length?'<div class="err">could not read: '+esc(c.missing.join(', '))+'</div>':'')}
+ const yn=b=>b?'on':'off',ok=c.up&&up.ok!==false;
+ $('cebadge').innerHTML=ok?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; up</span>':'<span class="err" style="text-transform:none;letter-spacing:0">&bull; down</span>';
+ const chip=(t,cls,tip)=>'<span class="cnt'+(cls?' '+cls:'')+'" title="'+esc(tip||'')+'">'+t+'</span>';
+ const t=sy.temp_c_max,tp=t!=null?Math.max(0,Math.min(100,Math.round(t/85*100))):0;
+ const bad=(c.rx_errors||0)+(c.tx_errors||0)+(c.rx_drops||0)+(c.tx_drops||0);
+ const kv=(k,v)=>'<div class="kvr"><span class="mut">'+k+'</span><span>'+v+'</span></div>';
+ el.innerHTML='<div class="row"><span class="dot'+(ok?' ok':' bad')+'"></span><span style="font-size:27px;font-weight:650;line-height:1">'+(up.latency_ms?Math.round(up.latency_ms):'-')+'</span><span class="mut">ms</span><span style="flex:1"></span>'+
+   (c.cgnat?chip('CGNAT','','carrier-grade NAT: shared with other customers, nothing can reach in from outside'):'')+chip(c.ipv6_enabled&&c.ipv6?'IPv6':'IPv4 only')+(up.consecutive_fails?chip(up.consecutive_fails+' failed','bad','failed checks in a row'):'')+(bad?chip(bad+' errors','bad','link errors and drops since boot'):'')+'</div>'+
+  '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px"><div><div style="font-size:24px;font-weight:650;line-height:1.1">&darr; '+(u.down!=null?cb(u.down):'?')+'</div><span class="mut">This cycle</span></div><div><div style="font-size:24px;font-weight:650;line-height:1.1">&uarr; '+(u.up!=null?cb(u.up):'?')+'</div><span class="mut">'+(u.cycle?esc(u.cycle):'&nbsp;')+'</span></div></div>'+
+  '<div class="mut" style="margin-top:8px">Since boot &darr; '+cb(c.rx_bytes)+' &uarr; '+cb(c.tx_bytes)+'</div>'+
+  (t!=null?'<div class="row" style="margin-top:12px"><span class="mut" style="width:44px">Temp</span><span class="bar" style="flex:1;margin:0"><i style="width:'+tp+'%'+(t>=70?';background:var(--warn)':'')+'"></i></span><span>'+t+'&deg;</span></div>':'')+
+  '<details style="margin-top:12px"><summary><b>Details</b></summary><div style="margin-top:6px">'+kv('APN',esc(c.apn||'?'))+kv('IPv4',esc(c.ipv4||'none'))+kv('IPv6',esc(c.ipv6||'none'))+kv('MTU',c.mtu||'?')+kv('Carrier DNS',esc((c.carrier_dns||[]).join(', ')||'none'))+kv('Roaming',yn(c.roaming_allowed))+kv('Auto-connect',yn(c.auto_connect))+kv('Data switch',yn(c.data_switch))+kv('Packets',(c.rx_packets||0)+' / '+(c.tx_packets||0))+'</div></details>'+
+  ((c.missing||[]).length?'<div class="err">could not read: '+esc(c.missing.join(', '))+'</div>':'')}
 async function cload(){try{Ce=await (await api('/api/cell')).json();CeS=await (await api('/status.json')).json();crender()}catch(e){}}
 let Fw=null;const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 function devopts(sel){const seen={},o=[];(Dh&&Dh.reservations||[]).forEach(r=>{seen[r.mac]=1;o.push([r.mac,r.name])});(Dh&&Dh.devices||[]).forEach(d=>{if(!seen[d.mac]){seen[d.mac]=1;o.push([d.mac,d.name||d.ip||d.mac])}});return '<option value="">'+sel+'</option>'+o.map(x=>'<option value="'+x[0]+'">'+esc(x[1])+'  '+esc(x[0])+'</option>').join('')}
