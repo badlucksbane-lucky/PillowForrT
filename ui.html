@@ -844,7 +844,7 @@ function yrender(force){const el=$('sys');if(!Sy||guard(el,force))return;const y
   '<div class="mut" style="margin:4px 0">Prevents WebRTC IPv6 leaks. Off = devices drop carrier IPv6 (IPv4 unaffected). Default off after boot. <code>ssh orbic touch /data/proxy/lanv6.on</code>.</div>'+
   '<div class="row"><button class="'+(Sl&&Sl.off?'':'on')+'" onclick="ylv6('+(Sl&&Sl.off?'false':'true')+')">'+(Sl&&Sl.off?'Switch LAN IPv6 back on':'Switch LAN IPv6 off')+'</button>'+(Sl&&Sl.off&&!Sl.rules_in_place?'<span class="err">the firewall rules are not in place yet: they are applied within 20 seconds</span>':'')+'</div>'+
   '<div class="row" style="margin-top:10px"><button onclick="yreboot()">Reboot the Orbic</button><span class="mut">Everything drops for 1–2 min. DHCP reservations restored on boot.</span></div>'}
-let EgTog={},EgDns={};
+let EgTog=(()=>{try{return JSON.parse(localStorage.getItem('egt')||'{}')}catch(e){return{}}})(),EgDns={};
 function egdevs(){const m={},add=(mac,o)=>{mac=(mac||'').toLowerCase();if(!mac)return;m[mac]=Object.assign(m[mac]||{mac,known:false},o)};
  ((Dv&&Dv.devices)||[]).forEach(d=>add(d.mac,{known:true,dev:d,name:d.label||d.name||d.hostname||(d.random_mac?'private-MAC device':'unknown device'),ip:d.ip,online:d.online}));
  if(Eg){Object.keys(Eg.devices||{}).forEach(k=>add(k,{}));Object.keys(Eg.dev_services||{}).forEach(k=>add(k,{}));(Eg.http_upgrade_skip||[]).forEach(k=>add(k,{}));(Eg.observed||[]).forEach(o=>add(o.mac,{ip:o.ip}))}
@@ -865,7 +865,7 @@ function egcard(d){const mac=d.mac,em=esc(mac),ex=(Eg.dev_services||{})[mac]||[]
   if(dv.ip)h+='<div class="mut" style="margin-top:14px">DNS</div>'+seg('DNS filter for this device',[['','Auto'],['off','Off'],['strict','Strict']],(EgDns[dv.ip]||{}).mode||'',v=>"post('dns/device',{ip:'"+esc(dv.ip)+"',mode:'"+v+"'})",1)}
  h+='<div class="mut" style="margin-top:14px">HTTPS</div>'+seg('Force HTTPS for this device',[['on','On'],['off','Off']],skip?'off':'on',v=>"yhup("+(v==='on')+",'"+em+"')",1);
  if(d.pend.length)h+='<div class="mut" style="margin-top:14px">Refused</div><div class="chips" style="margin-top:6px">'+d.pend.slice(0,25).map(o=>'<button class="chip" title="'+o.flows+' flows to '+esc((o.dsts||[]).join(', '))+'" onclick="yega(\''+o.proto+'\','+o.port+',\''+em+'\')">'+o.proto+' '+o.port+'<span class="cnt">'+o.flows+'</span></button>').join('')+'</div>';
- h+='<details style="margin-top:14px"><summary><b>Ports</b><span class="cnt">'+(ex.length+rules.length)+'</span></summary><table style="margin-top:6px">'+Eg.services.map(s=>{const on=s.on||ex.indexOf(s.id)>=0;return '<tr><td style="width:28px"><input type="checkbox" aria-label="Allow '+esc(s.name)+' for '+esc(d.name)+'"'+(on?' checked':'')+(s.on?' disabled':'')+' onchange="yegsv(\''+s.id+'\',this.checked,\''+em+'\')"></td><td><b>'+esc(s.name)+'</b>'+(s.on?' <span class="mut">(everyone)</span>':'')+'<br><span class="mut">'+esc(s.desc)+'</span></td><td class="mut">'+esc(s.ports)+'</td></tr>'}).join('')+'</table>'+
+ h+='<details style="margin-top:14px" data-k="'+em+'"><summary><b>Ports</b><span class="cnt">'+(ex.length+rules.length)+'</span></summary><table style="margin-top:6px">'+Eg.services.map(s=>{const on=s.on||ex.indexOf(s.id)>=0;return '<tr><td style="width:28px"><input type="checkbox" aria-label="Allow '+esc(s.name)+' for '+esc(d.name)+'"'+(on?' checked':'')+(s.on?' disabled':'')+' onchange="yegsv(\''+s.id+'\',this.checked,\''+em+'\')"></td><td><b>'+esc(s.name)+'</b>'+(s.on?' <span class="mut">(everyone)</span>':'')+'<br><span class="mut">'+esc(s.desc)+'</span></td><td class="mut">'+esc(s.ports)+'</td></tr>'}).join('')+'</table>'+
   (rules.length?'<table>'+rules.map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td class="mut">'+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\''+em+'\')">remove</button></td></tr>').join('')+'</table>':'')+'</details>';
  return h+'</div></div>'}
 let EgEdit=null;
@@ -886,7 +886,7 @@ el.innerHTML='<div class="row" title="Only listed services may connect out (DNS 
   '<div class="row"><button class="'+(Eg.http_upgrade?'on':'')+'" onclick="yhup('+!Eg.http_upgrade+',\'\')">'+(Eg.http_upgrade?'Turn the upgrade off':'Turn the upgrade on')+'</button>'+((Eg.http_upgrade_skip||[]).length?'<span class="mut">'+Eg.http_upgrade_skip.length+' device(s) left out</span>':'')+'</div></details>'+
   (devs.map(egcard).join('')||'<div class="mut">no devices yet</div>')}
 function egopen(d){return !!EgTog[d.mac]}
-function egtog(mac){const d=egdevs().find(x=>x.mac===mac);EgTog[mac]=!(d&&egopen(d));egrender(true)}
+function egtog(mac){const d=egdevs().find(x=>x.mac===mac);EgTog[mac]=!(d&&egopen(d));try{localStorage.setItem('egt',JSON.stringify(EgTog))}catch(e){}egrender(true)}
 let Sa=null,Sl=null,Eg=null;
 async function yload(){try{Sy=await (await api('/api/system')).json();Sa=await (await api('/api/system/stockadmin')).json();Sl=await (await api('/api/system/lanv6')).json();Eg=await (await api('/api/egress')).json();yrender();egrender()}catch(e){}}
 async function egreload(m){$('egmsg').textContent=m||'';Eg=await (await api('/api/egress')).json();egrender(true)}
@@ -1021,6 +1021,14 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
  lightsRender();setInterval(lightsRender,1500);
  const gt=document.getElementById('gtog'),gr=document.getElementById('gr');let gopen=false;try{gopen=localStorage.getItem('gr')==='1'}catch(e){}
  const gset=o=>{gopen=o;gr.hidden=!o;gt.setAttribute('aria-expanded',o);gt.innerHTML=ic('chart')+'<span class="cv" style="display:inline-flex;transform:rotate('+(o?180:0)+'deg)">'+ic('chev')+'</span>';try{localStorage.setItem('gr',o?'1':'0')}catch(e){}};gt.onclick=()=>gset(!gopen);gset(gopen);
+ // every <details> remembers open/closed across re-renders and page reloads
+ let dst={};try{dst=JSON.parse(localStorage.getItem('dt')||'{}')}catch(e){}
+ let dapplying=false;
+ const dkey=d=>{const c=d.closest('.card'),h=c&&c.querySelector(':scope>h2'),t=h&&h.firstChild?h.firstChild.textContent.trim():'',sm=d.querySelector(':scope>summary'),b=sm&&sm.querySelector('b'),x=(b||sm||{textContent:''}).textContent.replace(/\d+/g,'#').replace(/\s+/g,' ').trim();return t+'|'+(d.dataset.k||'')+'|'+x};
+ const dapply=root=>{const l=root.matches&&root.matches('details')?[root]:[];root.querySelectorAll&&l.push(...root.querySelectorAll('details'));dapplying=true;l.forEach(d=>{if(d.dataset.r)return;d.dataset.r='1';const k=dkey(d);if(k in dst)d.open=!!dst[k]});dapplying=false};
+ document.addEventListener('toggle',e=>{const d=e.target;if(dapplying||!d||d.tagName!=='DETAILS')return;dst[dkey(d)]=d.open?1:0;try{localStorage.setItem('dt',JSON.stringify(dst))}catch(x){}},true);
+ new MutationObserver(ms=>{for(const m of ms)m.addedNodes.forEach(n=>{if(n.nodeType===1)dapply(n)})}).observe(document.body,{childList:true,subtree:true});
+ dapply(document.body);
  // result lines: green when the last request worked, red when it failed
  new MutationObserver(ms=>{for(const m of ms){const e=m.target.nodeType===3?m.target.parentElement:m.target;if(e&&e.classList&&e.classList.contains('msg'))e.classList.toggle('ok',LAST_OK&&!!e.textContent)}}).observe(document.body,{childList:true,characterData:true,subtree:true});
  // a card whose data never arrived says so instead of "loading" for ever
