@@ -1,6 +1,6 @@
 package main
 
-// Scheduled actions: things the Orbic does by itself at a chosen time on chosen days, from a short fixed list (never an arbitrary command): save a settings snapshot, update the
+// Scheduled actions: things the box does by itself at a chosen time on chosen days, from a short fixed list (never an arbitrary command): save a settings snapshot, update the
 // DNS block lists, run the diagnostics (anything not fine becomes an event), and reboot. Times are in the schedule time zone (see -tz). A run that is missed because
 // the box was off is skipped, not made up later. A reboot needs the typed word `reboot` to create, edit or run, and is refused within 10 minutes of the box starting (so a bad schedule
 // cannot become a reboot loop). Each run's result is kept with the action and logged as an event.
@@ -31,7 +31,7 @@ var actionKinds = map[string]string{
 	"snapshot":     "Save a settings snapshot",
 	"update_lists": "Update the DNS block lists",
 	"diagnostics":  "Run the diagnostics",
-	"reboot":       "Reboot the Orbic",
+	"reboot":       "Reboot the box",
 }
 
 type actionManager struct {
@@ -85,7 +85,7 @@ func defaultActionManager() *actionManager {
 						names = append(names, c.Name)
 					}
 				}
-				m.note("diagnostics", sevAttention, fmt.Sprintf("Scheduled diagnostics found %d thing(s) to look at: %s", bad, strings.Join(names, ", ")), "The Orbic's scheduled diagnostics found something to look at")
+				m.note("diagnostics", sevAttention, fmt.Sprintf("Scheduled diagnostics found %d thing(s) to look at: %s", bad, strings.Join(names, ", ")), "The box's scheduled diagnostics found something to look at")
 			}
 			return fmt.Sprintf("%d fine, %d to look at, %d broken", r.Counts["ok"], r.Counts["warn"], r.Counts["fail"]), nil
 		},
@@ -243,7 +243,7 @@ func (m *actionManager) run(id int, viaRun bool) (string, error) {
 	m.running[id] = true
 	m.mu.Unlock()
 	if act == "reboot" {
-		m.note("scheduled_reboot", sevInfo, "Rebooting now: scheduled action \""+name+"\"", "The Orbic is rebooting (scheduled)")
+		m.note("scheduled_reboot", sevInfo, "Rebooting now: scheduled action \""+name+"\"", "The box is rebooting (scheduled)")
 	}
 	res, err := m.runners[act]()
 	m.mu.Lock()
@@ -262,7 +262,7 @@ func (m *actionManager) run(id int, viaRun bool) (string, error) {
 		}
 	}
 	if err != nil {
-		m.note("scheduled_failed", sevAttention, fmt.Sprintf("Scheduled action \"%s\" failed: %v", name, err), "A scheduled action on the Orbic failed")
+		m.note("scheduled_failed", sevAttention, fmt.Sprintf("Scheduled action \"%s\" failed: %v", name, err), "A scheduled action on the box failed")
 		return "", err
 	}
 	if act != "reboot" {

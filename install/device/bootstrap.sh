@@ -1,5 +1,5 @@
 #!/bin/sh
-# bootstrap.sh -- runs ON the Orbic, as root (started by the host installer with a short AT+SYSCMD line: `sh /tmp/stone/boot.sh install`).
+# bootstrap.sh -- runs ON the box, as root (started by the host installer with a short AT+SYSCMD line: `sh /tmp/stone/boot.sh install`).
 #   install     put the staged files in place, journal every change, start the services, verify; on any failure roll everything back
 #   check       read-only report (nothing is changed)
 #   rollback    undo the last install from its journal (works with no network: the host runs it over USB), then reboot

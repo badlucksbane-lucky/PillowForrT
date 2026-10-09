@@ -325,11 +325,11 @@ func TestHTTPStaysOrRedirects(t *testing.T) {
 			t.Errorf("%s %s (Accept %q): stays=%v want %v", c.method, c.target, c.accept, got, c.stays)
 		}
 	}
-	h := "orbic"
+	h := "pillowforrt.lan"
 	uiHost = &h
 	rec := httptest.NewRecorder()
 	redirectHTTPS(rec, httptest.NewRequest("GET", "/ui?x=1", nil))
-	if rec.Code != 308 || rec.Header().Get("Location") != "https://orbic/ui?x=1" {
+	if rec.Code != 308 || rec.Header().Get("Location") != "https://pillowforrt.lan/ui?x=1" {
 		t.Errorf("redirect: %d %s", rec.Code, rec.Header().Get("Location"))
 	}
 }
@@ -359,14 +359,14 @@ func TestStatusDetailNeedsAuth(t *testing.T) {
 
 func TestCertificate(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "tls")
-	names := []string{"orbic", "orbic.lan", "wpad"}
+	names := []string{"pillowforrt", "pillowforrt.lan", "wpad"}
 	ips := []net.IP{net.ParseIP("192.168.1.1"), net.ParseIP("192.168.1.254")}
 	now := time.Now()
 	c1, fp1, created, err := loadOrCreateCert(dir, names, ips, now)
 	if err != nil || !created {
 		t.Fatal(created, err)
 	}
-	for _, h := range []string{"orbic", "wpad", "192.168.1.1", "192.168.1.254"} {
+	for _, h := range []string{"pillowforrt", "wpad", "192.168.1.1", "192.168.1.254"} {
 		if c1.Leaf.VerifyHostname(h) != nil {
 			t.Errorf("the certificate does not cover %s", h)
 		}

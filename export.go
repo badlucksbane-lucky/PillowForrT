@@ -43,8 +43,8 @@ type exportMQTT struct {
 	Addr         string `json:"addr"` // ip:port on the LAN, plain MQTT 3.1.1
 	User         string `json:"user,omitempty"`
 	Pass         string `json:"pass,omitempty"`
-	NodeID       string `json:"node_id,omitempty"`       // the id Home Assistant knows this box by (default "orbic")
-	Prefix       string `json:"prefix,omitempty"`        // topic prefix (default "stone")
+	NodeID       string `json:"node_id,omitempty"`       // the id Home Assistant knows this box by (default "box")
+	Prefix       string `json:"prefix,omitempty"`        // topic prefix (default "pillowforrt")
 	Control      bool   `json:"control,omitempty"`       // let Home Assistant pause a device's internet (a switch per device)
 	PauseMinutes int    `json:"pause_minutes,omitempty"` // how long a pause from Home Assistant lasts (default 60)
 }
@@ -160,10 +160,10 @@ func (s *exportStore) SetMQTT(c exportMQTT) error {
 		c.Addr = a
 	}
 	if c.NodeID == "" {
-		c.NodeID = "orbic"
+		c.NodeID = "box"
 	}
 	if c.Prefix == "" {
-		c.Prefix = "stone"
+		c.Prefix = "pillowforrt"
 	}
 	if !topicOK(c.NodeID) || !topicOK(c.Prefix) {
 		return errors.New("the node id and prefix may only use a-z, 0-9, _ and - (40 characters at most)")
@@ -228,7 +228,7 @@ func (s *exportStore) View(headID int) exportView {
 	v.Tap.Enabled, v.Tap.Active, v.Tap.Last = s.cfg.Tap.Enabled, s.tapActive, s.tapLast
 	m := s.cfg.MQTT
 	v.MQTT.Enabled, v.MQTT.Addr, v.MQTT.User, v.MQTT.PassSet = m.Enabled, m.Addr, m.User, m.Pass != ""
-	v.MQTT.NodeID, v.MQTT.Prefix, v.MQTT.Control, v.MQTT.PauseMinutes = orStr(m.NodeID, "orbic"), orStr(m.Prefix, "stone"), m.Control, m.PauseMinutes
+	v.MQTT.NodeID, v.MQTT.Prefix, v.MQTT.Control, v.MQTT.PauseMinutes = orStr(m.NodeID, "box"), orStr(m.Prefix, "pillowforrt"), m.Control, m.PauseMinutes
 	if v.MQTT.PauseMinutes == 0 {
 		v.MQTT.PauseMinutes = 60
 	}
@@ -299,7 +299,7 @@ func kindWords(kind string) string { return strings.ReplaceAll(kind, "_", " ") }
 
 func toEVE(e evt, host string, public bool) eveRecord {
 	r := eveRecord{Timestamp: time.Unix(e.T, 0).Format("2006-01-02T15:04:05.000000-0700"), EventType: "alert", Host: host}
-	r.Alert = eveAlert{Action: "allowed", GID: eveGID, SignatureID: eveSID(e.Kind), Rev: 1, Signature: "Stone of Heimdall: " + kindWords(e.Kind), Category: "Stone of Heimdall " + e.Sev, Severity: eveSeverity(e.Sev)}
+	r.Alert = eveAlert{Action: "allowed", GID: eveGID, SignatureID: eveSID(e.Kind), Rev: 1, Signature: "PillowForrT: " + kindWords(e.Kind), Category: "PillowForrT " + e.Sev, Severity: eveSeverity(e.Sev)}
 	r.Stone = eveStone{ID: e.ID, Kind: e.Kind, Sev: e.Sev, Public: e.Public, Hash: e.Hash, Prev: e.Prev}
 	if !public {
 		r.Stone.Text = e.Text
@@ -487,7 +487,7 @@ func (s *exportStore) TestSyslog() error {
 	if c.Addr == "" {
 		return errors.New("give the collector's address first")
 	}
-	s.sendSyslog(evt{ID: 0, T: time.Now().Unix(), Kind: "test", Sev: sevInfo, Text: "test message from the Stone of Heimdall page", Public: "test message from the Stone of Heimdall page"})
+	s.sendSyslog(evt{ID: 0, T: time.Now().Unix(), Kind: "test", Sev: sevInfo, Text: "test message from the PillowForrT page", Public: "test message from the PillowForrT page"})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.syslogErr != "" {

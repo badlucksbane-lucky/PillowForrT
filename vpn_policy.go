@@ -71,7 +71,7 @@ func planRules(p exitPlan) (mangle, filter, v6 string) {
 
 // restore feeds a ruleset to iptables-restore --noflush (declared chains are replaced, everything else is left alone).
 func restore(cmd, rules string) error {
-	f, err := os.CreateTemp("", "heimdallstone-rules")
+	f, err := os.CreateTemp("", "pillowforrt-rules")
 	if err != nil {
 		return err
 	}

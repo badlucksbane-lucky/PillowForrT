@@ -8,7 +8,7 @@ package main
 //   - a one-time "withdraw" advertisement goes out to the LAN (and again every 5 minutes while off): router lifetime 0 and the carrier prefix with preferred = valid = 0. Hosts
 //     deprecate the address at once and drop it within 2 hours (Linux and Android ignore a valid lifetime below 2 h; a Wi-Fi reconnect drops it immediately). The packet carries
 //     SO_MARK 0x4e, which the drop rule lets through.
-// The Orbic's own IPv6 (its cellular side, the porch relay, the onion door) is not touched. OFF IS THE DEFAULT (): LAN IPv6 is on only while the flag file
+// The box's own IPv6 (its cellular side, the porch relay, the onion door) is not touched. OFF IS THE DEFAULT (): LAN IPv6 is on only while the flag file
 // /data/proxy/lanv6.on exists, so a wiped /data, a restore or a first boot comes up with it off. On again: the rules go within 20 seconds and radish's next carrier
 // advertisement (a few minutes, or a device's solicitation) hands the prefix back. (0.41.0 used lanv6.off with the opposite meaning; its file is simply ignored now.)
 

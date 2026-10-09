@@ -44,7 +44,7 @@ const lanCIDR = "192.168.1.0/24"
 
 // createPlainTUN makes the tun device WITHOUT IFF_VNET_HDR. wireguard-go's default asks the kernel for TCP segmentation/checksum offload on the tun; on this 3.18 kernel
 // (with the bridge, the Qualcomm fast path and the Wi-Fi driver downstream) forwarded TCP data from the tunnel never reached the device (ICMP and TCP handshakes did,
-// found 2026-10-02), while the Orbic's own local sockets were fine. Plain packets, one per read/write, cost a little speed and work.
+// found 2026-10-02), while the box's own local sockets were fine. Plain packets, one per read/write, cost a little speed and work.
 func createPlainTUN(name string, mtu int) (tun.Device, error) {
 	nfd, err := unix.Open("/dev/net/tun", unix.O_RDWR|unix.O_CLOEXEC, 0)
 	if err != nil {

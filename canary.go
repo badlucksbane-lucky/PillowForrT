@@ -1,12 +1,12 @@
 package main
 
 // The canary address (192.168.1.253): a decoy host that no honest device has any reason to talk to, so anything that touches it is looking around: a port scanner, a worm, a
-// compromised device, a curious guest. tinyfwd gives the Orbic that address as an alias on the LAN bridge (so the kernel answers ARP for it), listens on a set of tempting TCP
+// compromised device, a curious guest. tinyfwd gives the box that address as an alias on the LAN bridge (so the kernel answers ARP for it), listens on a set of tempting TCP
 // ports there (a slow tarpit, never a real service), and watches the wire for ANY packet or ARP request aimed at it, including pings and ports nothing listens on, through an
 // AF_PACKET socket with a kernel packet filter (so only frames for .253 ever reach us). The first touch from a source raises an event "to look at"; a source that tries five or more
 // ports raises a scan event; each at most once per 10 minutes per source. Nothing is ever sent beyond a trickle of banner bytes, no payload is stored, and the address is never
 // handed out by DHCP or allowed in a reservation. Honest limits: Wi-Fi to Wi-Fi traffic the radio relays by itself never reaches the bridge, but a probe of .253 does (the address
-// belongs to the Orbic, so the frames come to it), and the ARP sweep that precedes most scans is broadcast.
+// belongs to the box, so the frames come to it), and the ARP sweep that precedes most scans is broadcast.
 
 import (
 	"encoding/binary"

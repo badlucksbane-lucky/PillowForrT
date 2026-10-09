@@ -64,7 +64,7 @@ func validatePool(p dhcpPool) error {
 	lo, hi := net.ParseIP(p.Start).To4(), net.ParseIP(p.End).To4()
 	for _, ip := range []net.IP{lo, hi} {
 		if ip == nil || ip[0] != 192 || ip[1] != 168 || ip[2] != 1 || ip[3] < 2 || ip[3] > 252 {
-			return errors.New("the pool must lie inside 192.168.1.2 to 192.168.1.252 (.1 and .254 belong to the Orbic, .253 is the canary)")
+			return errors.New("the pool must lie inside 192.168.1.2 to 192.168.1.252 (.1 and .254 belong to the box, .253 is the canary)")
 		}
 	}
 	if ipNum(p.Start) > ipNum(p.End) {

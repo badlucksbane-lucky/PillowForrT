@@ -5,7 +5,7 @@ import (
 	_ "embed"
 )
 
-// caBundle is the Mozilla root set (a Debian /etc/ssl/certs/ca-certificates.crt, copied 2026-10-01). The Orbic's own /etc/ssl/certs has four
+// caBundle is the Mozilla root set (a Debian /etc/ssl/certs/ca-certificates.crt, copied 2026-10-01). The box's own /etc/ssl/certs has four
 // DigiCert files and cannot verify Cloudflare (SSL.com) or other newer chains, so the daemon carries its own. Refresh with:
 //
 //	cp /etc/ssl/certs/ca-certificates.crt ca-bundle.pem   (then rebuild and redeploy)

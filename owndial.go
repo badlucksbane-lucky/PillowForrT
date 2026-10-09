@@ -206,11 +206,11 @@ func (o *ownRouter) noteLocked(r ownRoute, why string) {
 	case r == routeBlock:
 		kind, sev = "own_traffic_blocked", sevAttention
 		text = "tinyfwd's own traffic (encrypted DNS lookups, list downloads, notifications) is blocked: " + why + ". Name lookups are refused until the tunnel is back."
-		public = "The Orbic's own traffic is blocked while the VPN is down"
+		public = "The box's own traffic is blocked while the VPN is down"
 	case r == routeDirect && why != "":
 		kind, sev = "own_traffic_raw", sevAttention
 		text = "tinyfwd's own traffic (encrypted DNS lookups, list downloads, notifications) is leaving over the cellular link because " + why + "."
-		public = "The Orbic's own traffic is leaving over the cellular link because a private path is unavailable"
+		public = "The box's own traffic is leaving over the cellular link because a private path is unavailable"
 	default:
 		return
 	}

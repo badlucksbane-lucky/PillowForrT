@@ -168,12 +168,12 @@ func (d *detector) step(in evIn) []evt {
 		d.dohFB = in.DoHDown
 		msg := "The web page and proxy started"
 		if in.SysUptime < 900 {
-			msg = "The Orbic restarted"
+			msg = "The box restarted"
 		}
 		return append(out, mk("restart", sevInfo, msg, msg, now))
 	}
 	if in.SysUptime+30 < d.lastUp { // the whole box restarted while we kept running (cannot normally happen) or the counter wrapped
-		out = append(out, mk("restart", sevInfo, "The Orbic restarted", "The Orbic restarted", now))
+		out = append(out, mk("restart", sevInfo, "The box restarted", "The box restarted", now))
 	}
 	d.lastUp = in.SysUptime
 	for _, o := range in.Online {
@@ -190,16 +190,16 @@ func (d *detector) step(in evIn) []evt {
 	switch down := !in.UplinkOK && in.UplinkFails >= 3; {
 	case down && !d.uplinkDown:
 		d.uplinkDown, d.upDownAt = true, now
-		out = append(out, mk("uplink_down", sevAlert, "The internet is down: the cellular uplink has stopped answering", "The Orbic's internet connection is down", now))
+		out = append(out, mk("uplink_down", sevAlert, "The internet is down: the cellular uplink has stopped answering", "The box's internet connection is down", now))
 	case !down && d.uplinkDown && in.UplinkOK:
 		d.uplinkDown = false
 		dur := now.Sub(d.upDownAt).Round(time.Minute)
-		out = append(out, mk("uplink_up", sevInfo, fmt.Sprintf("The internet is back after about %d minute(s)", int(dur.Minutes())), "The Orbic's internet connection is back", now))
+		out = append(out, mk("uplink_up", sevInfo, fmt.Sprintf("The internet is back after about %d minute(s)", int(dur.Minutes())), "The box's internet connection is back", now))
 	}
 	switch {
 	case in.DoHDown && !d.dohFB:
 		d.dohFB = true
-		out = append(out, mk("doh_down", sevAttention, "Encrypted DNS is failing: name lookups are being refused, and nothing is sent in the clear", "Encrypted DNS is failing on the Orbic", now))
+		out = append(out, mk("doh_down", sevAttention, "Encrypted DNS is failing: name lookups are being refused, and nothing is sent in the clear", "Encrypted DNS is failing on the box", now))
 	case !in.DoHDown && d.dohFB:
 		d.dohFB = false
 		out = append(out, mk("doh_ok", sevInfo, "Encrypted DNS is working again", "Encrypted DNS is working again", now))
@@ -210,13 +210,13 @@ func (d *detector) step(in evIn) []evt {
 		d.svcCount[s]++
 		if d.svcCount[s] >= 2 && !d.svcAlerted[s] {
 			d.svcAlerted[s] = true
-			out = append(out, mk("service_down", sevAlert, "A service stopped: "+s, "A service on the Orbic stopped", now))
+			out = append(out, mk("service_down", sevAlert, "A service stopped: "+s, "A service on the box stopped", now))
 		}
 	}
 	for s := range d.svcCount {
 		if !cur[s] {
 			if d.svcAlerted[s] {
-				out = append(out, mk("service_up", sevInfo, "A service is back: "+s, "A service on the Orbic is back", now))
+				out = append(out, mk("service_up", sevInfo, "A service is back: "+s, "A service on the box is back", now))
 			}
 			delete(d.svcCount, s)
 			delete(d.svcAlerted, s)
@@ -226,13 +226,13 @@ func (d *detector) step(in evIn) []evt {
 		d.hotCount++
 		if d.hotCount >= 2 && !d.hot {
 			d.hot = true
-			out = append(out, mk("hot", sevAttention, fmt.Sprintf("The Orbic is running hot: %.0f°C", in.TempMax), "The Orbic is running hot", now))
+			out = append(out, mk("hot", sevAttention, fmt.Sprintf("The box is running hot: %.0f°C", in.TempMax), "The box is running hot", now))
 		}
 	} else if in.TempMax < 65 {
 		d.hotCount = 0
 		if d.hot {
 			d.hot = false
-			out = append(out, mk("cool", sevInfo, "The Orbic has cooled down", "The Orbic has cooled down", now))
+			out = append(out, mk("cool", sevInfo, "The box has cooled down", "The box has cooled down", now))
 		}
 	}
 	if in.SSHFailed < d.sshBase {
@@ -240,13 +240,13 @@ func (d *detector) step(in evIn) []evt {
 	}
 	if n := in.SSHFailed - d.sshBase; n >= 5 {
 		d.sshBase = in.SSHFailed
-		out = append(out, mk("ssh_failed", sevAttention, fmt.Sprintf("%d failed ssh logins in a short time: see the SSH card", n), "Several failed ssh logins on the Orbic", now))
+		out = append(out, mk("ssh_failed", sevAttention, fmt.Sprintf("%d failed ssh logins in a short time: see the SSH card", n), "Several failed ssh logins on the box", now))
 	}
 	if in.Wifi24Down || in.Wifi5Down {
 		d.radioCount++
 		if d.radioCount >= 2 && !d.radioDown {
 			d.radioDown = true
-			out = append(out, mk("radio_down", sevAlert, "A Wi-Fi radio is down", "A Wi-Fi radio on the Orbic is down", now))
+			out = append(out, mk("radio_down", sevAlert, "A Wi-Fi radio is down", "A Wi-Fi radio on the box is down", now))
 		}
 	} else {
 		d.radioCount = 0
@@ -256,7 +256,7 @@ func (d *detector) step(in evIn) []evt {
 		}
 	}
 	if in.CertFP != "" && d.certFP != "" && in.CertFP != d.certFP {
-		out = append(out, mk("cert_renewed", sevInfo, "The web page certificate was renewed (browsers will ask to trust it again)", "The Orbic's web certificate was renewed", now))
+		out = append(out, mk("cert_renewed", sevInfo, "The web page certificate was renewed (browsers will ask to trust it again)", "The box's web certificate was renewed", now))
 	}
 	if in.CertFP != "" {
 		d.certFP = in.CertFP
@@ -410,7 +410,7 @@ func (s *eventStore) Add(es []evt) {
 		} else if e.Sev == sevInfo {
 			prio = 2
 		}
-		if err := s.post(u, "Orbic", e.Public, prio); err != nil {
+		if err := s.post(u, "PillowForrT", e.Public, prio); err != nil {
 			s.mu.Lock()
 			s.lastErr = err.Error()
 			s.mu.Unlock()
@@ -603,7 +603,7 @@ func (s *eventStore) Test() error {
 	if u == "" {
 		return errors.New("give the ntfy address first")
 	}
-	return s.post(u, "Orbic", "A test notification from the Orbic", 3)
+	return s.post(u, "PillowForrT", "A test notification from the box", 3)
 }
 
 // postNtfy sends one notification the way ntfy expects: the body is the message, headers carry the title and priority. It goes out through ownDial (the tunnel, Tor or the cellular link as the state says: owndial.go) and our own root set.

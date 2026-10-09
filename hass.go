@@ -1,6 +1,6 @@
 package main
 
-// Home Assistant over MQTT. With a broker on the LAN the box announces itself through MQTT discovery (one device, "Stone of Heimdall", with its sensors) and then
+// Home Assistant over MQTT. With a broker on the LAN the box announces itself through MQTT discovery (one device, "PillowForrT", with its sensors) and then
 // publishes its state every 30 seconds and each event as it happens:
 //
 //   - sensors: uplink (connectivity), uplink latency, Wi-Fi clients, temperature, events needing attention, the last event's text, data used this cycle, DNS queries
@@ -52,7 +52,7 @@ func macSlug(mac string) string { return strings.ReplaceAll(strings.ToLower(mac)
 
 // hassDevice is the device block every entity carries, so Home Assistant files them under one device.
 func hassDevice(node string) map[string]any {
-	return map[string]any{"identifiers": []string{"stone-of-heimdall-" + node}, "name": "Stone of Heimdall", "manufacturer": "Stone of Heimdall", "model": "Orbic RC400L", "sw_version": version}
+	return map[string]any{"identifiers": []string{"pillowforrt-" + node}, "name": "PillowForrT", "manufacturer": "PillowForrT", "model": "Orbic RC400L", "sw_version": version}
 }
 
 type hassEntity struct {
@@ -210,7 +210,7 @@ func (h *hassPublisher) run() {
 }
 
 func (h *hassPublisher) session(cfg exportMQTT) error {
-	node, prefix := orStr(cfg.NodeID, "orbic"), orStr(cfg.Prefix, "stone")
+	node, prefix := orStr(cfg.NodeID, "box"), orStr(cfg.Prefix, "pillowforrt")
 	base := prefix + "/" + node
 	conn, err := exports.dial("tcp", cfg.Addr)
 	if err != nil {
@@ -279,7 +279,7 @@ func (h *hassPublisher) lastEventText() string {
 }
 
 func (h *hassPublisher) publishState(cl *mqttClient, cfg exportMQTT) error {
-	node, prefix := orStr(cfg.NodeID, "orbic"), orStr(cfg.Prefix, "stone")
+	node, prefix := orStr(cfg.NodeID, "box"), orStr(cfg.Prefix, "pillowforrt")
 	base := prefix + "/" + node
 	st := hassStateFrom(gatherMetrics(), h.lastEventText())
 	b, _ := json.Marshal(st)
@@ -335,7 +335,7 @@ func (h *hassPublisher) command(cfg exportMQTT, topic, payload string) {
 	if !cfg.Control || fwMgr == nil {
 		return
 	}
-	mac, ok := parseInternetCommand(orStr(cfg.Prefix, "stone"), orStr(cfg.NodeID, "orbic"), topic)
+	mac, ok := parseInternetCommand(orStr(cfg.Prefix, "pillowforrt"), orStr(cfg.NodeID, "box"), topic)
 	if !ok {
 		return
 	}
@@ -391,5 +391,5 @@ func (h *hassPublisher) event(e evt) {
 		return
 	}
 	b, _ := json.Marshal(toEVE(e, *uiHost, false))
-	cl.Publish(orStr(cfg.Prefix, "stone")+"/"+orStr(cfg.NodeID, "orbic")+"/event", b, false)
+	cl.Publish(orStr(cfg.Prefix, "pillowforrt")+"/"+orStr(cfg.NodeID, "box")+"/event", b, false)
 }

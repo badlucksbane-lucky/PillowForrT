@@ -1,6 +1,6 @@
 package main
 
-// Tor / proxy-bypass detection: catches a device reaching Tor on its own, outside the Orbic's own Tor path (tor.go), which egress.go and the per-device firewall rules cannot
+// Tor / proxy-bypass detection: catches a device reaching Tor on its own, outside the box's own Tor path (tor.go), which egress.go and the per-device firewall rules cannot
 // see because Tor traffic to a public relay looks like an ordinary HTTPS connection to the service allow-list. Two signals, both passive:
 //   tor_bypass_exit    a device that is NOT one of the MACs assigned to tor.go's forced-Tor path has opened a connection to a known Tor relay or bridge address. That device is
 //                       running its own Tor client (or a proxy that chains through one), unseen by and unaffected by the house's own Tor controls.
@@ -187,7 +187,7 @@ func (w *torBypassWatch) ObserveFlow(mac, src, dst string, now time.Time) {
 	if mac != "" {
 		who = w.label(mac)
 	}
-	w.emit(evt{T: now.Unix(), Kind: "tor_bypass_exit", Sev: sevAttention, Text: fmt.Sprintf("%s connected directly to a known Tor relay address (%s) but is not one of the devices assigned to the Orbic's own Tor path: it is likely running its own Tor client or a proxy that chains through one, unseen by the house's Tor controls.", who, dst), Public: "A device reached the Tor network outside the router's own Tor controls"})
+	w.emit(evt{T: now.Unix(), Kind: "tor_bypass_exit", Sev: sevAttention, Text: fmt.Sprintf("%s connected directly to a known Tor relay address (%s) but is not one of the devices assigned to the box's own Tor path: it is likely running its own Tor client or a proxy that chains through one, unseen by the house's Tor controls.", who, dst), Public: "A device reached the Tor network outside the router's own Tor controls"})
 }
 
 // ObserveOnionAttempt is called from tor.go's DNS when a non-Tor device's .onion lookup is refused because house-wide .onion is off: the refusal already stops anything from

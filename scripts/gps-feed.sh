@@ -1,13 +1,13 @@
 #!/bin/bash
-# gps-feed.sh -- give the Orbic the location its tower telemetry needs (the hotspot has no GPS). Run on a companion computer on the LAN.
+# gps-feed.sh -- give the box the location its tower telemetry needs (the hotspot has no GPS). Run on a companion computer on the LAN.
 #   gps-feed.sh                 read gpsd on this machine (gpspipe -w) and post each fix with a 2D/3D lock, at most once every 10 s
 #   gps-feed.sh 40.7128 -74.0060 [alt] [acc]   post one fixed position (a parked box), then exit
-# Uses the same pinned certificate and API token as orbic-api.sh (~/.heimdallstone/). Needs gpspipe (gpsd-clients) and jq for the gpsd mode.
+# Uses the same pinned certificate and API token as pf-api.sh (~/.pillowforrt/). Needs gpspipe (gpsd-clients) and jq for the gpsd mode.
 set -eu
-CERT=~/.heimdallstone/orbic-tls.pem
-[ -s "$CERT" ] || { ssh -o BatchMode=yes orbic 'cat /data/proxy/secure/tls/cert.pem' > "$CERT"; chmod 644 "$CERT"; }
-T=$(cat ~/.heimdallstone/ui.token)
-post() { curl -s --cacert "$CERT" -X POST -H "X-UI-Token: $T" -H 'Content-Type: application/json' -d "$1" "https://orbic:3129/api/towers/fix"; echo; }
+CERT=~/.pillowforrt/tls.pem
+[ -s "$CERT" ] || { ssh -o BatchMode=yes pillowforrt 'cat /data/proxy/secure/tls/cert.pem' > "$CERT"; chmod 644 "$CERT"; }
+T=$(cat ~/.pillowforrt/ui.token)
+post() { curl -s --cacert "$CERT" -X POST -H "X-UI-Token: $T" -H 'Content-Type: application/json' -d "$1" "https://pillowforrt.lan:3129/api/towers/fix"; echo; }
 if [ $# -ge 2 ]; then
   post "{\"lat\":$1,\"lon\":$2,\"alt\":${3:-0},\"acc\":${4:-0}}"
   exit

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The product is called Stone of Heimdall: the pages, the sign-in page and the browser tab say so, and the mark is the sepia Bifrost.
+// The product is called PillowForrT: the pages, the sign-in page and the browser tab say so, and the mark is the sepia Bifrost.
 
 func TestBrandingOnTheSignInPage(t *testing.T) {
 	srv, c, _ := testWeb(t)
@@ -14,7 +14,7 @@ func TestBrandingOnTheSignInPage(t *testing.T) {
 	b, _ := io.ReadAll(r.Body)
 	r.Body.Close()
 	page := string(b)
-	for _, want := range []string{"<title>Stone of Heimdall", "<h1>Stone of Heimdall</h1>", "a watchman for your hotspot", `rel="icon"`, "/favicon.svg", `class="mark"`, "#f1e4c8", "#1b130c"} {
+	for _, want := range []string{"<title>PillowForrT", "<h1>PillowForrT</h1>", "a watchman for your hotspot", `rel="icon"`, "/favicon.svg", `class="mark"`, "#f1e4c8", "#1b130c"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("sign-in page lacks %q", want)
 		}
@@ -37,7 +37,7 @@ func TestBrandingOnTheMainPage(t *testing.T) {
 	if r.StatusCode != 200 {
 		t.Fatalf("/ui: %d", r.StatusCode)
 	}
-	for _, want := range []string{"<title>Stone of Heimdall</title>", `id="ver"`, `rel="icon"`, "/favicon.svg", `class="mark"`, "#f1e4c8", "#1b130c", "Collapse all"} {
+	for _, want := range []string{"<title>PillowForrT</title>", `id="ver"`, `rel="icon"`, "/favicon.svg", `class="mark"`, "#f1e4c8", "#1b130c", "Collapse all"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("main page lacks %q", want)
 		}

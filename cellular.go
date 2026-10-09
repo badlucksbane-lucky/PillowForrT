@@ -2,7 +2,7 @@ package main
 
 // Read-only cellular page: the APN and data settings the stock firmware keeps (/usrdata/data/qcmap/mobileap_cfg.xml, /usrdata/data/usr/dial/dial_cfg.xml) and what the
 // kernel shows of the uplink interface (addresses, carrier-grade NAT, counters). Uplink health, latency, usage and temperature are already in /status.json and the page
-// joins them. Nothing here writes: an APN change goes through the carrier's data session and can cut the Orbic off, so it needs its own confirmed, rolled-back flow.
+// joins them. Nothing here writes: an APN change goes through the carrier's data session and can cut the box off, so it needs its own confirmed, rolled-back flow.
 // What it does not show: signal strength, band and the serving cell. Those are read over the modem's AT port by the tower telemetry in cell.go (off until you give the port),
 // not through QMI/diag (the stock QCMAP_CLI returned error 0x2 when asked, 2026-10-02).
 

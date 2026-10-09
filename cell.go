@@ -597,7 +597,7 @@ func (s *cellStore) Run() {
 // then one row per observation with the cell key in the MAC column, the operator as SSID, the technology as AuthMode and Type.
 func wigleCSV(obs []cellObs, loc *time.Location) []byte {
 	var b bytes.Buffer
-	fmt.Fprintf(&b, "WigleWifi-1.6,appRelease=stone-of-heimdall %s,model=RC400L,release=%s,device=orbic,display=,board=mdm9607,brand=Orbic,star=Sol,body=3,subBody=0\n", version, version)
+	fmt.Fprintf(&b, "WigleWifi-1.6,appRelease=pillowforrt %s,model=RC400L,release=%s,device=orbic,display=,board=mdm9607,brand=Orbic,star=Sol,body=3,subBody=0\n", version, version)
 	b.WriteString("MAC,SSID,AuthMode,FirstSeen,Channel,Frequency,RSSI,CurrentLatitude,CurrentLongitude,AltitudeMeters,AccuracyMeters,RCOIs,MfgrId,Type\n")
 	for _, o := range obs {
 		if !o.Fix {
@@ -670,7 +670,7 @@ func handleCellAPI(w http.ResponseWriter, r *http.Request, path string) {
 		towers.mu.Unlock()
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Disposition", "attachment; filename=\"stone-of-heimdall-"+time.Now().Format("20060102")+".csv\"")
+		w.Header().Set("Content-Disposition", "attachment; filename=\"pillowforrt-"+time.Now().Format("20060102")+".csv\"")
 		w.Write(wigleCSV(obs, schedLoc()))
 	default:
 		http.Error(w, "not found", 404)

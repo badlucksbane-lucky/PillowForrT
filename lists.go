@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// listUpdater downloads the block lists itself (from the Orbic, over its own uplink), validates them, writes the compiled copy to flash and swaps it in.
+// listUpdater downloads the block lists itself (from the box, over its own uplink), validates them, writes the compiled copy to flash and swaps it in.
 type listUpdater struct {
 	f      *Filter
 	client *http.Client
@@ -46,7 +46,7 @@ func (u *listUpdater) UpdateOne(sp listSpec, force bool) error {
 	defer func() { u.mu.Lock(); delete(u.busy, sp.Name); u.mu.Unlock(); debug.FreeOSMemory() }()
 
 	req, _ := http.NewRequest("GET", sp.URL, nil)
-	req.Header.Set("User-Agent", "heimdallstone/0.3")
+	req.Header.Set("User-Agent", "pillowforrt/0.3")
 	u.f.mu.RLock()
 	if l := u.f.lists[sp.Name]; l != nil && !force {
 		if l.ETag != "" {

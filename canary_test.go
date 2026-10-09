@@ -256,7 +256,7 @@ func TestCanaryIgnoresOwnAddressesAndTheIgnoreList(t *testing.T) {
 		c.record(canaryHit{Src: own, Proto: "icmp", Kind: "echo"})
 	}
 	if len(*got) != 0 || len(c.hits) != 0 {
-		t.Error("the Orbic's own addresses are not visitors")
+		t.Error("the box's own addresses are not visitors")
 	}
 	if err := c.IgnoreMAC("AA:BB:CC:DD:EE:99", true); err != nil {
 		t.Fatal(err)

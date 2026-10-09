@@ -90,13 +90,13 @@ func TestExfilLabelShape(t *testing.T) {
 }
 
 func TestIsCanaryName(t *testing.T) {
-	if !isCanaryName("heimdall-canary.invalid", nil) {
+	if !isCanaryName("pillowforrt-canary.invalid", nil) {
 		t.Error("the exact decoy name should match")
 	}
-	if !isCanaryName("sub.heimdall-canary.invalid", nil) {
+	if !isCanaryName("sub.pillowforrt-canary.invalid", nil) {
 		t.Error("a subdomain of a decoy name should match")
 	}
-	if isCanaryName("notheimdall-canary.invalid", nil) {
+	if isCanaryName("notpillowforrt-canary.invalid", nil) {
 		t.Error("a name that merely ends with the decoy string, without a dot boundary, must not match")
 	}
 	if !isCanaryName("example.com", []string{"example.com"}) {

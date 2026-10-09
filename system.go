@@ -99,7 +99,7 @@ func parseBattery(dmesg string) sysBattery {
 	return sysBattery{Known: true, Level: lv, MV: mv, TempC: t}
 }
 
-// serviceTable says which of the processes that make the Orbic work are alive. `procs` is comm names plus full command lines.
+// serviceTable says which of the processes that make the box work are alive. `procs` is comm names plus full command lines.
 func serviceTable(comms, stopped map[string]bool, cmdlines []string) []sysService {
 	has := func(sub string) bool {
 		for _, c := range cmdlines {

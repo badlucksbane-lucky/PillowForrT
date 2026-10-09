@@ -1,4 +1,4 @@
-# Stone of Heimdall
+# PillowForrT
 
 Firmware for the Orbic RC400L, a cheap cellular hotspot. It swaps out the stock admin page and changes what the box lets your devices do.
 

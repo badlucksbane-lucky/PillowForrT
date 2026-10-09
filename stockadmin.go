@@ -7,7 +7,7 @@ package main
 //     web page: our certificate covers that address).
 // The daemon itself is left running, NOT suspended: it holds the System V message queue the other stock daemons talk to, and stopping it could stall them. The switch is the
 // flag file /data/proxy/stockadmin.off (present = off); undo it from the page, or over ssh: `rm /data/proxy/stockadmin.off` (the rules go within 20 seconds). One thing the stock
-// admin is still needed for: entering a SIM PIN, if the carrier ever asks for one (the Orbic has not so far). Its password files are untouched.
+// admin is still needed for: entering a SIM PIN, if the carrier ever asks for one (the box has not so far). Its password files are untouched.
 
 import (
 	"errors"

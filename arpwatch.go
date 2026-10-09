@@ -1,18 +1,18 @@
 package main
 
-// ARP spoof detection: ARP has no authentication, so any device on the network can claim to be the gateway (or any other address) and pull that traffic through itself. The Orbic
+// ARP spoof detection: ARP has no authentication, so any device on the network can claim to be the gateway (or any other address) and pull that traffic through itself. The box
 // watches every ARP frame on the bridge, passively, through an AF_PACKET socket with a kernel filter that passes only ARP, and looks at who CLAIMS an address (the sender fields of
 // requests and replies; the 0.0.0.0 "is anyone using this?" probes claim nothing). Three findings:
-//   - arp_gateway (alert): a MAC that is not the Orbic's own claims one of the Orbic's addresses (.1 gateway, .254, the canary): someone is impersonating the router.
+//   - arp_gateway (alert): a MAC that is not the box's own claims one of the box's addresses (.1 gateway, .254, the canary): someone is impersonating the router.
 //   - arp_conflict (alert): a MAC claims an address reserved for a different device.
 //   - arp_flip (attention): an address held by one MAC a moment ago (within 10 minutes) is now claimed by another; a quick change of owner is how poisoning looks, though a device
 //     that rejoined under a new random MAC can look the same, so it is only "to look at".
 //   - arp_sweep (attention): one MAC asking "who has?" for 20 or more different LAN addresses within a minute. That is a host scan, the first step of nmap, of a worm and of a
 //     network-discovery app alike, and it is the recon the canary only catches when it happens to touch the decoy address. A new phone enumerating the LAN for printers and
 //     Chromecasts does the same once, so it is only "to look at". Only addresses inside the LAN's /24 count: a device with a wrong netmask asks for the whole internet and that
-//     is a misconfiguration, not a scan. The Orbic's own requests never count.
+//     is a misconfiguration, not a scan. The box's own requests never count.
 // One event per address (per asker, for a sweep) per 10 minutes; the public text never names a device or address. Nothing is ever sent. Honest limit: unicast ARP between two
-// Wi-Fi clients is relayed inside the radio and never reaches the bridge, so the broadcast announcements (which is what a sweep is made of) and anything aimed at the Orbic are
+// Wi-Fi clients is relayed inside the radio and never reaches the bridge, so the broadcast announcements (which is what a sweep is made of) and anything aimed at the box are
 // what can be seen.
 
 import (
@@ -112,7 +112,7 @@ type arpFinding struct {
 
 type arpWatch struct {
 	mu       sync.Mutex
-	own      func() map[string]bool // the Orbic's own addresses
+	own      func() map[string]bool // the box's own addresses
 	selfMAC  func() string
 	reserved func() map[string]reservation // by IP
 	nameOf   func(mac string) string
@@ -222,7 +222,7 @@ func (w *arpWatch) observe(c arpClaim) {
 	var e evt
 	switch f.Kind {
 	case "arp_gateway":
-		e = evt{Kind: f.Kind, Sev: sevAlert, Text: fmt.Sprintf("%s is claiming to be the Orbic's own address %s: someone may be impersonating the router.", w.label(c.MAC), c.IP), Public: "A device on the network is impersonating the router's address"}
+		e = evt{Kind: f.Kind, Sev: sevAlert, Text: fmt.Sprintf("%s is claiming to be the box's own address %s: someone may be impersonating the router.", w.label(c.MAC), c.IP), Public: "A device on the network is impersonating the router's address"}
 	case "arp_conflict":
 		e = evt{Kind: f.Kind, Sev: sevAlert, Text: fmt.Sprintf("%s is claiming %s, which is reserved for %s.", w.label(c.MAC), c.IP, w.label(f.Other)), Public: "A device is claiming an address reserved for another device"}
 	default:

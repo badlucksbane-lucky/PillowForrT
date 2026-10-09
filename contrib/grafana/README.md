@@ -1,11 +1,11 @@
 # Grafana dashboard
 
-`stone-of-heimdall.json` reads `/metrics` through Prometheus (or VictoriaMetrics, Grafana Agent, anything that speaks the text format).
+`pillowforrt.json` reads `/metrics` through Prometheus (or VictoriaMetrics, Grafana Agent, anything that speaks the text format).
 
 1. Scrape the box. `/metrics` needs no login and is served on the LAN at `http://192.168.1.254/metrics`, `http://192.168.1.1:3128/metrics` and on the HTTPS page:
    ```yaml
    scrape_configs:
-     - job_name: stone-of-heimdall
+     - job_name: pillowforrt
        scrape_interval: 30s
        static_configs:
          - targets: ["192.168.1.254:80"]

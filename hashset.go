@@ -6,7 +6,7 @@ import (
 )
 
 // hashSet is a read-only set of domain names kept as sorted 64-bit hashes: 8 bytes an entry, where a map[string]struct{}
-// costs about 75 (string header, the bytes in their own allocation, bucket overhead). The Orbic has ~75 MB and the two block
+// costs about 75 (string header, the bytes in their own allocation, bucket overhead). The box has ~75 MB and the two block
 // lists hold ~130k names. A false "yes" needs two names with the same 64-bit hash (about 1 in 10^14 per lookup at this size),
 // and the seed is random per process, so nobody can craft a name that collides with a listed one.
 type hashSet []uint64

@@ -261,7 +261,7 @@ func (p *presenceStore) Info() map[string]presInfo {
 	return out
 }
 
-// gatherPresent: the stations on either band plus neighbours the kernel has heard from lately; the Orbic's own addresses are never "a device".
+// gatherPresent: the stations on either band plus neighbours the kernel has heard from lately; the box's own addresses are never "a device".
 func gatherPresent() map[string]bool {
 	present := map[string]bool{}
 	if wifi != nil {
@@ -304,7 +304,7 @@ func presenceLoop() {
 
 var presence *presenceStore
 
-// handleDHCPHook receives dnsmasq's notification from the Orbic itself: loopback only, POST, and the beat token (the same one the heartbeat uses).
+// handleDHCPHook receives dnsmasq's notification from the box itself: loopback only, POST, and the beat token (the same one the heartbeat uses).
 func handleDHCPHook(w http.ResponseWriter, r *http.Request) {
 	host := r.RemoteAddr
 	if i := strings.LastIndex(host, ":"); i > 0 {

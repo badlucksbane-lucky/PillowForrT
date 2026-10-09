@@ -1,6 +1,6 @@
 package main
 
-// Settings snapshots: one JSON file holding everything this page configures, kept on the Orbic (/data/proxy/secure/snapshots, 0700 dir, 0600 files), downloadable to
+// Settings snapshots: one JSON file holding everything this page configures, kept on the box (/data/proxy/secure/snapshots, 0700 dir, 0600 files), downloadable to
 // keep a copy off the box (the flash can be wiped by a factory reset or a firmware update), and restorable per section. Sections: wifi (the stock settings XML, both bands),
 // pool (DHCP range and lease time), reservations, blocklist, firewall (blocked destinations and schedules; live pauses are not kept), dns (filter mode, per-device modes,
 // allow-list). NOT included on purpose: the VPN registration and its private key, the web login, the TLS key, the beat/UI tokens (they are the box's identity, and

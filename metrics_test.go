@@ -64,14 +64,14 @@ func TestMetricsFormat(t *testing.T) {
 		if strings.HasSuffix(n, "_total") != (ty == "counter") {
 			t.Errorf("%s is a %s: a name ends in _total exactly when it is a counter", n, ty)
 		}
-		if !strings.HasPrefix(n, "orbic_") {
-			t.Errorf("%s lacks the orbic_ prefix", n)
+		if !strings.HasPrefix(n, "pillowforrt_") {
+			t.Errorf("%s lacks the pillowforrt_ prefix", n)
 		}
 	}
-	for _, want := range []string{`orbic_build_info{version="0.25.0"} 1`, "orbic_uplink_up 1", "orbic_uplink_latency_seconds 0.0555", `orbic_temperature_celsius{sensor="pa_therm0"} 37`,
-		`orbic_service_up{service="tinyfwd"} 1`, `orbic_service_up{service="carrier_updates"} 1`, `orbic_service_up{service="dropbear"} 0`, `orbic_wifi_radio_up{band="5ghz"} 0`,
-		`orbic_dns_list_entries{list="stevenblack"} 0`, `orbic_dns_list_age_seconds{list="oisd"} 3600`, "orbic_memory_available_bytes 8.192e+07", "orbic_stock_admin_off 1",
-		`orbic_filesystem_free_bytes{mount="/data"} 800`} {
+	for _, want := range []string{`pillowforrt_build_info{version="0.25.0"} 1`, "pillowforrt_uplink_up 1", "pillowforrt_uplink_latency_seconds 0.0555", `pillowforrt_temperature_celsius{sensor="pa_therm0"} 37`,
+		`pillowforrt_service_up{service="tinyfwd"} 1`, `pillowforrt_service_up{service="carrier_updates"} 1`, `pillowforrt_service_up{service="dropbear"} 0`, `pillowforrt_wifi_radio_up{band="5ghz"} 0`,
+		`pillowforrt_dns_list_entries{list="stevenblack"} 0`, `pillowforrt_dns_list_age_seconds{list="oisd"} 3600`, "pillowforrt_memory_available_bytes 8.192e+07", "pillowforrt_stock_admin_off 1",
+		`pillowforrt_filesystem_free_bytes{mount="/data"} 800`} {
 		if !strings.Contains(text, want+"\n") {
 			t.Errorf("missing sample %q", want)
 		}
@@ -87,7 +87,7 @@ func TestMetricsFormat(t *testing.T) {
 		}
 		series[id] = true
 	}
-	if !strings.Contains(text, `orbic_service_up{service="hostapd_2_4ghz"} 1`) || strings.Contains(text, `service="hostapd_5ghz"`) == false {
+	if !strings.Contains(text, `pillowforrt_service_up{service="hostapd_2_4ghz"} 1`) || strings.Contains(text, `service="hostapd_5ghz"`) == false {
 		t.Error("the two radios need distinct service labels while 5 GHz is on")
 	}
 	in5 := richInput()
@@ -95,15 +95,15 @@ func TestMetricsFormat(t *testing.T) {
 	if strings.Contains(buildMetrics(in5), `service="hostapd_5ghz"`) {
 		t.Error("with the 5 GHz network off, its hostapd is not a failing service and must not be reported")
 	}
-	if strings.Contains(text, "orbic_dns_list_age_seconds{list=\"stevenblack\"}") {
+	if strings.Contains(text, "pillowforrt_dns_list_age_seconds{list=\"stevenblack\"}") {
 		t.Error("a list that was never updated has no age")
 	}
-	if !strings.Contains(text, "orbic_vpn_enabled 0\n") || !strings.Contains(text, "orbic_vpn_up 0\n") {
+	if !strings.Contains(text, "pillowforrt_vpn_enabled 0\n") || !strings.Contains(text, "pillowforrt_vpn_up 0\n") {
 		t.Error("a registered but switched-off VPN reports enabled 0 and up 0")
 	}
 	in := richInput()
 	in.VPN = &vpnStatus{Registered: false}
-	if strings.Contains(buildMetrics(in), "orbic_vpn_") {
+	if strings.Contains(buildMetrics(in), "pillowforrt_vpn_") {
 		t.Error("an unregistered VPN has no metrics at all")
 	}
 }
@@ -128,8 +128,8 @@ func TestMetricsHoldNothingPersonal(t *testing.T) {
 
 func TestMetricsEscapingAndEmpty(t *testing.T) {
 	m := newMB()
-	m.metric("orbic_x", "gauge", "h", 1, "k", "a\"b\\c\nd")
-	if !strings.Contains(m.b.String(), `orbic_x{k="a\"b\\c\nd"} 1`) {
+	m.metric("pillowforrt_x", "gauge", "h", 1, "k", "a\"b\\c\nd")
+	if !strings.Contains(m.b.String(), `pillowforrt_x{k="a\"b\\c\nd"} 1`) {
 		t.Errorf("label escaping: %q", m.b.String())
 	}
 	min := buildMetrics(metricsIn{Version: "x"}) // no sources at all: still valid, just fewer lines
@@ -138,7 +138,7 @@ func TestMetricsEscapingAndEmpty(t *testing.T) {
 			t.Errorf("invalid line with no sources: %q", l)
 		}
 	}
-	if names := metricNames(min); len(names) < 5 || strings.Contains(strings.Join(names, ","), "orbic_uplink_up") {
+	if names := metricNames(min); len(names) < 5 || strings.Contains(strings.Join(names, ","), "pillowforrt_uplink_up") {
 		t.Errorf("%v", names)
 	}
 }
@@ -151,7 +151,7 @@ func TestServeMetrics(t *testing.T) {
 		t.Fatalf("%d %q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "orbic_build_info{version=") || !strings.Contains(body, "orbic_daemon_goroutines") {
+	if !strings.Contains(body, "pillowforrt_build_info{version=") || !strings.Contains(body, "pillowforrt_daemon_goroutines") {
 		t.Errorf("a live scrape lacks the basics:\n%s", body[:min(len(body), 400)])
 	}
 	rec2 := httptest.NewRecorder()

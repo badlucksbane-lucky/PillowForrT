@@ -1,6 +1,6 @@
 package main
 
-// Diagnostics: one click runs every check we can make about the Orbic and says, in plain words, what is fine, what deserves a look and what is broken. The checks run on the box
+// Diagnostics: one click runs every check we can make about the box and says, in plain words, what is fine, what deserves a look and what is broken. The checks run on the box
 // itself (network probes included) and read the same state the pages show. The text report is for sharing: it never contains device names, MACs, SMS, keys, passwords or full
 // IPv6 addresses, and it names no one. The evaluation is a pure function of the gathered inputs (`evaluate`), so every threshold is unit-tested.
 
@@ -99,7 +99,7 @@ func evaluate(in diagInputs) []diagCheck {
 	// ---- internet ----
 	switch {
 	case !in.Cell.Up:
-		add(ck("uplink.link", "Internet", "Cellular link", "fail", "the uplink interface is down", "Check the SIM and the carrier signal; the Orbic reconnects by itself, a reboot is the last resort."))
+		add(ck("uplink.link", "Internet", "Cellular link", "fail", "the uplink interface is down", "Check the SIM and the carrier signal; the box reconnects by itself, a reboot is the last resort."))
 	case in.Cell.IPv4 == "" || !in.HasRoute:
 		add(ck("uplink.link", "Internet", "Cellular link", "fail", "the link is up but there is no address or default route", "The data session may have dropped: wait a minute, then check the cellular card."))
 	default:
@@ -122,7 +122,7 @@ func evaluate(in diagInputs) []diagCheck {
 	case len(okMS) == 0:
 		add(ck("uplink.reach", "Internet", "Reaching the internet", "fail", fmt.Sprintf("none of the %d test servers answered", len(in.TCP)), "The carrier may be down or the data session stuck."))
 	case median(okMS) > 400:
-		add(ck("uplink.reach", "Internet", "Reaching the internet", "warn", fmt.Sprintf("slow: %.0f ms to the nearest servers", median(okMS)), "Weak signal or a busy tower: try moving the Orbic."))
+		add(ck("uplink.reach", "Internet", "Reaching the internet", "warn", fmt.Sprintf("slow: %.0f ms to the nearest servers", median(okMS)), "Weak signal or a busy tower: try moving the box."))
 	case len(bad) > 0:
 		add(ck("uplink.reach", "Internet", "Reaching the internet", "warn", fmt.Sprintf("%.0f ms, but %d of %d test servers did not answer", median(okMS), len(bad), len(in.TCP)), "One server may be blocked or down; if it persists, check the carrier."))
 	default:
@@ -276,16 +276,16 @@ func evaluate(in diagInputs) []diagCheck {
 	// ---- the box ----
 	switch am := in.Sys.MemAvailKB / 1024; {
 	case am < 20:
-		add(ck("box.mem", "The Orbic itself", "Memory", "fail", fmt.Sprintf("only %d MB available", am), "Something is using too much: reboot from the system card."))
+		add(ck("box.mem", "The box itself", "Memory", "fail", fmt.Sprintf("only %d MB available", am), "Something is using too much: reboot from the system card."))
 	case am < 40:
-		add(ck("box.mem", "The Orbic itself", "Memory", "warn", fmt.Sprintf("%d MB available of %d", am, in.Sys.MemTotalKB/1024), ""))
+		add(ck("box.mem", "The box itself", "Memory", "warn", fmt.Sprintf("%d MB available of %d", am, in.Sys.MemTotalKB/1024), ""))
 	default:
-		add(ck("box.mem", "The Orbic itself", "Memory", "ok", fmt.Sprintf("%d MB available of %d", am, in.Sys.MemTotalKB/1024), ""))
+		add(ck("box.mem", "The box itself", "Memory", "ok", fmt.Sprintf("%d MB available of %d", am, in.Sys.MemTotalKB/1024), ""))
 	}
 	if in.Sys.Load[0] > 2.5 {
-		add(ck("box.load", "The Orbic itself", "Load", "warn", fmt.Sprintf("load %.2f on one core", in.Sys.Load[0]), "Busy for now; if it stays high, look at what is running."))
+		add(ck("box.load", "The box itself", "Load", "warn", fmt.Sprintf("load %.2f on one core", in.Sys.Load[0]), "Busy for now; if it stays high, look at what is running."))
 	} else {
-		add(ck("box.load", "The Orbic itself", "Load", "ok", fmt.Sprintf("load %.2f on one core", in.Sys.Load[0]), ""))
+		add(ck("box.load", "The box itself", "Load", "ok", fmt.Sprintf("load %.2f on one core", in.Sys.Load[0]), ""))
 	}
 	maxT := 0.0
 	for _, t := range in.Sys.Temps {
@@ -295,11 +295,11 @@ func evaluate(in diagInputs) []diagCheck {
 	}
 	switch {
 	case maxT >= 75:
-		add(ck("box.temp", "The Orbic itself", "Temperature", "fail", fmt.Sprintf("%.0f°C", maxT), "Too hot: move it somewhere cooler and out of the sun."))
+		add(ck("box.temp", "The box itself", "Temperature", "fail", fmt.Sprintf("%.0f°C", maxT), "Too hot: move it somewhere cooler and out of the sun."))
 	case maxT >= 65:
-		add(ck("box.temp", "The Orbic itself", "Temperature", "warn", fmt.Sprintf("%.0f°C", maxT), "Warm: give it some airflow."))
+		add(ck("box.temp", "The box itself", "Temperature", "warn", fmt.Sprintf("%.0f°C", maxT), "Warm: give it some airflow."))
 	default:
-		add(ck("box.temp", "The Orbic itself", "Temperature", "ok", fmt.Sprintf("%.0f°C at the hottest sensor", maxT), ""))
+		add(ck("box.temp", "The box itself", "Temperature", "ok", fmt.Sprintf("%.0f°C at the hottest sensor", maxT), ""))
 	}
 	for _, d := range in.Sys.Disks {
 		if d.TotalB == 0 {
@@ -309,18 +309,18 @@ func evaluate(in diagInputs) []diagCheck {
 		id := "box.disk." + d.Path
 		switch {
 		case d.Path == "/":
-			add(ck(id, "The Orbic itself", d.Name, "info", fmt.Sprintf("%d%% full: fixed by the firmware, nothing should be added", used), ""))
+			add(ck(id, "The box itself", d.Name, "info", fmt.Sprintf("%d%% full: fixed by the firmware, nothing should be added", used), ""))
 		case used >= 90:
-			add(ck(id, "The Orbic itself", d.Name, "warn", fmt.Sprintf("%d%% full", used), "Free some space."))
+			add(ck(id, "The box itself", d.Name, "warn", fmt.Sprintf("%d%% full", used), "Free some space."))
 		default:
-			add(ck(id, "The Orbic itself", d.Name, "ok", fmt.Sprintf("%d%% full", used), ""))
+			add(ck(id, "The box itself", d.Name, "ok", fmt.Sprintf("%d%% full", used), ""))
 		}
 	}
 	if in.Sys.Battery.Known {
 		if in.Sys.Battery.MV < 3500 {
-			add(ck("box.battery", "The Orbic itself", "Battery", "warn", fmt.Sprintf("%.2f V: low", float64(in.Sys.Battery.MV)/1000), "Keep it on power."))
+			add(ck("box.battery", "The box itself", "Battery", "warn", fmt.Sprintf("%.2f V: low", float64(in.Sys.Battery.MV)/1000), "Keep it on power."))
 		} else {
-			add(ck("box.battery", "The Orbic itself", "Battery", "ok", fmt.Sprintf("%.2f V", float64(in.Sys.Battery.MV)/1000), ""))
+			add(ck("box.battery", "The box itself", "Battery", "ok", fmt.Sprintf("%.2f V", float64(in.Sys.Battery.MV)/1000), ""))
 		}
 	}
 	switch {
@@ -397,7 +397,7 @@ func evaluate(in diagInputs) []diagCheck {
 	if t := in.Tor; t != nil && (t.Enabled || len(t.Devices) > 0) {
 		switch {
 		case !t.Installed:
-			add(ck("sec.tor", "Security", "Tor", "warn", "Tor is switched on but its program is not installed on the Orbic", "Deploy it with orbic-proxy/deploy-tor.sh."))
+			add(ck("sec.tor", "Security", "Tor", "warn", "Tor is switched on but its program is not installed on the box", "Deploy it with the Tor recipe (see docs/INSTALL.md)."))
 		case t.Ready:
 			add(ck("sec.tor", "Security", "Tor", "ok", fmt.Sprintf("Tor is ready (%d device(s) routed through it, %.0f MB in use)", len(t.Devices), t.RSSMB), ""))
 		case len(t.Devices) > 0:
@@ -446,11 +446,11 @@ func evaluate(in diagInputs) []diagCheck {
 	if st := in.Steer; st != nil {
 		switch {
 		case st.Alerts > 0:
-			add(ck("sec.steer", "Security", "Other routers", "fail", fmt.Sprintf("%d router advertisement(s) or redirect(s) from %d device(s) other than the Orbic in the last day (latest: %s)", st.Alerts, st.Sources, st.Messages[0].MAC), "See the Steering watch card; find that device, or allow it there if it is a router you run yourself."))
+			add(ck("sec.steer", "Security", "Other routers", "fail", fmt.Sprintf("%d router advertisement(s) or redirect(s) from %d device(s) other than the box in the last day (latest: %s)", st.Alerts, st.Sources, st.Messages[0].MAC), "See the Steering watch card; find that device, or allow it there if it is a router you run yourself."))
 		case !st.CaptureOK:
 			add(ck("sec.steer", "Security", "Other routers", "warn", "the steering watcher is not running", "It retries every minute."))
 		default:
-			add(ck("sec.steer", "Security", "Other routers", "ok", fmt.Sprintf("only the Orbic has announced a route (%d of its own seen)", st.Honest), ""))
+			add(ck("sec.steer", "Security", "Other routers", "ok", fmt.Sprintf("only the box has announced a route (%d of its own seen)", st.Honest), ""))
 		}
 	}
 	if r := in.Rogue; r != nil {
@@ -460,10 +460,10 @@ func evaluate(in diagInputs) []diagCheck {
 		case !r.CaptureOK:
 			add(ck("sec.rogue_dhcp", "Security", "Other DHCP servers", "warn", "the DHCP watcher is not running", "It retries every minute."))
 		default:
-			add(ck("sec.rogue_dhcp", "Security", "Other DHCP servers", "ok", fmt.Sprintf("only the Orbic has answered DHCP (%d replies seen)", r.Honest), ""))
+			add(ck("sec.rogue_dhcp", "Security", "Other DHCP servers", "ok", fmt.Sprintf("only the box has answered DHCP (%d replies seen)", r.Honest), ""))
 		}
 	}
-	add(ck("tinyfwd", "The Orbic itself", "Web page and proxy", "info", fmt.Sprintf("tinyfwd %s, running for %s", version, in.Uptime.Round(time.Minute)), ""))
+	add(ck("tinyfwd", "The box itself", "Web page and proxy", "info", fmt.Sprintf("tinyfwd %s, running for %s", version, in.Uptime.Round(time.Minute)), ""))
 	return out
 }
 
@@ -513,7 +513,7 @@ func diagCounts(cs []diagCheck) map[string]int {
 // diagReport renders the shareable text report (see the header: nothing personal goes in).
 func diagReport(r diagResult) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Orbic diagnostics report\nRun: %s   tinyfwd %s   took %d ms\n", r.RanAt, r.Version, r.TookMS)
+	fmt.Fprintf(&b, "PillowForrT diagnostics report\nRun: %s   tinyfwd %s   took %d ms\n", r.RanAt, r.Version, r.TookMS)
 	fmt.Fprintf(&b, "Result: %d ok, %d to look at, %d broken, %d notes\n", r.Counts["ok"], r.Counts["warn"], r.Counts["fail"], r.Counts["info"])
 	fmt.Fprintf(&b, "(No device names, MACs, messages, keys or passwords are included.)\n")
 	group := ""

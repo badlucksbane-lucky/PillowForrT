@@ -418,7 +418,7 @@ func TestBTSettings(t *testing.T) {
 }
 
 func TestCertInstallDER(t *testing.T) {
-	cm, _, err := newCertManager(t.TempDir(), []string{"orbic"}, []net.IP{net.ParseIP("192.168.1.1")})
+	cm, _, err := newCertManager(t.TempDir(), []string{"pillowforrt"}, []net.IP{net.ParseIP("192.168.1.1")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -431,7 +431,7 @@ func TestCertInstallDER(t *testing.T) {
 		t.Fatal(err)
 	}
 	c, err := x509.ParseCertificate(der)
-	if err != nil || len(c.DNSNames) == 0 || c.DNSNames[0] != "orbic" {
+	if err != nil || len(c.DNSNames) == 0 || c.DNSNames[0] != "pillowforrt" {
 		t.Fatalf("not the box certificate: %v", err)
 	}
 	if _, err := certInstallDER([]byte("not a pem")); err == nil {

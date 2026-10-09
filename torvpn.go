@@ -1,6 +1,6 @@
 package main
 
-// Tor over Mullvad. The Orbic's kernel has no iptables owner match (CONFIG_NETFILTER_XT_MATCH_OWNER is not set; found 2026-10-07 when the first attempt, a firewall mark on Tor's user id,
+// Tor over Mullvad. The box's kernel has no iptables owner match (CONFIG_NETFILTER_XT_MATCH_OWNER is not set; found 2026-10-07 when the first attempt, a firewall mark on Tor's user id,
 // failed to load) and its `ip` has no uidrange rules, so Tor's own packets cannot be picked out in the firewall. Instead Tor is told to make EVERY connection through tinyfwd's CONNECT proxy
 // (torrc HTTPSProxy, with a secret that only this run of Tor knows), and the proxy dials those connections through the tunnel and nowhere else:
 //   - the socket is marked (routed by table 77) AND bound to mullvad0 (SO_BINDTODEVICE), so with the tunnel gone the connection fails instead of finding another route;

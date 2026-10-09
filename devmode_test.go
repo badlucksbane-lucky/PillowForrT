@@ -77,7 +77,7 @@ func TestDeviceModeMakeBeforeBreak(t *testing.T) {
 func TestDeviceModeFailedSwitchKeepsOldMode(t *testing.T) {
 	d, ft, fv, _ := testModeDeps()
 	ft.macs[torMAC] = true
-	fv.err = errors.New("register this Orbic with your Mullvad account first")
+	fv.err = errors.New("register this box with your Mullvad account first")
 	if err := d.set("192.168.1.50", "", "mullvad"); err == nil {
 		t.Fatal("the error must come back")
 	}

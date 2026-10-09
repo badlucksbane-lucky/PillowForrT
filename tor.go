@@ -1,6 +1,6 @@
 package main
 
-// Tor on the Orbic: a minimal client-only Tor (recipe orbic-tor) supervised by tinyfwd, used two ways.
+// Tor on the box: a minimal client-only Tor (the Tor recipe) supervised by tinyfwd, used two ways.
 //
 //   House-wide .onion: any device can open a .onion name with no setup. The DNS stub answers an A query for a valid v3 .onion name with an address from 198.18.0.0/16 and a firewall rule
 //   sends TCP aimed at that range to the onion bridge (onionbridge.go), which connects to the name through Tor's SOCKS port. (Tor's own DNS port cannot give an onion name an IPv4 address, hence the
@@ -14,8 +14,8 @@ package main
 //     DNS    its lookups still reach the DNS stub (blocklists apply), which answers them through Tor's DNS port, or SERVFAIL when Tor is not ready: never from a public resolver.
 //   The device assignment is separate from the daemon switch ON PURPOSE: switching Tor off leaves an assigned device blocked, not suddenly direct; unassign it to give it back its direct line.
 //   A Tor device is not also sent through Mullvad: a device has ONE mode (devmode.go), changed make-before-break, and while it is in both the Tor rules come first.
-//   Tor's own connections leave the Orbic by the cellular link, unless "Tor over Mullvad" is on (OverVPN, torvpn.go): then Tor is configured to make every connection through tinyfwd's
-//   CONNECT proxy, which dials only through the tunnel (bound to mullvad0), and Tor is started only with the tunnel up. (The Orbic's kernel has no iptables owner match, so Tor's traffic
+//   Tor's own connections leave the box by the cellular link, unless "Tor over Mullvad" is on (OverVPN, torvpn.go): then Tor is configured to make every connection through tinyfwd's
+//   CONNECT proxy, which dials only through the tunnel (bound to mullvad0), and Tor is started only with the tunnel up. (The box's kernel has no iptables owner match, so Tor's traffic
 //   cannot be picked out in the firewall; routing it through a proxy that only knows the tunnel is what keeps it off the cellular link.)
 //   DNS rules: a Tor device's lookups go through the list filter first, Tor's answer then gets the CNAME-cloaking and rebind checks, and a failure is a refused lookup (SERVFAIL) with a
 //   dns_hardblock event, never another resolver (dnsproxy.go).
@@ -341,7 +341,7 @@ func startTorProc(m *torMgr) (*exec.Cmd, error) {
 	cmd := exec.Command(m.bin, "-f", m.torrc)
 	cmd.Env = append(os.Environ(), "MALLOC_ARENA_MAX=1")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if os.Geteuid() == 0 { // never run Tor as root: the unprivileged "nobody" ids (numeric, the Orbic has no name lookups for a static program); it needs nothing privileged
+	if os.Geteuid() == 0 { // never run Tor as root: the unprivileged "nobody" ids (numeric, the box has no name lookups for a static program); it needs nothing privileged
 		const nobody = 65534
 		os.Chmod(m.torrc, 0o644)
 		filepath.WalkDir(m.dataDir, func(p string, _ os.DirEntry, err error) error { // files from an earlier run as root (or by another user) must be readable
@@ -426,7 +426,7 @@ func (m *torMgr) Tick() {
 		m.stopProc()
 		m.yieldTil = now.Add(torYieldPause)
 		m.lastErr = fmt.Sprintf("stopped to protect the router's memory (%d MB available, Tor was using %d MB)", o.AvailKB/1024, o.RSSKB/1024)
-		m.emit(evt{T: now.Unix(), Kind: "tor_yield", Sev: sevAttention, Text: "Tor was stopped because the Orbic was running low on memory (" + m.lastErr + "). It starts again in about 10 minutes if memory allows.", Public: "The Tor service paused to protect the router's memory"})
+		m.emit(evt{T: now.Unix(), Kind: "tor_yield", Sev: sevAttention, Text: "Tor was stopped because the box was running low on memory (" + m.lastErr + "). It starts again in about 10 minutes if memory allows.", Public: "The Tor service paused to protect the router's memory"})
 	case "stop":
 		m.stopProc()
 		m.lastErr = ""
@@ -657,6 +657,14 @@ func torResolve(q []byte) ([]byte, error) {
 
 // ---- settings ----
 
+// SetEnabled switches the Tor daemon on or off and leaves the .onion settings alone (those are changed only over SSH).
+func (m *torMgr) SetEnabled(enabled bool) error {
+	m.mu.Lock()
+	on := m.cfg.Onion
+	m.mu.Unlock()
+	return m.Set(enabled, on)
+}
+
 func (m *torMgr) Set(enabled, onion bool) error {
 	m.mu.Lock()
 	m.cfg.Enabled, m.cfg.Onion = enabled, onion
@@ -675,7 +683,7 @@ var vpnRegistered = func() bool { return vpn != nil && vpn.Registered() }
 // torProxyAllowed), and the proxy dials through the tunnel only. Tor is restarted either way: its torrc changes, and circuits built over one path should not quietly carry on over the other.
 func (m *torMgr) SetOverVPN(on bool) error {
 	if on && !vpnRegistered() {
-		return errors.New("register this Orbic with your Mullvad account first")
+		return errors.New("register this box with your Mullvad account first")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -708,7 +716,7 @@ func (m *torMgr) SetDevice(mac string, on bool) error {
 		}
 		if selfMAC := ownBridgeMAC(); mac == selfMAC {
 			m.mu.Unlock()
-			return errors.New("that is the Orbic's own address")
+			return errors.New("that is the box's own address")
 		}
 		keep = append(keep, mac)
 	}
@@ -818,7 +826,7 @@ func (m *torMgr) View() torView {
 	return v
 }
 
-// torSelfTest asks check.torproject.org, through the local SOCKS port, whether the request arrived from Tor. It proves Tor works on the Orbic; a device's own path needs a test from the device.
+// torSelfTest asks check.torproject.org, through the local SOCKS port, whether the request arrived from Tor. It proves Tor works on the box; a device's own path needs a test from the device.
 func torSelfTest() (map[string]any, error) {
 	host := "check.torproject.org"
 	c, err := socksConnect(onionSocksAddr, host, 443, 60*time.Second)

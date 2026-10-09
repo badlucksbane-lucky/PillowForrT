@@ -1,7 +1,7 @@
 package main
 
 // The web page's HTTPS server (login, session, CSRF) and the rules for what stays on plain HTTP. HTTP keeps only what machines need: the PAC file, /status.json (without the
-// per-device detail), /beat for a companion computer's heartbeat, and the proxy itself. Everything else on HTTP is redirected to https://orbic/ .
+// per-device detail), /beat for a companion computer's heartbeat, and the proxy itself. Everything else on HTTP is redirected to https://pillowforrt.lan/ .
 
 import (
 	"context"
@@ -192,7 +192,7 @@ func onionPathOK(p string) bool {
 // onionLANOnly: changes that are refused through the onion door even when remote writes are switched on: the door's own settings (a remote session must never authorize more keys or loosen its
 // own limits), SSH keys, the login itself and restoring a backup.
 func onionLANOnly(p string) bool {
-	return strings.HasPrefix(p, "/api/tor/onion") || strings.HasPrefix(p, "/api/ssh") || strings.HasPrefix(p, "/api/account/") || strings.HasPrefix(p, "/api/backup/restore") || strings.HasPrefix(p, "/api/export") || p == "/api/tap" || strings.HasPrefix(p, "/api/towers")
+	return strings.HasPrefix(p, "/api/ssh") || strings.HasPrefix(p, "/api/account/") || strings.HasPrefix(p, "/api/backup/restore") || strings.HasPrefix(p, "/api/export") || p == "/api/tap" || strings.HasPrefix(p, "/api/towers")
 }
 
 // onionHandler is the web page for a visitor who came through the onion service: same login, same pages, but read-only (any change is refused) unless remote writes are on, and the
@@ -226,7 +226,7 @@ func httpStays(r *http.Request) bool {
 		return true
 	}
 	if r.Method == http.MethodGet && isPACPath(r.URL.Path) {
-		// a browser opening http://orbic/ is sent to the login; PAC fetchers send no Accept: text/html
+		// a browser opening http://pillowforrt.lan/ is sent to the login; PAC fetchers send no Accept: text/html
 		return !(r.URL.Path == "/" && strings.Contains(r.Header.Get("Accept"), "text/html"))
 	}
 	return false

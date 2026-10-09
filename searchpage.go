@@ -39,7 +39,7 @@ func renderSearch(v searchView) string {
 	if v.Q != "" {
 		b.WriteString(e(v.Q) + " · ")
 	}
-	b.WriteString(`Search</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="search" type="application/opensearchdescription+xml" title="Heimdall search" href="/opensearch.xml">` + searchCSS + `</head><body><main>`)
+	b.WriteString(`Search</title><link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="search" type="application/opensearchdescription+xml" title="PillowForrT search" href="/opensearch.xml">` + searchCSS + `</head><body><main>`)
 	b.WriteString(`<form action="/search" method="get" role="search"><a href="/ui" class="home" title="Dashboard"><img class="mark" src="/favicon.svg" alt="Dashboard"></a><input name="q" value="` + e(v.Q) + `" aria-label="Search" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="200"`)
 	if v.Q == "" {
 		b.WriteString(" autofocus")
@@ -132,7 +132,7 @@ func serveOpenSearch(w http.ResponseWriter, r *http.Request) {
 		host = *uiHost
 	}
 	w.Header().Set("Content-Type", "application/opensearchdescription+xml")
-	w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/"><ShortName>Heimdall search</ShortName>` +
+	w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/"><ShortName>PillowForrT search</ShortName>` +
 		`<Description>Metasearch on the hotspot</Description><InputEncoding>UTF-8</InputEncoding><Image width="16" height="16" type="image/svg+xml">https://` + host + `/favicon.svg</Image>` +
 		`<Url type="text/html" method="get" template="https://` + host + `/search?q={searchTerms}"/></OpenSearchDescription>`))
 }

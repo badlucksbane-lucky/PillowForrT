@@ -1,7 +1,7 @@
 package main
 
 // The onion bridge. The range is 198.18.0.0/16 (RFC 2544 benchmarking space), NOT a private range: the router's dnsmasq runs with DNS-rebind protection and silently drops any answer
-// that points into 10/8, 172.16/12 or 192.168/16 (found 2026-10-02: the answer vanished and clients saw an empty NOERROR); nothing else in the house uses 198.18/16. Tor's own DNS port can only hand a .onion name an IPv6 "virtual" address (this Tor version copies no IPv4 preference into a DNS request), and the Orbic has no IPv6
+// that points into 10/8, 172.16/12 or 192.168/16 (found 2026-10-02: the answer vanished and clients saw an empty NOERROR); nothing else in the house uses 198.18/16. Tor's own DNS port can only hand a .onion name an IPv6 "virtual" address (this Tor version copies no IPv4 preference into a DNS request), and the box has no IPv6
 // redirect, so tinyfwd does the mapping itself:
 //   DNS      the stub answers an A query for a valid v3 .onion name with a benchmarking-range address from 198.18.0.0/16 (onionMap below, in memory, 4000 names, oldest recycled)
 //   firewall TCP aimed at that range is REDIRECTed to this bridge (nat HS_TOR), which reads the address the client really dialled (SO_ORIGINAL_DST)

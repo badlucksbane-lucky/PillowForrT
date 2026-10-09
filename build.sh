@@ -1,5 +1,5 @@
 #!/bin/sh
-# Cross-build tinyfwd for the Orbic (armv7, static). Output: ./tinyfwd
+# Cross-build tinyfwd for the box (armv7, static). Output: ./tinyfwd
 # -buildvcs=false matters: without it Go stamps the git revision into the binary
 # and the hash stops matching the one on the device.
 cd "$(dirname "$0")" || exit 1

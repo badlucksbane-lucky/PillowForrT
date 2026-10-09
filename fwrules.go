@@ -1,7 +1,7 @@
 package main
 
 // Our own firewall rules, replacing the stock admin's firewall pages (whose rules live in /usrdata/data/usr/firewall/*.xml and are not used here). Two kinds:
-//   - blocked destinations: an IP or CIDR no device on the network (and not the Orbic itself, so the proxied traffic is covered too) may reach;
+//   - blocked destinations: an IP or CIDR no device on the network (and not the box itself, so the proxied traffic is covered too) may reach;
 //   - internet schedules and pauses: a device's internet is cut during a weekly window or until a time, while its LAN access, DHCP and this web page stay.
 // The list of record is /data/proxy/fw.json (0600). Everything is rendered into chains we own (HS_FW forward, HS_FWIN input, HS_FWOUT output, HS_FW6 for
 // IPv6) and loaded atomically with iptables-restore --noflush; a loop every 15 s re-evaluates the clock, expires pauses and re-asserts the hooks, which the stock
@@ -19,7 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-	_ "time/tzdata" // the zone database is compiled in: the Orbic has no usable one for the configured zone and its stock zone is fixed Eastern
+	_ "time/tzdata" // the zone database is compiled in: the box has no usable one for the configured zone and its stock zone is fixed Eastern
 )
 
 type fwDest struct {
@@ -31,7 +31,7 @@ type fwSched struct {
 	ID      int    `json:"id"`
 	MAC     string `json:"mac"`
 	Days    []int  `json:"days"` // 0 = Sunday .. 6 = Saturday; the day the window starts
-	From    string `json:"from"` // HH:MM, the Orbic's local time
+	From    string `json:"from"` // HH:MM, the box's local time
 	To      string `json:"to"`   // a window with To before From runs past midnight
 	Note    string `json:"note,omitempty"`
 	Enabled bool   `json:"enabled"`
@@ -81,7 +81,7 @@ func normDest(s string) (string, error) {
 	for _, c := range []string{"192.168.1.0/24", "127.0.0.0/8", "0.0.0.0/8", "::1/128", "fe80::/10"} {
 		_, k, _ := net.ParseCIDR(c)
 		if k.Contains(n.IP) || n.Contains(k.IP) {
-			return "", errors.New("that range overlaps the local network or the Orbic itself")
+			return "", errors.New("that range overlaps the local network or the box itself")
 		}
 	}
 	return n.String(), nil

@@ -1,6 +1,6 @@
 package main
 
-// Uplink speed history: every few hours the Orbic times a small download and upload over the cellular link (Cloudflare's speed endpoints), keeps the results on flash so the
+// Uplink speed history: every few hours the box times a small download and upload over the cellular link (Cloudflare's speed endpoints), keeps the results on flash so the
 // history survives restarts, and charts them. The point is the trend (is the evening slower, did the carrier throttle, did moving the antenna help), not a lab number: the test is
 // deliberately small (1 MB down, 256 KB up, about 5 MB a day at the default every 6 hours), so TCP slow start keeps it under the link's peak, but every test is the same size so
 // the history compares like with like. A test never runs while the link is down, while the house is using the link (it would measure the house, not the carrier) or when the

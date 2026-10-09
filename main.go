@@ -1,5 +1,5 @@
 // tinyfwd - a minimal forward HTTP/HTTPS proxy, Squid-style, listening on :3128, that is
-// also the Orbic hotspot's vantage-node daemon (status.json, heartbeat, usage counters;
+// also the box hotspot's vantage-node daemon (status.json, heartbeat, usage counters;
 // see status.go and stats.go).
 //
 //   - Plain HTTP: forwards absolute-URI requests to the origin and streams the reply.
@@ -33,7 +33,7 @@ var (
 	listenAddr = flag.String("listen", ":3128", "address:port to listen on")
 	allowFlag  = flag.String("allow", "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16", "comma-separated CIDRs allowed to use the proxy")
 	verbose    = flag.Bool("v", false, "log every request")
-	ipv4Only   = flag.Bool("4", true, "force IPv4 for all upstream connections (the Orbic's cellular link has no IPv6)")
+	ipv4Only   = flag.Bool("4", true, "force IPv4 for all upstream connections (the box's cellular link has no IPv6)")
 	pacFile    = flag.String("pac", "", "path to a PAC file to serve at /wpad.dat and /proxy.pac (empty = serve a built-in one)")
 	proxyHost  = flag.String("proxy-host", "192.168.1.1:3128", "host:port advertised inside the built-in PAC")
 	allowNets  []*net.IPNet
@@ -70,7 +70,7 @@ var (
 	canaryIP        = flag.String("canary", "192.168.1.253", "the canary (decoy) address on the LAN; empty switches the canary off entirely")
 	arpWatchOn      = flag.Bool("arp-watch", true, "watch the bridge for ARP spoofing (gateway impersonation, address conflicts)")
 	torFile         = flag.String("tor-file", "/data/proxy/tor.json", "Tor settings (daemon on/off, house-wide .onion, the devices sent through Tor)")
-	torBin          = flag.String("tor-bin", "/data/proxy/tor", "the Tor client binary (recipe orbic-tor)")
+	torBin          = flag.String("tor-bin", "/data/proxy/tor", "the Tor client binary (the Tor recipe)")
 	rogueFile       = flag.String("rogue-file", "/data/proxy/rogue.json", "DHCP servers the owner allowed (their MAC addresses)")
 	torExitFile     = flag.String("tor-exit-file", "/data/proxy/tor-exits.txt", "known Tor relay/bridge addresses, one IP or CIDR per line; empty or missing turns tor_bypass_exit off")
 	tlsSNIWatchOn   = flag.Bool("tls-sni-watch", true, "watch the bridge for TLS connections with no SNI or an IP-literal SNI (bare-IP TLS), and for a JA3 fingerprint match")
@@ -83,13 +83,13 @@ var (
 	ttlWatchOn      = flag.Bool("ttl-watch", true, "watch the bridge for a device forwarding for others behind it, read from the IP TTL of each connection's first packet (hidden router)")
 	ttlFile         = flag.String("ttl-file", "/data/proxy/ttlwatch.json", "devices marked expected by the hidden-router watch; empty keeps them in memory only")
 	adminTripOn     = flag.Bool("admin-tripwire", true, "raise an event when something knocks on the switched-off stock admin's ports 81 and 444 (stock admin tripwire)")
-	steerWatchOn    = flag.Bool("steer-watch", true, "watch the bridge for IPv6 router advertisements and ICMP redirects from anything other than this Orbic (steering watch)")
+	steerWatchOn    = flag.Bool("steer-watch", true, "watch the bridge for IPv6 router advertisements and ICMP redirects from anything other than this box (steering watch)")
 	steerFile       = flag.String("steer-file", "/data/proxy/steer.json", "routers the owner allowed to advertise (their MAC addresses)")
 	btFile          = flag.String("bt-file", "/data/proxy/bt.json", "torrent playback settings (on/off)")
 	searchFile      = flag.String("search-file", "/data/proxy/search.json", "metasearch settings (on/off, the proxy and DNS paths, the engines)")
 	rebindFile      = flag.String("rebind-file", "/data/proxy/rebind.json", "DNS rebinding refusal settings (on/off, the names allowed to resolve to a private address)")
 	dhcpFPWatchOn   = flag.Bool("dhcp-fp-watch", true, "watch the bridge for DHCP fingerprint drift (option 55 shape changing on a MAC that had settled)")
-	rogueWatchOn    = flag.Bool("rogue-dhcp", true, "watch the bridge for DHCP replies from any server other than this Orbic")
+	rogueWatchOn    = flag.Bool("rogue-dhcp", true, "watch the bridge for DHCP replies from any server other than this box")
 	linkFile        = flag.String("link-file", "/data/proxy/linkhist.json", "uplink latency and loss history (hourly, about 35 days)")
 	speedFile       = flag.String("speed-file", "/data/proxy/speed.json", "uplink speed test settings and history")
 	canaryFile      = flag.String("canary-file", "/data/proxy/canary.json", "canary settings (on/off, ignored devices)")
@@ -102,8 +102,9 @@ var (
 	uiTokenFlag     = flag.String("ui-token-file", "", "file holding the API-key token that scripts send as X-UI-Token instead of signing in (empty = script tokens are OFF and every such header is refused; the web login is unaffected)")
 	vpnDir          = flag.String("vpn-dir", "/data/proxy/vpn", "directory for the Mullvad exit's state (holds this device's WireGuard key, mode 0600; empty = VPN off)")
 	uiListen        = flag.String("ui-listen", ":3129", "address for the HTTPS web page (login required); empty = the web page is off")
-	onionListen     = flag.String("onion-listen", "127.0.0.1:3130", "loopback address of the web page for the onion door (plain HTTP, read-only by default; Tor is its only client); empty = off")
-	uiHost          = flag.String("ui-host", "orbic", "the name plain-HTTP requests are redirected to (https://<name>/...)")
+	onionListen     = flag.String("onion-listen", "", "loopback address of the web page for the onion door (plain HTTP, read-only by default; Tor is its only client); empty = off unless the door is switched on over SSH, then 127.0.0.1:3130")
+	onionCmd        = flag.String("onion", "", "change or show the .onion settings over SSH, then exit: comma-separated status, house=on|off, door=on|off, write=on|off, add=NAME:PUBKEY, remove=NAME")
+	uiHost          = flag.String("ui-host", "pillowforrt.lan", "the name plain-HTTP requests are redirected to (https://<name>/...)")
 	secureDir       = flag.String("secure-dir", "/data/proxy/secure", "directory (mode 0700) for the login hash and the HTTPS certificate")
 	setLogin        = flag.String("set-login", "", "set the web login for this user (the password is read from stdin) and exit")
 	setWifi         = flag.String("set-wifi", "", "set the Wi-Fi name (the password is the first line of stdin; an empty line keeps the current one) on both radios and exit")
@@ -317,6 +318,16 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println("login set for", *setLogin)
+		os.Exit(0)
+	}
+	if *onionCmd != "" {
+		m := newTorMgr()
+		out, err := onionCLI(m, *onionCmd)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "not changed:", err)
+			os.Exit(1)
+		}
+		fmt.Print(out)
 		os.Exit(0)
 	}
 	if *setWifi != "" {
@@ -544,7 +555,7 @@ func main() {
 		webAuth.Load()
 		uiTokenFile = *uiTokenFlag
 		cm, created, err := newCertManager(filepath.Join(*secureDir, "tls"),
-			[]string{"orbic", "orbic.lan", "wpad", "wpad.lan", "localhost"}, []net.IP{net.ParseIP("192.168.1.1"), net.ParseIP("192.168.1.254"), net.ParseIP("127.0.0.1")})
+			[]string{"pillowforrt", "pillowforrt.lan", "wpad", "wpad.lan", "localhost"}, []net.IP{net.ParseIP("192.168.1.1"), net.ParseIP("192.168.1.254"), net.ParseIP("127.0.0.1")})
 		if err != nil {
 			log.Printf("web page off: certificate: %v", err)
 		} else {
@@ -558,11 +569,15 @@ func main() {
 			hs := &http.Server{Addr: *uiListen, Handler: ui.handler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10,
 				TLSConfig: &tls.Config{GetCertificate: cm.GetCertificate, MinVersion: tls.VersionTLS12}}
 			go func() { log.Printf("web page: %v", hs.ListenAndServeTLS("", "")) }()
-			if *onionListen != "" {
-				if !isLoopbackAddr(*onionListen) {
-					log.Printf("onion web page off: %q is not a loopback address", *onionListen)
+			onionAddr := *onionListen
+			if onionAddr == "" && torMgrG.DoorEnabled() {
+				onionAddr = onionWebTarget // the door is on (set over SSH): its web page listens on the loopback address Tor forwards to
+			}
+			if onionAddr != "" {
+				if !isLoopbackAddr(onionAddr) {
+					log.Printf("onion web page off: %q is not a loopback address", onionAddr)
 				} else {
-					ohs := &http.Server{Addr: *onionListen, Handler: ui.onionHandler(func() bool { return torMgrG.RemoteWrite() }), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10}
+					ohs := &http.Server{Addr: onionAddr, Handler: ui.onionHandler(func() bool { return torMgrG.RemoteWrite() }), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10}
 					go func() { log.Printf("onion web page: %v", ohs.ListenAndServe()) }()
 				}
 			}

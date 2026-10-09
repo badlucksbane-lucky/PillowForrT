@@ -1,5 +1,5 @@
 #!/bin/sh
-# wpad-guard.sh (also the DNS redirect, SSH and FOTA lines below): the name `wpad` (and `orbic`) lives at its own address, 192.168.1.254, so the stock web admin that owns port 80 on 192.168.1.1 is never what
+# wpad-guard.sh (also the DNS redirect, SSH and FOTA lines below): the name `wpad` (and `pillowforrt`) lives at its own address, 192.168.1.254, so the stock web admin that owns port 80 on 192.168.1.1 is never what
 # a client reaches. This keeps (a) the address on the bridge and (b) a DNAT that sends port 80 on that address to the proxy daemon's own PAC/UI server (:3128).
 # qcmap rebuilds the NAT chains on some network events, so it re-checks every 60 s (one copy; started by the init script; `once` runs a single pass).
 A=192.168.1.254
@@ -12,9 +12,9 @@ add_rule() {
 # The DNS rules. tinyfwd owns them (dnsguard.go: one chain per table, applied atomically, checked by hash) and says so by writing /var/volatile/dnsguard.on once they are in; until then (after a boot,
 # or with tinyfwd started with -dns-guard=false) this function installs the same protection the old way, and tinyfwd deletes these loose rules when it takes over.
 legacy_dns() {
-  # every DNS query a device sends to anyone else (8.8.8.8, a router's own resolver...) comes to the Orbic instead, so the filter cannot be bypassed;
+  # every DNS query a device sends to anyone else (8.8.8.8, a router's own resolver...) comes to the box instead, so the filter cannot be bypassed;
   # the client address is untouched, so the per-device view still works. Encrypted DNS (DoT, port 853) is refused so devices fall back to plain DNS.
-  # (iptables 1.4 takes one -d per rule: the Orbic's own addresses are exempted first with RETURN rules, which end up above the REDIRECT)
+  # (iptables 1.4 takes one -d per rule: the box's own addresses are exempted first with RETURN rules, which end up above the REDIRECT)
   for p in udp tcp; do
     add_rule iptables nat PREROUTING -i bridge0 -p $p --dport 53 -j REDIRECT --to-ports 53
     add_rule iptables nat PREROUTING -i bridge0 -p $p --dport 53 -d $A -j RETURN
@@ -22,13 +22,13 @@ legacy_dns() {
   done
   add_rule iptables filter FORWARD -i bridge0 -p tcp --dport 853 -j REJECT --reject-with tcp-reset
   # IPv6 does reach the uplink (devices hold global IPv6 addresses) and there is no ip6 nat table to redirect with, so DNS and DoT to any outside IPv6
-  # resolver is refused instead; clients then fall back to the Orbic (which they are also told about over IPv6 and IPv4)
+  # resolver is refused instead; clients then fall back to the box (which they are also told about over IPv6 and IPv4)
   add_rule ip6tables filter FORWARD -i bridge0 -p udp --dport 53 -j REJECT --reject-with icmp6-port-unreachable
   add_rule ip6tables filter FORWARD -i bridge0 -p tcp --dport 53 -j REJECT --reject-with tcp-reset
   add_rule ip6tables filter FORWARD -i bridge0 -p tcp --dport 853 -j REJECT --reject-with tcp-reset
-  # No plain DNS leaves over the cellular side, from the Orbic itself or from anyone behind it (): DNS is encrypted (DoH from tinyfwd), carried by the Mullvad tunnel
+  # No plain DNS leaves over the cellular side, from the box itself or from anyone behind it (): DNS is encrypted (DoH from tinyfwd), carried by the Mullvad tunnel
   # (10.64.0.1 inside it, so never on rmnet) or by Tor. tinyfwd runs with -dns-plain-after -1, so nothing needs the old plain fallback; measured 0 packets before this was added.
-  # The redirect above still sends devices' DNS to the Orbic; these rules are the net under it (REJECT, so a stray resolver fails fast instead of hanging).
+  # The redirect above still sends devices' DNS to the box; these rules are the net under it (REJECT, so a stray resolver fails fast instead of hanging).
   for t in iptables ip6tables; do
     for p in udp tcp; do
       for d in 53 853; do
@@ -42,7 +42,7 @@ pass() {
   [ -e /var/volatile/dnsguard.on ] || legacy_dns
   # IPv6 firewall on the cellular side. The stock firmware leaves ip6tables INPUT and FORWARD at ACCEPT with no rules, while devices hold global IPv6 addresses (the companion computer
   # listens on SMB, NFS, rpcbind and ssh over IPv6), so nothing but the carrier stood between them and the internet. Now: unsolicited NEW connections arriving from the cellular
-  # interfaces are DROPPED silently (stealth: no reset, no ICMP) both to the Orbic itself and to the LAN; replies to our own traffic and related ICMP errors pass, and the
+  # interfaces are DROPPED silently (stealth: no reset, no ICMP) both to the box itself and to the LAN; replies to our own traffic and related ICMP errors pass, and the
   # ICMPv6 types IPv6 cannot work without (errors 1-4, neighbour/router discovery 133-137) are allowed. Echo requests from outside get no answer.
   add_rule ip6tables filter INPUT -i rmnet_data+ -m state --state NEW -j DROP
   for t in 1 2 3 4 133 134 135 136 137; do add_rule ip6tables filter INPUT -i rmnet_data+ -p icmpv6 --icmpv6-type $t -j ACCEPT; done
@@ -71,7 +71,7 @@ pass() {
   pidof dropbear >/dev/null || /data/proxy/dropbear -s -k -p $A:22 -r /data/dropbear/ssh/host_ed25519 -D /data/dropbear/ssh -P /tmp/dropbear.pid -K 30
   iptables -t nat -C PREROUTING -d $A -p tcp --dport 80 -j DNAT --to-destination 192.168.1.1:3128 2>/dev/null ||
     iptables -t nat -I PREROUTING 1 -d $A -p tcp --dport 80 -j DNAT --to-destination 192.168.1.1:3128
-  # https://orbic/ : port 443 on the services address goes to tinyfwd's HTTPS web page (login required); the stock admin keeps 192.168.1.1:443
+  # https://pillowforrt.lan/ : port 443 on the services address goes to tinyfwd's HTTPS web page (login required); the stock admin keeps 192.168.1.1:443
   iptables -t nat -C PREROUTING -d $A -p tcp --dport 443 -j DNAT --to-destination 192.168.1.1:3129 2>/dev/null ||
     iptables -t nat -I PREROUTING 1 -d $A -p tcp --dport 443 -j DNAT --to-destination 192.168.1.1:3129
   # DHCP reservations survive a reboot: the stock firmware empties /data/dhcp_hosts at every boot (found 2026-10-02, the first reboot since we added reservations; the companion computer came

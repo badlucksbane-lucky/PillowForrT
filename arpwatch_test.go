@@ -248,7 +248,7 @@ func TestARPSweepIgnoresSlowAsksOffLANAndTheRouterItself(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		w.observeRequest("ee:00:00:00:00:05", "192.168.1.6", net.IPv4(8, 8, byte(i), 8).String())
 	}
-	// the Orbic itself resolving everyone
+	// the box itself resolving everyone
 	for i := 0; i < 50; i++ {
 		w.observeRequest(bridgeMAC.String(), "192.168.1.1", net.IPv4(192, 168, 1, byte(10+i)).String())
 	}

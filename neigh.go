@@ -1,6 +1,6 @@
 package main
 
-// One device, many addresses. A phone asks DNS over IPv4 and over IPv6 (the Orbic advertises itself as DNS on both), so the same device would show up
+// One device, many addresses. A phone asks DNS over IPv4 and over IPv6 (the box advertises itself as DNS on both), so the same device would show up
 // twice and an IPv4-keyed rule would miss its IPv6 queries. Both are tied together by the device's MAC address: the ARP table gives MAC -> IPv4, the
 // IPv6 neighbour table gives IPv6 -> MAC. canonical() turns an IPv6 client address into the device's IPv4 one when both are known.
 

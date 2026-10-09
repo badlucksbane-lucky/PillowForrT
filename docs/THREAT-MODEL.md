@@ -1,12 +1,12 @@
 # Threat model
 
-DRAFT for the maintainer's review. What Stone of Heimdall is meant to defend against, what it is not, and where its claims stop.
+DRAFT for the maintainer's review. What PillowForrT is meant to defend against, what it is not, and where its claims stop.
 
 ## Who it is for
 A person who carries a cellular hotspot and wants fewer third parties able to profile their devices' traffic: ad and tracker networks, the carrier's DNS resolver, apps that phone home, and devices on the same network that should not be talking to the internet at all.
 
 ## What it defends against
-| Threat | What Stone of Heimdall does | Where the claim stops |
+| Threat | What PillowForrT does | Where the claim stops |
 |---|---|---|
 | The carrier's resolver logging every name you look up | All DNS leaves encrypted (DoH) or through the VPN or Tor; plain DNS (53) and DNS-over-TLS (853) are refused out of the cellular side | The carrier still sees the IP addresses you connect to, and the size and timing of the traffic |
 | Ad, tracker and malware domains | DNS filter with published block lists, your own wildcard rules, per-device profiles, and a "why was this blocked?" check | A filter is not a guarantee: a tracker on an unlisted name, or one reached by a hard-coded IP, gets through |
@@ -21,7 +21,7 @@ A person who carries a cellular hotspot and wants fewer third parties able to pr
 - **Content.** It does not look inside encrypted traffic and does not try to.
 - **Someone with physical access to the unit, or already on your Wi-Fi.** Anyone on the LAN who can reach the web page can try the login; use a strong password and keep the self-signed certificate fingerprint you checked at first sign-in. The event log is a hash chain, so an edit or a deletion in it shows on the page, but someone with a root shell can rewrite the whole chain; only a head hash copied off the box beforehand tells you that happened.
 - **Malicious devices that bypass the router** (a second radio, a USB tether).
-- **A vulnerability in this software or in the stock firmware under it.** The stock firmware is old, and rooting the unit is what makes this possible at all. Stone of Heimdall shrinks the exposed surface (the stock admin page is switched off for the network, SSH is key-only); it cannot make the base firmware new.
+- **A vulnerability in this software or in the stock firmware under it.** The stock firmware is old, and rooting the unit is what makes this possible at all. PillowForrT shrinks the exposed surface (the stock admin page is switched off for the network, SSH is key-only); it cannot make the base firmware new.
 
 ## Trust you are placing
 - In the code. It was written by an AI model under the maintainer's direction and has not had an independent human security audit; the maintainer did not write or line-by-line review it. It has a large automated test suite and has run on one unit. Read before you run.

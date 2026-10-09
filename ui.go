@@ -355,7 +355,7 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("Content-Disposition", `attachment; filename="orbic-diagnostics.txt"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="pillowforrt-diagnostics.txt"`)
 		w.Write([]byte(diagReport(*last)))
 	case path == "cert" && r.Method == http.MethodGet:
 		if certMgr == nil {
@@ -385,9 +385,9 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/x-pem-file")
-		w.Header().Set("Content-Disposition", `attachment; filename="orbic-web-certificate.pem"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="pillowforrt-web-certificate.pem"`)
 		w.Write(pem)
-	case path == "cert/orbic.crt" && r.Method == http.MethodGet:
+	case path == "cert/pillowforrt.crt" && r.Method == http.MethodGet:
 		// The same public certificate, sent as a CA certificate (DER): Android's Chrome and iPhone's Safari offer to install that type when it is opened, where the .pem download above
 		// only saves a file. Installing it is what lets a browser register the player's service worker, which refuses an origin with a certificate warning.
 		if certMgr == nil {
@@ -484,12 +484,12 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 		}
 		writeJSON(w, 200, torMgrG.View())
 	case path == "tor/set" && r.Method == http.MethodPost:
-		var b struct{ Enabled, Onion bool }
+		var b struct{ Enabled bool } // the .onion settings are not here: they are changed only over SSH (onion.go, -onion)
 		if torMgrG == nil || json.NewDecoder(r.Body).Decode(&b) != nil {
 			writeJSON(w, 400, map[string]string{"error": "bad request"})
 			return
 		}
-		if err := torMgrG.Set(b.Enabled, b.Onion); err != nil {
+		if err := torMgrG.SetEnabled(b.Enabled); err != nil {
 			writeJSON(w, 500, map[string]string{"error": err.Error()})
 			return
 		}
@@ -1058,7 +1058,7 @@ func handleBackup(w http.ResponseWriter, r *http.Request, path string) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Content-Disposition", `attachment; filename="orbic-`+r.URL.Query().Get("name")+`.json"`)
+		w.Header().Set("Content-Disposition", `attachment; filename="pillowforrt-`+r.URL.Query().Get("name")+`.json"`)
 		w.Header().Set("Cache-Control", "no-store")
 		w.Write(raw)
 	case path == "backup/upload" && r.Method == http.MethodPost:
@@ -1115,7 +1115,7 @@ func handleBackup(w http.ResponseWriter, r *http.Request, path string) {
 
 // settingsPaths are the endpoints handled by handleSettings (everything that is not DNS, VPN, account or backup). Adding an endpoint there means adding it here too.
 var settingsPaths = map[string]bool{
-	"wifi": true, "dhcp": true, "cell": true, "diag": true, "diag/run": true, "diag/report": true, "cert": true, "cert/renew": true, "cert/download": true, "cert/orbic.crt": true,
+	"wifi": true, "dhcp": true, "cell": true, "diag": true, "diag/run": true, "diag/report": true, "cert": true, "cert/renew": true, "cert/download": true, "cert/pillowforrt.crt": true,
 	"ssh": true, "ssh/add": true, "ssh/delete": true, "sms": true, "devices": true, "devices/note": true, "graphs": true, "linkhist": true, "canary": true, "rogue-dhcp": true, "rogue-dhcp/allow": true, "arp": true, "tor": true, "tor/set": true, "tor/device": true, "tor/overvpn": true, "device/mode": true, "tor/test": true, "speed": true, "speed/set": true, "speed/run": true, "canary/set": true, "canary/ignore": true, "actions": true, "actions/set": true, "actions/delete": true, "actions/run": true, "events": true, "events/seen": true, "events/clear": true, "notify/set": true, "notify/clear": true, "notify/test": true, "devices/wake": true, "devices/watch": true,
 	"system": true, "system/reboot": true, "system/stockadmin": true, "system/lanv6": true, "egress": true, "egress/set": true, "egress/allow": true, "egress/remove": true, "egress/service": true, "egress/httpupgrade": true,
 	"dnscanary": true, "dnscanary/set": true, "macchurn": true, "torbypass": true, "beacon": true, "beacon/ignore": true, "dganxdomain": true, "tlssni": true, "tlscert": true, "lanannounce": true, "dnsxcheck": true, "dnsmitm": true, "dhcpfp": true, "ttl": true, "ttl/ignore": true, "admintrip": true, "steer": true, "steer/allow": true, "rebind": true, "rebind/set": true, "rebind/allow": true,
@@ -1145,10 +1145,6 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 	}
 	if path == "tap" {
 		handleTap(w, r)
-		return
-	}
-	if path == "tor/onion" || strings.HasPrefix(path, "tor/onion/") {
-		handleOnionAPI(w, r, path)
 		return
 	}
 	if path == "bt" || strings.HasPrefix(path, "bt/") {

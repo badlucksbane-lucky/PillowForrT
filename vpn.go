@@ -4,7 +4,7 @@ package main
 //   - the whole house (default exit = mullvad), with a kill switch so a dead tunnel blocks instead of leaking;
 //   - single devices (a per-device exit: Default / Direct / Mullvad), by MAC address (netfilter MARK + policy routing, vpn_policy.go);
 //   - PAC-proxy users, whose connections tinyfwd dials through the tunnel (vpn_dial.go).
-// The account number is typed into the web page once, used to register this Orbic as a device, and never stored or logged: only the device's own key and address are kept.
+// The account number is typed into the web page once, used to register this box as a device, and never stored or logged: only the device's own key and address are kept.
 
 import (
 	"bytes"
@@ -383,7 +383,7 @@ func (v *VPN) ExitFor(client string) string {
 		return e
 	}
 	if strings.HasPrefix(client, "127.") || client == "::1" || client == "" {
-		return "direct" // the Orbic's own queries never take the exit
+		return "direct" // the box's own queries never take the exit
 	}
 	return v.cfg.DefaultExit
 }
@@ -396,7 +396,7 @@ func (v *VPN) OwnState() (wanted, up bool, tier string) {
 	return wanted, v.tunnelUp(), tier
 }
 
-// Registered says whether this Orbic holds a Mullvad device slot (the tunnel can be used at all).
+// Registered says whether this box holds a Mullvad device slot (the tunnel can be used at all).
 func (v *VPN) Registered() bool {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -410,7 +410,7 @@ func (v *VPN) fail(err error) error {
 	return err
 }
 
-// Register creates this Orbic's Mullvad device. The account number is used for the calls and then dropped.
+// Register creates this box's Mullvad device. The account number is used for the calls and then dropped.
 func (v *VPN) Register(account string) error {
 	account = strings.Map(func(r rune) rune {
 		if r >= '0' && r <= '9' {
@@ -424,7 +424,7 @@ func (v *VPN) Register(account string) error {
 	v.mu.Lock()
 	if v.cfg.Registered {
 		v.mu.Unlock()
-		return v.fail(errors.New("this Orbic is already registered; remove the device first"))
+		return v.fail(errors.New("this box is already registered; remove the device first"))
 	}
 	v.mu.Unlock()
 	priv, pub, err := newWGKey()
@@ -508,7 +508,7 @@ func (v *VPN) SetEnabled(on bool) error {
 	reg := v.cfg.Registered
 	v.mu.Unlock()
 	if on && !reg {
-		return errors.New("register this Orbic with your Mullvad account first")
+		return errors.New("register this box with your Mullvad account first")
 	}
 	v.update(func(c *vpnConfig) { c.Enabled = on })
 	if !on {
@@ -546,7 +546,7 @@ func (v *VPN) SetDefaultExit(e string) error {
 	v.mu.Lock()
 	if e == "mullvad" && !v.cfg.Registered {
 		v.mu.Unlock()
-		return errors.New("register this Orbic with your Mullvad account first")
+		return errors.New("register this box with your Mullvad account first")
 	}
 	v.mu.Unlock()
 	v.update(func(c *vpnConfig) { c.DefaultExit = e })
@@ -563,7 +563,7 @@ func (v *VPN) SetDeviceExit(ip, e string) error {
 	v.mu.Lock()
 	if e == "mullvad" && !v.cfg.Registered {
 		v.mu.Unlock()
-		return errors.New("register this Orbic with your Mullvad account first")
+		return errors.New("register this box with your Mullvad account first")
 	}
 	if _, had := v.cfg.DeviceExit[ip]; !had && len(v.cfg.DeviceExit) >= 64 && e != "" && e != "default" {
 		v.mu.Unlock()

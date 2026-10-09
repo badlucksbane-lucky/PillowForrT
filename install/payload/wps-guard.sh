@@ -1,5 +1,5 @@
 #!/bin/sh
-# wps-guard.sh -- WPS must stay OFF on the Orbic's Wi-Fi (WPS is a known weak spot; a factory reset or the stock settings can turn it back on).
+# wps-guard.sh -- WPS must stay OFF on the box's Wi-Fi (WPS is a known weak spot; a factory reset or the stock settings can turn it back on).
 # Runs as root from /etc/init.d/http_proxy at boot and then every 5 minutes. hostapd treats a config with no wps_state as "WPS off"; if a generated
 # /tmp/hostapd_wlan*.conf ever has wps_state=1 or 2 (the web settings, a factory reset), set it to 0 and send hostapd a SIGHUP so it reloads. Logs to
 # /data/proxy/wps-guard.log: one line per check. Test knobs (env): CONF_GLOB, LOG, ONCE=1 (single pass), NOHUP=1 (do not signal hostapd), WAIT (seconds to wait for the conf).

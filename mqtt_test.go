@@ -26,7 +26,7 @@ func TestMQTTRemainingLength(t *testing.T) {
 }
 
 func TestMQTTConnectPacket(t *testing.T) {
-	p := mqttConnectPacket(mqttOpts{ClientID: "stone-orbic", User: "ha", Pass: "pw", WillTopic: "stone/orbic/availability", WillPayload: "offline"})
+	p := mqttConnectPacket(mqttOpts{ClientID: "pillowforrt", User: "ha", Pass: "pw", WillTopic: "pillowforrt/box/availability", WillPayload: "offline"})
 	if p[0] != mqttConnect<<4 {
 		t.Fatalf("type byte %x", p[0])
 	}
@@ -42,7 +42,7 @@ func TestMQTTConnectPacket(t *testing.T) {
 		t.Error("keepalive")
 	}
 	rest := string(body[10:])
-	for _, s := range []string{"stone-orbic", "stone/orbic/availability", "offline", "ha", "pw"} {
+	for _, s := range []string{"pillowforrt", "pillowforrt/box/availability", "offline", "ha", "pw"} {
 		if !strings.Contains(rest, s) {
 			t.Errorf("missing %q", s)
 		}
@@ -151,10 +151,10 @@ func TestMQTTConnectRefused(t *testing.T) {
 }
 
 func TestHassEntitiesAndCommands(t *testing.T) {
-	es := hassEntities("stone", "orbic")
+	es := hassEntities("pillowforrt", "box")
 	seen := map[string]bool{}
 	for _, e := range es {
-		if e.Config["state_topic"] != "stone/orbic/state" || e.Config["availability_topic"] != "stone/orbic/availability" || e.Config["unique_id"] == "" {
+		if e.Config["state_topic"] != "pillowforrt/box/state" || e.Config["availability_topic"] != "pillowforrt/box/availability" || e.Config["unique_id"] == "" {
 			t.Errorf("%s: %v", e.Object, e.Config)
 		}
 		if seen[e.Config["unique_id"].(string)] {
@@ -165,19 +165,19 @@ func TestHassEntitiesAndCommands(t *testing.T) {
 	if len(es) < 10 {
 		t.Errorf("only %d entities", len(es))
 	}
-	tr := hassTrackerConfig("stone", "orbic", "AA:BB:CC:DD:EE:FF", "Ben's laptop")
-	if tr["state_topic"] != "stone/orbic/dev/aabbccddeeff/presence" || tr["source_type"] != "router" || tr["name"] != "Ben's laptop" {
+	tr := hassTrackerConfig("pillowforrt", "box", "AA:BB:CC:DD:EE:FF", "Ben's laptop")
+	if tr["state_topic"] != "pillowforrt/box/dev/aabbccddeeff/presence" || tr["source_type"] != "router" || tr["name"] != "Ben's laptop" {
 		t.Errorf("%v", tr)
 	}
-	sw := hassSwitchConfig("stone", "orbic", "aa:bb:cc:dd:ee:ff", "Laptop")
-	if sw["command_topic"] != "stone/orbic/dev/aabbccddeeff/internet/set" || sw["name"] != "Laptop internet" {
+	sw := hassSwitchConfig("pillowforrt", "box", "aa:bb:cc:dd:ee:ff", "Laptop")
+	if sw["command_topic"] != "pillowforrt/box/dev/aabbccddeeff/internet/set" || sw["name"] != "Laptop internet" {
 		t.Errorf("%v", sw)
 	}
-	if mac, ok := parseInternetCommand("stone", "orbic", "stone/orbic/dev/aabbccddeeff/internet/set"); !ok || mac != "aa:bb:cc:dd:ee:ff" {
+	if mac, ok := parseInternetCommand("pillowforrt", "box", "pillowforrt/box/dev/aabbccddeeff/internet/set"); !ok || mac != "aa:bb:cc:dd:ee:ff" {
 		t.Errorf("%q %v", mac, ok)
 	}
-	for _, bad := range []string{"stone/orbic/dev/aabbccddeeff/presence", "stone/orbic/dev/zzbbccddeeff/internet/set", "stone/orbic/dev/aabb/internet/set", "other/orbic/dev/aabbccddeeff/internet/set"} {
-		if _, ok := parseInternetCommand("stone", "orbic", bad); ok {
+	for _, bad := range []string{"pillowforrt/box/dev/aabbccddeeff/presence", "pillowforrt/box/dev/zzbbccddeeff/internet/set", "pillowforrt/box/dev/aabb/internet/set", "other/box/dev/aabbccddeeff/internet/set"} {
+		if _, ok := parseInternetCommand("pillowforrt", "box", bad); ok {
 			t.Errorf("%q accepted", bad)
 		}
 	}

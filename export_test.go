@@ -30,8 +30,8 @@ func TestLanAddr(t *testing.T) {
 
 func TestToEVE(t *testing.T) {
 	e := evt{ID: 7, T: 1700000000, Kind: "arp_spoof", Sev: sevAlert, Text: "aa:bb claimed the router's address", Public: "a device impersonated the router", Hash: "h7", Prev: "h6"}
-	r := toEVE(e, "orbic", false)
-	if r.EventType != "alert" || r.Host != "orbic" || r.Alert.Severity != 1 || r.Alert.GID != eveGID || r.Alert.Signature != "Stone of Heimdall: arp spoof" {
+	r := toEVE(e, "pillowforrt", false)
+	if r.EventType != "alert" || r.Host != "pillowforrt" || r.Alert.Severity != 1 || r.Alert.GID != eveGID || r.Alert.Signature != "PillowForrT: arp spoof" {
 		t.Errorf("%+v", r)
 	}
 	if r.Stone.Text != e.Text || r.Stone.Public != e.Public || r.Stone.Hash != "h7" || r.Stone.Prev != "h6" || r.Stone.ID != 7 {
@@ -40,7 +40,7 @@ func TestToEVE(t *testing.T) {
 	if !strings.HasPrefix(r.Timestamp, "2023-11-14T") || !strings.Contains(r.Timestamp, ".000000") {
 		t.Errorf("timestamp %q", r.Timestamp)
 	}
-	if p := toEVE(e, "orbic", true); p.Stone.Text != "" || p.Stone.Public != e.Public {
+	if p := toEVE(e, "pillowforrt", true); p.Stone.Text != "" || p.Stone.Public != e.Public {
 		t.Errorf("public view leaked the text: %+v", p.Stone)
 	}
 	if eveSID("arp_spoof") != eveSID("arp_spoof") || eveSID("arp_spoof") == eveSID("rogue_dhcp") || eveSID("x") < 1000000 || eveSID("x") >= 2000000 {
@@ -58,8 +58,8 @@ func TestToEVE(t *testing.T) {
 
 func TestSyslogLine(t *testing.T) {
 	e := evt{ID: 3, T: 1700000000, Kind: "rogue_dhcp", Sev: sevAttention, Text: `server "x" at [1]`, Public: "a second DHCP server answered", Hash: "abc", Prev: "def"}
-	l := syslogLine(e, "orbic", false)
-	if !strings.HasPrefix(l, "<132>1 2023-11-14T22:13:20Z orbic tinyfwd - rogue_dhcp [stone@0 id=\"3\" kind=\"rogue_dhcp\" sev=\"attention\" hash=\"abc\" prev=\"def\"] ") {
+	l := syslogLine(e, "pillowforrt", false)
+	if !strings.HasPrefix(l, "<132>1 2023-11-14T22:13:20Z pillowforrt tinyfwd - rogue_dhcp [stone@0 id=\"3\" kind=\"rogue_dhcp\" sev=\"attention\" hash=\"abc\" prev=\"def\"] ") {
 		t.Errorf("header: %s", l)
 	}
 	if !strings.HasSuffix(l, `server "x" at [1]`) {
@@ -68,7 +68,7 @@ func TestSyslogLine(t *testing.T) {
 	if !strings.HasPrefix(syslogLine(evt{Sev: sevAlert, Kind: "k"}, "o", false), "<129>") || !strings.HasPrefix(syslogLine(evt{Sev: sevInfo, Kind: "k"}, "o", false), "<134>") {
 		t.Error("severity to PRI")
 	}
-	if p := syslogLine(e, "orbic", true); !strings.HasSuffix(p, "a second DHCP server answered") {
+	if p := syslogLine(e, "pillowforrt", true); !strings.HasSuffix(p, "a second DHCP server answered") {
 		t.Errorf("public: %s", p)
 	}
 	esc := syslogLine(evt{Kind: `a"b\c]d`, Sev: sevInfo}, "o", false)
@@ -123,7 +123,7 @@ func TestExportStoreMQTTSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := s.Cfg().MQTT
-	if c.NodeID != "orbic" || c.Prefix != "stone" || c.PauseMinutes != 60 || c.Pass != "secret" {
+	if c.NodeID != "box" || c.Prefix != "pillowforrt" || c.PauseMinutes != 60 || c.Pass != "secret" {
 		t.Errorf("%+v", c)
 	}
 	// an empty password on a later save keeps the stored one

@@ -1,6 +1,6 @@
 package main
 
-// The devices view: every device the Orbic knows about, one row each, joining what the separate pages know: the radio (which band, how long connected), ARP and NDP
+// The devices view: every device the box knows about, one row each, joining what the separate pages know: the radio (which band, how long connected), ARP and NDP
 // (addresses, IPv4 and global IPv6), the DHCP reservations and the lease file (names, last lease), the block list, the firewall pauses and schedules. DNS activity and the VPN
 // exit are joined by the page from /api/dns and /api/vpn. A device the radio does not list (wired, or asleep) still shows from its reservation or lease.
 

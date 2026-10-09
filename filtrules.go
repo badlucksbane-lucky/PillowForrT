@@ -6,7 +6,7 @@ package main
 //   ads*.example.com  * stands for any run of characters (dots included), anywhere in the name
 //   *track*, *.zip    substring and whole-top-level-domain rules
 // Anything pasted is first reduced to a host name: scheme, user info, port, path, query and the adblock decorations (||host^) are dropped (DNS can only block a host, never a
-// path). Allow-list entries use the same patterns and always win. The Orbic's own lookups (loopback clients) are exempt from custom rules, so a careless pattern cannot cut
+// path). Allow-list entries use the same patterns and always win. The box's own lookups (loopback clients) are exempt from custom rules, so a careless pattern cannot cut
 // the router off from its list downloads or the Mullvad API.
 
 import (

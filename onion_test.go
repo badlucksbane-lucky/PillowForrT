@@ -344,7 +344,7 @@ func TestOnionWebIsReadOnlyAndNarrow(t *testing.T) {
 	if code, _ := w.do(t, "GET", "/ui", ""); code != 200 {
 		t.Errorf("the page after login: %d", code)
 	}
-	if code, _ := w.do(t, "GET", "/api/tor/onion", ""); code != 200 {
+	if code, _ := w.do(t, "GET", "/api/session", ""); code != 200 {
 		t.Errorf("reading is allowed: %d", code)
 	}
 	// every change is refused while remote writes are off, with the CSRF token or without
@@ -359,8 +359,8 @@ func TestOnionWebIsReadOnlyAndNarrow(t *testing.T) {
 	if _, body := w.do(t, "POST", "/api/tor/set", s.CSRF); strings.Contains(body, "read-only") {
 		t.Errorf("with remote writes on, an ordinary change is not refused as read-only: %s", body)
 	}
-	// ...but the door's own settings, SSH keys, the account and backup restore never go through the onion
-	for _, p := range []string{"/api/tor/onion/set", "/api/tor/onion/client", "/api/tor/onion/client/remove", "/api/ssh/add", "/api/ssh/delete", "/api/account/password", "/api/backup/restore"} {
+	// ...but SSH keys, the account and backup restore never go through the onion
+	for _, p := range []string{"/api/ssh/add", "/api/ssh/delete", "/api/account/password", "/api/backup/restore"} {
 		code, body := w.do(t, "POST", p, s.CSRF)
 		if code != 403 || !strings.Contains(body, "read-only") {
 			t.Errorf("POST %s with remote writes on: %d %s (must stay LAN-only)", p, code, body)
@@ -388,9 +388,9 @@ func TestOnionWebOnlyForLoopbackPeers(t *testing.T) {
 	}
 }
 
-func TestLANPageStillSecureCookieAndManagesTheDoor(t *testing.T) {
-	// the TLS listener keeps the Secure cookie (the existing login test), and the door can be managed from it
-	srv, c, _ := testWeb(t)
+// The .onion settings can only be changed over SSH: the web page and its API have nothing for them.
+func TestOnionIsSSHOnly(t *testing.T) {
+	srv, c, _ := testWeb(t) // the TLS listener keeps the Secure cookie (the existing login test)
 	login(t, srv, c, "ben", "correct horse battery")
 	var csrf string
 	u, _ := url.Parse(srv.URL)
@@ -404,24 +404,79 @@ func TestLANPageStillSecureCookieAndManagesTheDoor(t *testing.T) {
 	t.Cleanup(func() { torMgrG = prev })
 	m, _, _, _ := testTor(t)
 	torMgrG = m
-	req, _ := http.NewRequest("POST", srv.URL+"/api/tor/onion/set", strings.NewReader(`{"enabled":true}`))
+	pub := newTestPub(t)
+	for _, p := range []string{"/api/tor/onion", "/api/tor/onion/set", "/api/tor/onion/client", "/api/tor/onion/client/remove"} {
+		for _, method := range []string{"GET", "POST"} {
+			req, _ := http.NewRequest(method, srv.URL+p, strings.NewReader(`{"enabled":true,"name":"laptop","pub":"`+pub+`"}`))
+			req.Header.Set("X-CSRF-Token", csrf)
+			r, err := c.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r.Body.Close()
+			if r.StatusCode != 404 {
+				t.Errorf("%s %s: %d, want 404 (no such thing in the web API)", method, p, r.StatusCode)
+			}
+		}
+	}
+	if m.DoorEnabled() || len(m.cfg.Door.Clients) != 0 {
+		t.Fatal("the door must not have changed")
+	}
+	// the Tor switch no longer carries a .onion setting: an "onion" field in the request is ignored
+	req, _ := http.NewRequest("POST", srv.URL+"/api/tor/set", strings.NewReader(`{"enabled":false,"onion":true}`))
 	req.Header.Set("X-CSRF-Token", csrf)
 	r, err := c.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, _ := io.ReadAll(r.Body)
 	r.Body.Close()
-	if r.StatusCode != 400 || !strings.Contains(string(b), "authorize at least one device") {
-		t.Errorf("from the LAN page, switching on with no device is refused with the reason: %d %s", r.StatusCode, b)
+	if m.cfg.Onion {
+		t.Fatal("house-wide .onion was switched on from the web page")
 	}
+	if (*torMgr)(nil).DoorEnabled() {
+		t.Error("a nil manager has no door")
+	}
+}
+
+func TestOnionCLI(t *testing.T) {
+	m, _, _, _ := testTor(t)
 	pub := newTestPub(t)
-	req, _ = http.NewRequest("POST", srv.URL+"/api/tor/onion/client", strings.NewReader(`{"name":"laptop","pub":"`+pub+`"}`))
-	req.Header.Set("X-CSRF-Token", csrf)
-	r, _ = c.Do(req)
-	b, _ = io.ReadAll(r.Body)
-	r.Body.Close()
-	if r.StatusCode != 200 || strings.Contains(string(b), pub) || !strings.Contains(string(b), onionFingerprint(pub)) {
-		t.Errorf("adding a device: %d %s (the response shows the fingerprint, not the key)", r.StatusCode, b)
+	out, err := onionCLI(m, "status")
+	if err != nil || !strings.Contains(out, "house-wide .onion: off") || !strings.Contains(out, "onion door:        off") || !strings.Contains(out, "changes through it: off") {
+		t.Fatalf("everything is off until it is switched on over SSH: %v\n%s", err, out)
+	}
+	if _, err := onionCLI(m, "door=on"); err == nil || !strings.Contains(err.Error(), "authorize at least one device") {
+		t.Fatalf("the door cannot be switched on with no device: %v", err)
+	}
+	for _, bad := range []string{"door=maybe", "add=nocolon", "add=laptop:NOTAKEY", "remove=ghost", "bogus=1", "house=1"} {
+		if _, err := onionCLI(m, bad); err == nil {
+			t.Errorf("%q should be refused", bad)
+		}
+	}
+	if m.DoorEnabled() || m.cfg.Onion {
+		t.Fatal("a refused command must change nothing")
+	}
+	out, err = onionCLI(m, "add=laptop:"+pub+",door=on,write=on,house=on")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"house-wide .onion: on", "onion door:        on", "changes through it: on", "device laptop  key " + onionFingerprint(pub), "Restart tinyfwd"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("summary lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, pub) {
+		t.Error("the summary shows a fingerprint, never the key")
+	}
+	var saved torConfig
+	b, _ := os.ReadFile(m.path)
+	if json.Unmarshal(b, &saved) != nil || !saved.Onion || !saved.Door.Enabled || !saved.Door.RemoteWrite || len(saved.Door.Clients) != 1 {
+		t.Fatalf("not saved: %s", b)
+	}
+	if _, err := onionCLI(m, "remove=laptop"); err != nil || m.DoorEnabled() {
+		t.Fatalf("removing the last device switches the door off: %v", err)
+	}
+	if _, err := onionCLI(m, "house=off"); err != nil || m.cfg.Onion {
+		t.Fatal("house=off")
 	}
 }

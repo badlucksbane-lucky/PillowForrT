@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Stone of Heimdall</title>
+<title>PillowForrT</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>
 :root{--s1:#2a78d6;--s2:#eb6834;--gl:#e6d8b8;--ax:#cdb98e;--bg:#f1e4c8;--fg:#3f2a18;--card:#f8f0dc;--mut:#7a5638;--ac:#7b502d;--onac:#fff;--okc:#2e6b3f;--bad:#a3322a;--warn:#c08a1e;--ln:#d9c7a0}
@@ -83,7 +83,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 #tabs button{border:0;background:none;border-radius:12px;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px;color:var(--mut);position:relative}
 #tabs button.on{color:var(--ac);font-weight:600}#tabs button.on::before{content:"";position:absolute;top:-6px;width:34px;height:3px;border-radius:2px;background:var(--ac)}
 </style></head><body><main>
-<div class="brand"><img class="mark" src="/favicon.svg" alt=""><div><h1>Stone of Heimdall <span class="mut" id="ver"></span></h1><div class="tag mut">a watchman for your hotspot</div></div></div>
+<div class="brand"><img class="mark" src="/favicon.svg" alt=""><div><h1>PillowForrT <span class="mut" id="ver"></span></h1><div class="tag mut">a watchman for your hotspot</div></div></div>
 <div class="row" style="margin-bottom:6px"><form method="post" action="/logout" style="margin:0"><button>Sign out</button></form></div>
 <div id="banner"></div>
 <div class="card hero"><h2></h2>
@@ -154,7 +154,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 <div class="sec">System</div>
 <div class="card"><h2>Diagnostics</h2><div id="dg" class="mut">Not run yet.</div><div id="dgmsg" class="msg"></div></div>
 <div class="card"><h2>Admin</h2><div id="sys" class="mut">loading</div><div id="ymsg" class="msg"></div>
- <div style="margin-top:14px"><b>Onion door</b> <span id="odbadge"></span></div><div id="od" class="mut">loading</div><div id="odmsg" class="msg"></div></div>
+</div>
 <div class="card" id="c-cell"><h2>Cellular <span id="cebadge"></span></h2><div id="cell" class="mut">loading</div></div>
 <div class="card"><h2>Towers (WiGLE) <span id="twbadge"></span></h2><div id="tw" class="mut">loading</div><div id="twmsg" class="msg"></div></div>
 <div class="card"><h2>Certificate</h2><div id="crt" class="mut">loading</div><div id="cmsg" class="msg"></div></div>
@@ -348,36 +348,15 @@ function trrender(force){const el=$('tor');if(!Tr||guard(el,force))return;
  if(Tr.available===false){el.textContent='Tor is not available on this build.';return}
  $('torbadge').innerHTML=Tr.blocked?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+Tr.devices.length+' device'+(Tr.devices.length===1?'':'s')+' waiting for Tor</span>':Tr.ready?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; ready</span>'+((Tr.devices||[]).length?'<span class="cnt" title="devices sent through Tor">'+Tr.devices.length+'</span>':''):'';
  const [tk,tw]=trstate(),rss=Tr.rss_mb?Math.round(Tr.rss_mb):0,tt=TrTest;
- el.innerHTML='<div class="row"><span class="dot'+(tk?' '+tk:'')+'"></span><b>'+tw+'</b>'+(Tr.yielding?chip(Math.ceil(Tr.yield_left_s/60)+' min','warn','back in about '+Math.ceil(Tr.yield_left_s/60)+' min'):'')+'<span style="flex:1"></span>'+sw(Tr.enabled,'trset('+(!Tr.enabled)+','+Tr.onion+')','Tor')+'</div>'+
+ el.innerHTML='<div class="row"><span class="dot'+(tk?' '+tk:'')+'"></span><b>'+tw+'</b>'+(Tr.yielding?chip(Math.ceil(Tr.yield_left_s/60)+' min','warn','back in about '+Math.ceil(Tr.yield_left_s/60)+' min'):'')+'<span style="flex:1"></span>'+sw(Tr.enabled,'trset('+(!Tr.enabled)+')','Tor')+'</div>'+
   (Tr.running&&!Tr.ready&&!Tr.yielding?'<div class="bar"><i style="width:'+(Tr.bootstrap||0)+'%"></i></div>':'')+
   (Tr.running?'<div class="row" style="margin-top:10px">'+(rss?chip(rss+' MB','','used by Tor'):'')+chip(Math.round(Tr.avail_mb)+' MB free','','free on the router')+(Tr.restarts?chip(Tr.restarts+' restart'+(Tr.restarts===1?'':'s'),'warn'):'')+'</div>':'')+
   (Tr.error?'<div class="err" style="margin-top:6px">'+esc(Tr.error)+'</div>':'')+
   '<div class="row" style="margin-top:12px"><span title="Tor connects through the Mullvad tunnel, so the carrier sees the tunnel and not Tor">Over Mullvad</span>'+(Tr.vpn_wait?chip('waiting','warn','waiting for the tunnel'):'')+'<span style="flex:1"></span>'+sw(Tr.over_vpn,'trovervpn('+(!Tr.over_vpn)+')','Tor over Mullvad')+'</div>'+
   '<div class="row" style="margin-top:12px"><button onclick="trtest()">Test</button>'+(tt?'<span class="dot'+(tt.k?' '+tt.k:'')+'"></span><span class="mut">'+esc(tt.t)+'</span>':'')+'</div>'}
-async function trload(){try{Tr=await (await api('/api/tor')).json();trrender();if(typeof Eg!=='undefined'&&Eg)egrender()}catch(e){}odload()}
-let Od=null;
-function odrender(force){const el=$('od');if(!Od||guard(el,force))return;
- if(Od.available===false){el.textContent='The onion door is not available on this build.';return}
- $('odbadge').innerHTML=Od.active?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; '+(Od.address?'published':'on')+'</span>':'';
- const cl=(Od.clients||[]).map(c=>'<tr><td><b>'+esc(c.name)+'</b><div class="mut">key '+esc(c.fingerprint)+'</div></td><td><button onclick="odrm(\''+esc(c.name)+'\')">Remove</button></td></tr>').join('')||'<tr><td class="mut">no device is authorized yet</td></tr>';
- el.innerHTML='<div class="mut">Reach this page from anywhere through Tor, no open port. Only authorized devices can find it. Read-only through the door; no SSH.</div>'+
-  '<div class="row" style="margin-top:8px"><span>'+(Od.enabled?(Od.active?'On':'On, not published yet'):'Off')+'</span><span><button class="'+(Od.enabled?'':'on')+'" onclick="odset('+!Od.enabled+')">'+(Od.enabled?'Switch off':'Switch on')+'</button></span></div>'+
-  (Od.note?'<div class="err" style="margin-top:4px">'+esc(Od.note)+'</div>':'')+
-  '<div class="row" style="margin-top:6px"><label><input type="checkbox" '+(Od.remote_write?'checked ':'')+'onchange="odset(null,this.checked)"> allow changes through the door</label></div>'+
-  (Od.address?'<div class="mut" style="margin-top:6px">Address (private; shown only on this page): <code>'+esc(Od.address)+'.onion</code></div>':'')+
-  '<table>'+cl+'</table>'+
-  '<div class="row" style="margin-top:6px"><input id="od_name" placeholder="device name, e.g. laptop" maxlength="24"><input id="od_pub" placeholder="its PUBLIC key (52 letters)" maxlength="60" size="40"><button onclick="odadd()">Authorize</button></div>'+
-  '<div class="mut" style="margin-top:6px">Generate a key on your device; paste the public half here. Door settings, SSH keys and login are LAN-only.</div>'}
-async function odload(){try{Od=await (await api('/api/tor/onion')).json();odrender()}catch(e){}}
-function odpick(v,cur){return v===null||v===undefined?cur:v}
-async function odset(en,rw){const n={enabled:odpick(en,Od.enabled),remote_write:odpick(rw,Od.remote_write)};
- if(n.remote_write&&!Od.remote_write&&!confirm('Allow changes through the door? Anyone holding an authorized key and the login could then change settings from outside the house. (The door\'s own settings, SSH keys and the login stay LAN-only.)')){odrender(true);return}
- if(n.enabled&&!Od.enabled&&!confirm('Switch the onion door on? The router becomes reachable, through Tor, by the devices you authorized.'))return;
- const r=await apost('tor/onion/set',n);$('odmsg').textContent=r.j.error||'';odload()}
-async function odadd(){const r=await apost('tor/onion/client',{name:$('od_name').value,pub:$('od_pub').value});$('odmsg').textContent=r.j.error||'';odload()}
-async function odrm(name){if(!confirm('Remove '+name+'? It can no longer find the door (a connection it already holds may continue until it closes).'))return;const r=await apost('tor/onion/client/remove',{name});$('odmsg').textContent=r.j.error||'';odload()}
+async function trload(){try{Tr=await (await api('/api/tor')).json();trrender();if(typeof Eg!=='undefined'&&Eg)egrender()}catch(e){}}
 async function trovervpn(on){const r=await apost('tor/overvpn',{on});$('tormsg').textContent=r.j.error||'';trload()}
-async function trset(en,on){const r=await apost('tor/set',{enabled:en,onion:on});$('tormsg').textContent=r.j.error||'';trload()}
+async function trset(en){const r=await apost('tor/set',{enabled:en});$('tormsg').textContent=r.j.error||'';trload()}
 async function trdev(mac,on){if(on?!confirm('Send this device through Tor? All its internet traffic is forced through Tor (slower), its non-TCP traffic is blocked, and it has no internet while Tor is not ready.'):!confirm('Give this device its direct internet line back? Its traffic will no longer go through Tor.'))return;const r=await apost('tor/device',{mac,on});$('egmsg').textContent=r.j.error||'';trload()}
 async function trtest(){TrTest={k:'warn',t:'testing, this can take a minute'};trrender(true);const r=await apost('tor/test',{});TrTest=r.ok?(r.j.IsTor?{k:'ok',t:'works, exit '+r.j.IP}:{k:'bad',t:'not Tor ('+r.j.IP+')'}):{k:'bad',t:'failed: '+(r.j.error||'?')};trrender(true)}
 let Lh=null,LhH=168;
@@ -441,8 +420,8 @@ function rdrender(force){const el=$('rd');if(!Rd||guard(el,force))return;
  if(Rd.available===false){el.textContent='The DHCP watch is not running on this build.';return}
  const n=(Rd.servers||[]).length;
  $('rdbadge').innerHTML=n?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+n+' other server'+(n===1?'':'s')+'</span>':'';
- det(el,'rdrender',{sev:!Rd.capture_ok?'bad':n?'bad':'ok',label:!Rd.capture_ok?'Not running':n?'Rogue server':'Only the Orbic',chips:chip(Rd.honest_replies+' replies','','honest replies seen'),
-  tip:'Passive DHCP listener. Only the Orbic may answer; a second server or a forged gateway is an alert.',
+ det(el,'rdrender',{sev:!Rd.capture_ok?'bad':n?'bad':'ok',label:!Rd.capture_ok?'Not running':n?'Rogue server':'Only the box',chips:chip(Rd.honest_replies+' replies','','honest replies seen'),
+  tip:'Passive DHCP listener. Only the box may answer; a second server or a forged gateway is an alert.',
   rows:(Rd.servers||[]).map(x=>({k:x.mac,t:x.last,sev:'bad',title:'<b>'+esc(x.ip)+'</b> '+x.replies+' repl'+(x.replies===1?'y':'ies'),detail:esc(x.mac)+' &middot; '+esc((x.types||[]).join(', '))+(x.offered?' &middot; offered '+esc(x.offered):'')+' &middot; '+esc(dwhen(x.first))+' to '+esc(dwhen(x.last)),act:'<button class="on" onclick="rdallow(\''+x.mac+'\',true)">Allow this server</button>'})),
   foot:dsec('Allowed',(Rd.allowed||[]).length,(Rd.allowed||[]).map(a=>'<div class="rl"><span class="t">'+esc(a.mac)+'</span>'+chip(a.replies?a.replies+' answers':'not seen','')+dx2('Stop allowing',"rdallow('"+a.mac+"',false)")+'</div>').join(''))})}
 async function rdload(){try{Rd=await (await api('/api/rogue-dhcp')).json();rdrender()}catch(e){}}
@@ -453,8 +432,8 @@ function strender(force){const el=$('st');if(!St||guard(el,force))return;
  $('stbadge').innerHTML=n?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+St.sources+' other router'+(St.sources===1?'':'s')+'</span>':'';
  const sd=x=>{if(x.kind==='ra'){const d=[x.lifetime>0?'default router for '+x.lifetime+' s':'router lifetime 0 (withdrawal)'];if(x.managed)d.push('addresses by DHCPv6');if((x.prefixes||[]).length)d.push('prefix '+x.prefixes.map(esc).join(', '));if((x.dns||[]).length)d.push('DNS servers '+x.dns.map(esc).join(', '));else if(x.search)d.push('a DNS search list');return {t:'IPv6 router advertisement',d:d.join('; ')}}
   return {t:(x.kind==='redirect6'?'ICMPv6':'ICMP')+' redirect',d:'telling '+esc(x.victim||'?')+' to use '+esc(x.via||'?')+(x.dest?' for '+esc(x.dest):'')}};
- det(el,'strender',{sev:!St.capture_ok?'bad':n?'bad':'ok',label:!St.capture_ok?'Not running':n?'Another router':'Only the Orbic',chips:chip(St.honest+' own','','of the Orbic\'s own announcements seen'),
-  tip:'Passive watch for IPv6 router advertisements and ICMP redirects, the messages that tell a device to change its router. Only the Orbic may send them; a second router you run yourself can be allowed by its MAC.',
+ det(el,'strender',{sev:!St.capture_ok?'bad':n?'bad':'ok',label:!St.capture_ok?'Not running':n?'Another router':'Only the box',chips:chip(St.honest+' own','','of the box\'s own announcements seen'),
+  tip:'Passive watch for IPv6 router advertisements and ICMP redirects, the messages that tell a device to change its router. Only the box may send them; a second router you run yourself can be allowed by its MAC.',
   rows:ms.slice(0,30).map(x=>{const q=sd(x);return {k:x.t+x.mac,t:x.t,sev:'bad',title:'<b>'+esc(x.name||x.mac)+'</b> '+q.t,detail:esc(x.mac)+' &middot; '+esc(x.ip)+' &middot; '+q.d,act:'<button class="on" onclick="stallow(\''+x.mac+'\',true)">Allow this router</button>'}}),
   foot:dsec('Allowed',(St.allowed||[]).length,(St.allowed||[]).map(a=>'<div class="rl"><span class="t">'+esc(a.mac)+'</span>'+chip(a.seen?a.seen+' seen':'not seen')+dx2('Stop allowing',"stallow('"+a.mac+"',false)")+'</div>').join(''))})}
 async function stallow(mac,on){if(on&&!confirm('Allow '+mac+' to announce routes on this network? Only do this for a router you run yourself: devices that listen to it will send their traffic, and maybe their name lookups, through it.'))return;const r=await apost('steer/allow',{mac,allow:on});if(!r.ok){const m=$('stmsg');if(m)m.textContent=r.j.error||'failed';return}St=r.j;strender(true)}
@@ -522,7 +501,7 @@ function tb2render(force){const el=$('tb2');if(!Tb2||guard(el,force))return;
  $('tbbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
  const what={tor_bypass_exit:'connected directly to a known Tor relay',tor_bypass_onion:'asked for a .onion name while not assigned to Tor'};
  det(el,'tb2render',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',
-  tip:'Devices reaching Tor outside the Orbic\'s own Tor path, or attempting a .onion lookup the router refused. A device already sent through Tor on this page is never flagged.',
+  tip:'Devices reaching Tor outside the box\'s own Tor path, or attempting a .onion lookup the router refused. A device already sent through Tor on this page is never flagged.',
   rows:f.map(x=>({k:x.t+x.ip,t:x.t,title:'<b>'+esc(x.ip)+'</b> '+(what[x.kind]||esc(x.kind)),detail:(x.mac?esc(x.mac):'')+(x.dst?' &middot; '+esc(x.dst):'')+(x.name?' &middot; '+esc(x.name):'')}))})}
 async function tb2load(){try{Tb2=await (await api('/api/torbypass')).json();tb2render()}catch(e){}}
 let Ts=null;
@@ -631,7 +610,7 @@ function serender(force){const el=$('se');if(!Se||guard(el,force))return;
  el.innerHTML='<div class="row"><span class="dot'+(!Se.enabled?'':bad?' bad':' ok')+'"></span><b>'+(Se.enabled?'On':'Off')+'</b>'+(Se.enabled&&bad?chip('path down','bad',bad):'')+(Se.enabled&&leak?chip('DNS direct','warn','Names are looked up outside the proxy'):'')+'<span style="flex:1"></span>'+(Se.enabled?'<button type="button" class="on" onclick="window.open(\'/browse\',\'_blank\',\'noopener\')">Open</button>':'')+sw(Se.enabled,'seset({enabled:'+!Se.enabled+'})','Search')+'</div>'+
   '<div class="row" style="margin-top:10px"><span class="mut" style="min-width:48px">Proxy</span>'+seg('proxy')+'</div>'+
   '<div class="row" style="margin-top:8px"><span class="mut" style="min-width:48px">DNS</span>'+seg('dns')+'</div>'+
-  (Se.bt?'<div class="row" style="margin-top:10px"><span class="mut" style="min-width:48px">Play</span>'+sw(Se.bt.enabled,'btset('+!Se.bt.enabled+')','Torrent playback')+(Se.bt.enabled&&Se.bt.ready?chip('needs Mullvad','bad',Se.bt.ready):'')+(Se.bt.enabled&&!Se.bt.ready?'<span class="dot ok"></span>':'')+'<span style="flex:1"></span><a href="/api/cert/orbic.crt" title="Install this box certificate so the browser trusts it (the player needs that). On iPhone, then switch it on in Settings, General, About, Certificate Trust Settings."><button type="button">Trust certificate</button></a></div>'+(Se.bt.enabled?'<div class="row" style="margin-top:8px"><span class="mut" style="min-width:48px">Upload</span><span class="seg full" role="radiogroup" aria-label="Upload while playing">'+[['off','Off'],['low','128 KB/s'],['normal','512 KB/s']].map(u=>'<button type="button" class="'+(Se.bt.upload===u[0]?'on':'')+'" onclick="btset(null,\''+u[0]+'\')">'+u[1]+'</button>').join('')+'</span></div>':''):'')+
+  (Se.bt?'<div class="row" style="margin-top:10px"><span class="mut" style="min-width:48px">Play</span>'+sw(Se.bt.enabled,'btset('+!Se.bt.enabled+')','Torrent playback')+(Se.bt.enabled&&Se.bt.ready?chip('needs Mullvad','bad',Se.bt.ready):'')+(Se.bt.enabled&&!Se.bt.ready?'<span class="dot ok"></span>':'')+'<span style="flex:1"></span><a href="/api/cert/pillowforrt.crt" title="Install this box certificate so the browser trusts it (the player needs that). On iPhone, then switch it on in Settings, General, About, Certificate Trust Settings."><button type="button">Trust certificate</button></a></div>'+(Se.bt.enabled?'<div class="row" style="margin-top:8px"><span class="mut" style="min-width:48px">Upload</span><span class="seg full" role="radiogroup" aria-label="Upload while playing">'+[['off','Off'],['low','128 KB/s'],['normal','512 KB/s']].map(u=>'<button type="button" class="'+(Se.bt.upload===u[0]?'on':'')+'" onclick="btset(null,\''+u[0]+'\')">'+u[1]+'</button>').join('')+'</span></div>':''):'')+
   '<div class="chips" style="margin-top:10px">'+Se.engines.map(e=>'<button type="button" class="chip'+(e.on?' on':'')+'" aria-pressed="'+e.on+'" onclick="seset({engine:\''+e.id+'\',on:'+!e.on+'})">'+esc(e.name)+'</button>').join('')+'</div>'}
 async function seload(){try{Se=await (await api('/api/search')).json();serender()}catch(e){}}
 async function btset(on,upload){const r=await apost('bt/set',upload?{upload}:{enabled:on});$('semsg').textContent=r.j.error||'';seload()}
@@ -647,7 +626,7 @@ function acrender(force){const el=$('ac');if(!Ac||guard(el,force))return;
   '<div class="mut" style="margin-top:4px">Reboot requires confirmation and is blocked within 10 min of startup.</div>'}
 async function acload(){try{Ac=await (await api('/api/actions')).json();acrender()}catch(e){}}
 async function acdo(p,b){const r=await apost(p,b);$('acmsg').textContent=r.j.error||r.j.status||'';acload();return r}
-function acconfirm(kind){if(kind!=='reboot')return '';const w=prompt('This will reboot the Orbic: every device loses Wi-Fi and the internet for about a minute.\n\nType  reboot  to confirm:');return w}
+function acconfirm(kind){if(kind!=='reboot')return '';const w=prompt('This will reboot the box: every device loses Wi-Fi and the internet for about a minute.\n\nType  reboot  to confirm:');return w}
 function acadd(){const kind=$('ac_kind').value;const c=acconfirm(kind);if(kind==='reboot'&&c!=='reboot'){if(c!==null)$('acmsg').textContent='Not saved: the word did not match.';return}
  const days=[...document.querySelectorAll('.ac_day')].filter(x=>x.checked).map(x=>parseInt(x.value));acdo('actions/set',{action:kind,time:$('ac_time').value.trim(),days,name:$('ac_name').value,enabled:true,confirm:c||''})}
 function actoggle(id){const a=(Ac.actions||[]).find(x=>x.id===id);if(!a)return;const c=a.action==='reboot'&&!a.enabled?acconfirm('reboot'):'';if(a.action==='reboot'&&!a.enabled&&c!=='reboot')return;acdo('actions/set',{id,action:a.action,time:a.time,days:a.days,name:a.name,enabled:!a.enabled,confirm:a.action==='reboot'?'reboot':''})}
@@ -698,11 +677,11 @@ function xprender(force){const el=$('xp');if(!Xp||guard(el,force))return;
   '<div class="mut" style="margin:4px 0"><code>curl -sN -H "X-UI-Token: $TOKEN" "https://'+esc(host)+'/api/tap?filter=all&amp;seconds=600" | suricata -r /dev/stdin</code></div>'+
   '<div class="row"><button class="'+(tp.enabled?'':'on')+'" onclick="xptap('+(!tp.enabled)+')">'+(tp.enabled?'Switch off':'Switch on')+'</button></div>'+
   '<div style="margin-top:10px"><b>Home Assistant (MQTT)</b> '+mqstate+(mq.addr?' &rarr; '+esc(mq.addr):'')+'</div>'+
-  '<div class="mut" style="margin:4px 0">Announces one device with its sensors through MQTT discovery, a presence tracker per device, and each event on <code>'+esc(mq.prefix||'stone')+'/'+esc(mq.node_id||'orbic')+'/event</code>. Plain MQTT to a broker on the LAN only.</div>'+
+  '<div class="mut" style="margin:4px 0">Announces one device with its sensors through MQTT discovery, a presence tracker per device, and each event on <code>'+esc(mq.prefix||'pillowforrt')+'/'+esc(mq.node_id||'box')+'/event</code>. Plain MQTT to a broker on the LAN only.</div>'+
   '<div class="row"><input id="xp_mq_addr" placeholder="192.168.1.20:1883" value="'+esc(mq.addr||'')+'" style="width:14em"><input id="xp_mq_user" placeholder="user (optional)" value="'+esc(mq.user||'')+'" style="width:10em"><input id="xp_mq_pass" type="password" autocomplete="off" placeholder="'+(mq.pass_set?'password saved (blank keeps it)':'password (optional)')+'" style="width:14em"></div>'+
-  '<div class="row" style="margin-top:6px"><input id="xp_mq_node" placeholder="node id" value="'+esc(mq.node_id||'orbic')+'" style="width:8em"><input id="xp_mq_prefix" placeholder="prefix" value="'+esc(mq.prefix||'stone')+'" style="width:8em"><label><input type="checkbox" id="xp_mq_ctl" '+(mq.control?'checked':'')+'> let Home Assistant pause a device for</label><input id="xp_mq_min" type="number" min="1" max="1440" value="'+(mq.pause_minutes||60)+'" style="width:5em"> min<label><input type="checkbox" id="xp_mq_on" '+(mq.enabled?'checked':'')+'> connect</label></div>'+
+  '<div class="row" style="margin-top:6px"><input id="xp_mq_node" placeholder="node id" value="'+esc(mq.node_id||'box')+'" style="width:8em"><input id="xp_mq_prefix" placeholder="prefix" value="'+esc(mq.prefix||'pillowforrt')+'" style="width:8em"><label><input type="checkbox" id="xp_mq_ctl" '+(mq.control?'checked':'')+'> let Home Assistant pause a device for</label><input id="xp_mq_min" type="number" min="1" max="1440" value="'+(mq.pause_minutes||60)+'" style="width:5em"> min<label><input type="checkbox" id="xp_mq_on" '+(mq.enabled?'checked':'')+'> connect</label></div>'+
   '<div class="row" style="margin-top:6px"><button class="on" onclick="xpmqtt()">Save</button><button onclick="xpmqclear()"'+(mq.pass_set?'':' disabled')+'>Remove the password</button></div>'+
-  '<div class="mut" style="margin-top:10px"><b>Grafana</b>: <code>/metrics</code> is already there; <code>contrib/grafana/stone-of-heimdall.json</code> in the repository is a dashboard to import.</div>'}
+  '<div class="mut" style="margin-top:10px"><b>Grafana</b>: <code>/metrics</code> is already there; <code>contrib/grafana/pillowforrt.json</code> in the repository is a dashboard to import.</div>'}
 async function xpload(){try{Xp=await (await api('/api/export')).json();xprender()}catch(e){}}
 async function xpsyslog(){const r=await apost('export/syslog',{enabled:$('xp_sl_on').checked,addr:$('xp_sl_addr').value.trim(),public:$('xp_sl_pub').checked});$('xpmsg').textContent=r.j.error||r.j.status||'';xpload()}
 async function xpsltest(){const r=await apost('export/syslog/test',{});$('xpmsg').textContent=r.j.error||r.j.status||'';xpload()}
@@ -886,12 +865,12 @@ function yrender(force){const el=$('sys');if(!Sy||guard(el,force))return;const y
   row('Temperatures',tp||'?','')+row('Battery',b.known?(b.mv/1000).toFixed(2)+' V, level '+b.level+', '+b.temp_c+'&deg;':'unknown','the firmware&#39;s own level scale')+'</table>'+
   '<table style="margin-top:8px">'+sv+'</table>'+
   '<div style="margin-top:12px"><b>Stock admin</b> '+(Sa?(Sa.off?'<b style="color:var(--ac)">switched off</b>':'<b class="err">still reachable</b>'):'')+'</div>'+
-  '<div class="mut" style="margin:4px 0">Off = <code>192.168.1.1</code> redirects here. Still needed for SIM PIN only. Undo: <code>ssh orbic rm /data/proxy/stockadmin.off</code>.</div>'+
+  '<div class="mut" style="margin:4px 0">Off = <code>192.168.1.1</code> redirects here. Still needed for SIM PIN only. Undo: <code>ssh pillowforrt rm /data/proxy/stockadmin.off</code>.</div>'+
   '<div class="row"><button class="'+(Sa&&Sa.off?'':'on')+'" onclick="ysa('+(Sa&&Sa.off?'false':'true')+')">'+(Sa&&Sa.off?'Switch the stock admin back on':'Switch the stock admin off')+'</button>'+(Sa&&Sa.off&&!Sa.rules_in_place?'<span class="err">the firewall rules are not in place yet: they are applied within 20 seconds</span>':'')+'</div>'+
   '<div style="margin-top:12px"><b>LAN IPv6</b> '+(Sl?(Sl.off?'<b style="color:var(--ac)">switched off</b>':'<b>on</b>'):'')+'</div>'+
-  '<div class="mut" style="margin:4px 0">Prevents WebRTC IPv6 leaks. Off = devices drop carrier IPv6 (IPv4 unaffected). Default off after boot. <code>ssh orbic touch /data/proxy/lanv6.on</code>.</div>'+
+  '<div class="mut" style="margin:4px 0">Prevents WebRTC IPv6 leaks. Off = devices drop carrier IPv6 (IPv4 unaffected). Default off after boot. <code>ssh pillowforrt touch /data/proxy/lanv6.on</code>.</div>'+
   '<div class="row"><button class="'+(Sl&&Sl.off?'':'on')+'" onclick="ylv6('+(Sl&&Sl.off?'false':'true')+')">'+(Sl&&Sl.off?'Switch LAN IPv6 back on':'Switch LAN IPv6 off')+'</button>'+(Sl&&Sl.off&&!Sl.rules_in_place?'<span class="err">the firewall rules are not in place yet: they are applied within 20 seconds</span>':'')+'</div>'+
-  '<div class="row" style="margin-top:10px"><button onclick="yreboot()">Reboot the Orbic</button><span class="mut">Everything drops for 1–2 min. DHCP reservations restored on boot.</span></div>'}
+  '<div class="row" style="margin-top:10px"><button onclick="yreboot()">Reboot the box</button><span class="mut">Everything drops for 1–2 min. DHCP reservations restored on boot.</span></div>'}
 let EgTog=(()=>{try{return JSON.parse(localStorage.getItem('egt')||'{}')}catch(e){return{}}})(),EgDns={};
 function egdevs(){const m={},add=(mac,o)=>{mac=(mac||'').toLowerCase();if(!mac)return;m[mac]=Object.assign(m[mac]||{mac,known:false},o)};
  ((Dv&&Dv.devices)||[]).forEach(d=>add(d.mac,{known:true,dev:d,name:d.label||d.name||d.hostname||(d.random_mac?'private-MAC device':'unknown device'),ip:d.ip,online:d.online}));
@@ -924,11 +903,10 @@ function egrender(force){const el=$('eg');if(!Eg||guard(el,force))return;
 EgDns={};(DnsC||[]).forEach(c=>EgDns[c.ip]=c);
 const devs=egdevs(),pt=devs.reduce((n,d)=>n+d.pend.length,0);
 $('egbadge').innerHTML='<span class="cnt" title="devices">'+devs.length+'</span>'+(pt?'<span class="cnt" style="color:var(--bad);border-color:var(--bad)" title="would be refused">'+pt+'</span>':'');
-el.innerHTML='<div class="row" title="Only listed services may connect out (DNS is separate). Watch only logs without blocking. Undo: ssh orbic rm /data/proxy/egress.json"><span class="mut">Outbound</span>'+seg('Outbound firewall',[['off','Off'],['monitor','Watch only'],['enforce','Enforce']],Eg.mode,v=>"yegm('"+v+"')")+(Eg.rules_in_place?'':'<span class="err">rules not in place yet (20 s)</span>')+'</div>'+
-  '<details style="margin-top:8px"'+(EgTog._f?' open':'')+' ontoggle="EgTog._f=this.open"><summary><b>For everyone</b> <span class="mut">services, other ports, HTTP upgrade, .onion</span></summary>'+
+el.innerHTML='<div class="row" title="Only listed services may connect out (DNS is separate). Watch only logs without blocking. Undo: ssh pillowforrt rm /data/proxy/egress.json"><span class="mut">Outbound</span>'+seg('Outbound firewall',[['off','Off'],['monitor','Watch only'],['enforce','Enforce']],Eg.mode,v=>"yegm('"+v+"')")+(Eg.rules_in_place?'':'<span class="err">rules not in place yet (20 s)</span>')+'</div>'+
+  '<details style="margin-top:8px"'+(EgTog._f?' open':'')+' ontoggle="EgTog._f=this.open"><summary><b>For everyone</b> <span class="mut">services, other ports, HTTP upgrade</span></summary>'+
   '<table>'+Eg.services.map(s=>'<tr><td style="width:28px"><input type="checkbox" aria-label="Allow '+esc(s.name)+' for everyone"'+(s.on?' checked':'')+' onchange="yegsv(\''+s.id+'\',this.checked,\'\')"></td><td><b>'+esc(s.name)+'</b><br><span class="mut">'+esc(s.desc)+'</span></td><td class="mut">'+esc(s.ports)+'</td></tr>').join('')+'</table>'+
   '<div style="margin-top:8px"><b>Other allowed ports</b></div><table style="margin-top:6px">'+(Eg.allow||[]).map(r=>'<tr><td>'+r.proto+' '+esc(r.ports)+'</td><td>'+esc(r.note||'')+'</td><td><button onclick="yegr(\''+r.proto+'\',\''+r.ports+'\',\'\')">remove</button></td></tr>').join('')+(Eg.allow&&Eg.allow.length?'':'<tr><td class="mut">none</td></tr>')+'</table>'+
-  (Tr&&Tr.available!==false?'<div class="row" style="margin-top:8px"><label><input type="checkbox" '+(Tr.onion?'checked ':'')+'onchange="trset('+Tr.enabled+',this.checked)"> <b>.onion for the whole house</b></label></div>':'')+
   '<div style="margin-top:8px"><b>Upgrade plain HTTP to HTTPS</b> <b style="color:var(--ac)">'+(Eg.http_upgrade?'on':'off')+'</b></div>'+
   '<div class="mut" style="margin:4px 0">Port 80 stays open, but a page asked for over plain HTTP is first sent to its https:// address. If the same device comes back for the same site within 2 minutes and no HTTPS connection exists, it <b>fell back</b>: that is noted and the plain request is let through. A device that cannot follow redirects (curl without -L, some gadgets, firmware updaters) will not work: leave it out on its card. Served '+Eg.http_upgraded+', fell back '+Eg.http_fell_back+' since start.</div>'+
   '<div class="row"><button class="'+(Eg.http_upgrade?'on':'')+'" onclick="yhup('+!Eg.http_upgrade+',\'\')">'+(Eg.http_upgrade?'Turn the upgrade off':'Turn the upgrade on')+'</button>'+((Eg.http_upgrade_skip||[]).length?'<span class="mut">'+Eg.http_upgrade_skip.length+' device(s) left out</span>':'')+'</div></details>'+
@@ -945,7 +923,7 @@ async function yhup(on,mac){const r=await apost('egress/httpupgrade',{on,mac});e
 async function yegr(p,ports,mac){const r=await apost('egress/remove',{proto:p,ports,mac});egreload(r.j.error||r.j.status)}
 async function ylv6(off){if(off&&!confirm('Switch IPv6 off for the whole LAN? Devices lose their carrier IPv6 address (IPv4 keeps working). You can switch it back on here at any time.'))return;const r=await apost('system/lanv6',{off});$('ymsg').textContent=r.j.error||r.j.status||'';yload()}
 async function ysa(off){if(off&&!confirm('Switch the stock admin off for the whole network? Opening 192.168.1.1 will show this page instead. You can switch it back on here at any time.'))return;const r=await apost('system/stockadmin',{off});$('ymsg').textContent=r.j.error||r.j.status||'';yload()}
-async function yreboot(){const w=prompt('Reboot the Orbic? Every device loses Wi-Fi and the internet for 1 to 2 minutes.\n\nType  reboot  to confirm:');if(w!=='reboot'){if(w!==null)$('ymsg').textContent='Not rebooted: the word did not match.';return}
+async function yreboot(){const w=prompt('Reboot the box? Every device loses Wi-Fi and the internet for 1 to 2 minutes.\n\nType  reboot  to confirm:');if(w!=='reboot'){if(w!==null)$('ymsg').textContent='Not rebooted: the word did not match.';return}
  const r=await apost('system/reboot',{confirm:'reboot'});$('ymsg').textContent=r.j.error||r.j.status||''}
 let Ce=null,CeS=null;
 function cb(n){if(n==null)return'?';const u=['B','KB','MB','GB','TB'];let i=0;n=Number(n);while(n>=1024&&i<4){n/=1024;i++}return (i?n.toFixed(n<10?2:1):n)+' '+u[i]}

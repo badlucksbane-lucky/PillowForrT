@@ -77,7 +77,7 @@ func createCert(dir string, names []string, ips []net.IP, now time.Time) (tls.Ce
 	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
 	tpl := &x509.Certificate{
 		SerialNumber:          serial,
-		Subject:               pkix.Name{CommonName: "orbic", Organization: []string{"Stone of Heimdall"}},
+		Subject:               pkix.Name{CommonName: "pillowforrt", Organization: []string{"PillowForrT"}},
 		NotBefore:             now.Add(-time.Hour),
 		NotAfter:              now.Add(800 * 24 * time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,

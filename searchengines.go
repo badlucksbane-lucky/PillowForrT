@@ -28,7 +28,7 @@ var searchEngines = []searchEngine{
 
 const (
 	browserUA = "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
-	wikiUA    = "StoneOfHeimdall-search/1 (self-hosted metasearch on a hotspot)"
+	wikiUA    = "PillowForrT-search/1 (self-hosted metasearch on a hotspot)"
 	maxPerEng = 12
 	maxSnip   = 260
 )

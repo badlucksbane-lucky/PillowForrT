@@ -1,5 +1,5 @@
 {
-  "name": "heimdall-btclient",
+  "name": "pillowforrt-btclient",
   "private": true,
   "description": "Browser torrent client for the browse page: WebTorrent with its TCP peers carried over a WebSocket to the box (see net-shim.js). Build: ./build.sh",
   "type": "module",

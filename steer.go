@@ -4,10 +4,10 @@ package main
 // others, all of them one unauthenticated frame that every operating system honours by default:
 //   - an IPv6 router advertisement (ICMPv6 type 134). Whoever sends one becomes a default router for every Windows, Android, Apple and Linux device that hears it, and the
 //     RDNSS option in it hands them a DNS server as well, which Windows prefers over the IPv4 one it got from DHCP. That is the mitm6 attack. It works on the LAN even though
-//     LAN IPv6 is off on this box (lanv6.go): "off" stops the Orbic's own advertisements and refuses LAN IPv6 towards the cellular side, but the devices still listen to each
+//     LAN IPv6 is off on this box (lanv6.go): "off" stops the box's own advertisements and refuses LAN IPv6 towards the cellular side, but the devices still listen to each
 //     other, and a rogue advertiser needs no uplink to put itself between two of them or to answer their name lookups itself. The only honest advertiser on this bridge is the
-//     Orbic (radish relaying the carrier's advertisements while LAN IPv6 is on, and the withdraw advertisement while it is off), always from the bridge's own MAC.
-//   - an ICMPv6 redirect (type 137) and an ICMPv4 redirect (type 5): "send traffic for X through Y instead". Only a router sends them, the Orbic is the only router here, and a
+//     the box (radish relaying the carrier's advertisements while LAN IPv6 is on, and the withdraw advertisement while it is off), always from the bridge's own MAC.
+//   - an ICMPv6 redirect (type 137) and an ICMPv4 redirect (type 5): "send traffic for X through Y instead". Only a router sends them, the box is the only router here, and a
 //     redirect from anything else steers one device's traffic through another.
 // Every such frame from a MAC other than the bridge's own is an alert (ra_rogue, redirect_rogue), once per source per kind per 10 minutes. A second router the owner runs on
 // purpose can be allowed by its MAC, as with rogue DHCP; never by address, which is what a forger controls. Read passively through an AF_PACKET socket filtered in the kernel to
@@ -148,7 +148,7 @@ type steerWatch struct {
 	allowed map[string]*steerAllowed
 	msgs    []steerMsg
 	lastEv  map[string]time.Time
-	honest  int // the Orbic's own advertisements and redirects
+	honest  int // the box's own advertisements and redirects
 	selfMAC func() string
 	nameOf  func(mac string) string
 	now     func() time.Time
@@ -231,7 +231,7 @@ func (w *steerWatch) Allow(mac string, add bool) error {
 			return errors.New("too many allowed routers (8 is the limit)")
 		}
 		if mac == w.selfMAC() {
-			return errors.New("that is the Orbic's own address: it is always trusted")
+			return errors.New("that is the box's own address: it is always trusted")
 		}
 		keep = append(keep, mac)
 		var rest []steerMsg
@@ -311,7 +311,7 @@ func (w *steerWatch) Observe(m steerMsg, now time.Time) {
 			dns = " It offered DNS servers too, which Windows prefers over the ones DHCP gave it, so those devices' name lookups go around the encrypted DNS stub."
 		}
 		e = evt{Kind: "ra_rogue", Sev: sevAlert, Public: "A device on the network is announcing itself as a router",
-			Text: fmt.Sprintf("%s is sending IPv6 router advertisements (%s). Only the Orbic may do that: every device that listens sends traffic through the announcer, on the LAN whether or not LAN IPv6 is on. This is how mitm6-style attacks start; a second router you run yourself can be allowed on the card.%s", who, strings.Join(d, "; "), dns)}
+			Text: fmt.Sprintf("%s is sending IPv6 router advertisements (%s). Only the box may do that: every device that listens sends traffic through the announcer, on the LAN whether or not LAN IPv6 is on. This is how mitm6-style attacks start; a second router you run yourself can be allowed on the card.%s", who, strings.Join(d, "; "), dns)}
 	} else {
 		fam := "ICMP"
 		if m.Kind == "redirect6" {
@@ -322,7 +322,7 @@ func (w *steerWatch) Observe(m steerMsg, now time.Time) {
 			dest = " for traffic to " + m.Dest
 		}
 		e = evt{Kind: "redirect_rogue", Sev: sevAlert, Public: "A device on the network is redirecting another device's traffic",
-			Text: fmt.Sprintf("%s sent an %s redirect telling %s to use %s as its router%s. Only a router sends redirects and the Orbic is the only router here, so this steers one device's traffic through another.", who, fam, m.Victim, m.Via, dest)}
+			Text: fmt.Sprintf("%s sent an %s redirect telling %s to use %s as its router%s. Only a router sends redirects and the box is the only router here, so this steers one device's traffic through another.", who, fam, m.Victim, m.Via, dest)}
 	}
 	e.T = m.T
 	w.emit(e)
@@ -390,9 +390,9 @@ func (w *steerWatch) capture() error {
 type steerView struct {
 	Available bool           `json:"available"`
 	CaptureOK bool           `json:"capture_ok"`
-	Honest    int            `json:"honest"`   // the Orbic's own messages seen
+	Honest    int            `json:"honest"`   // the box's own messages seen
 	Messages  []steerMsg     `json:"messages"` // newest first
-	Alerts    int            `json:"alerts"`   // messages from anything other than the Orbic in the last 24 hours
+	Alerts    int            `json:"alerts"`   // messages from anything other than the box in the last 24 hours
 	Sources   int            `json:"sources"`  // distinct MACs behind them
 	Allowed   []steerAllowed `json:"allowed"`
 }

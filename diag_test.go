@@ -100,7 +100,7 @@ func TestDiagThresholds(t *testing.T) {
 		{"stale lists", "dns.lists", "warn", func(in *diagInputs) { in.Lists[0].Updated = in.Now.Add(-100 * time.Hour) }},
 		{"empty list", "dns.lists", "warn", func(in *diagInputs) { in.Lists[0].Entries = 0 }},
 		{"cert close", "sec.cert", "warn", func(in *diagInputs) { in.Cert.DaysLeft = 30 }},
-		{"cert missing name", "sec.cert", "warn", func(in *diagInputs) { in.Cert.Missing = []string{"orbic"} }},
+		{"cert missing name", "sec.cert", "warn", func(in *diagInputs) { in.Cert.Missing = []string{"pillowforrt"} }},
 		{"no ssh keys", "sec.ssh", "fail", func(in *diagInputs) { in.SSH.Keys = nil }},
 		{"ssh hammering", "sec.ssh", "warn", func(in *diagInputs) { in.SSH.Summary.Failed = 50 }},
 		{"no snapshot", "sec.backup", "warn", func(in *diagInputs) { in.Snapshots = nil }},

@@ -19,7 +19,7 @@ func TestGuardedDialRefusesOwnAddresses(t *testing.T) {
 			return []net.IPAddr{{IP: net.ParseIP("::1")}, {IP: net.ParseIP("127.0.0.1")}}, nil
 		case "rebind.example":
 			return []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}, {IP: net.ParseIP("93.184.216.34")}}, nil
-		case "orbic":
+		case "pillowforrt":
 			return []net.IPAddr{{IP: net.ParseIP("192.168.1.1")}}, nil
 		}
 		return nil, errors.New("no such host")
@@ -31,7 +31,7 @@ func TestGuardedDialRefusesOwnAddresses(t *testing.T) {
 		b.Close()
 		return a, nil
 	}
-	for _, addr := range []string{"127.0.0.1:3130", "127.0.0.2:9050", "[::1]:3130", "localhost:3130", "0.0.0.0:80", "169.254.1.1:80", "192.168.1.1:443", "10.64.0.2:80", "orbic:443", "224.0.0.1:80"} {
+	for _, addr := range []string{"127.0.0.1:3130", "127.0.0.2:9050", "[::1]:3130", "localhost:3130", "0.0.0.0:80", "169.254.1.1:80", "192.168.1.1:443", "10.64.0.2:80", "pillowforrt:443", "224.0.0.1:80"} {
 		dialed = nil
 		if _, err := guardedDial(context.Background(), "tcp", addr, false, lookup, dial); err == nil {
 			t.Errorf("%s: dialed %v, want refused", addr, dialed)

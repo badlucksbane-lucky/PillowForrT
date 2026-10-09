@@ -113,13 +113,13 @@ class Flows(Base):
         rc, dev, out = self.run_main(["install", "--payload", self.pay, "--answers", self.answers(token=True)])
         blob = out + repr(dev.calls) + repr(dev.at_lines)
         for secret in (WIFI_PW, LOGIN_PW): self.assertNotIn(secret, blob)
-        tok = open(os.path.join(self.home, ".heimdallstone", "ui.token")).read().strip()
+        tok = open(os.path.join(self.home, ".pillowforrt", "ui.token")).read().strip()
         self.assertEqual(len(tok), 64); self.assertNotIn(tok, blob)
-        self.assertEqual(stat.S_IMODE(os.stat(os.path.join(self.home, ".heimdallstone", "ui.token")).st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(os.stat(os.path.join(self.home, ".pillowforrt", "ui.token")).st_mode), 0o600)
         self.assertEqual(dev.pushed["/tmp/stone/secrets/ui.token"][0].decode().strip(), tok)
 
     def test_new_token_keeps_the_old_one(self):
-        d = os.path.join(self.home, ".heimdallstone"); os.makedirs(d); open(os.path.join(d, "ui.token"), "w").write("OLDTOKEN\n")
+        d = os.path.join(self.home, ".pillowforrt"); os.makedirs(d); open(os.path.join(d, "ui.token"), "w").write("OLDTOKEN\n")
         self.run_main(["install", "--payload", self.pay, "--answers", self.answers(token=True)])
         self.assertEqual(open(os.path.join(d, "ui.token.old")).read().strip(), "OLDTOKEN")
 
@@ -127,7 +127,7 @@ class Flows(Base):
         dev = FakeDevice(log_script=["10:00:00 STEP wifi", "10:00:01 could not set the Wi-Fi", "10:00:01 STONE-FAILED wifi", "10:00:02 rolled back", "10:00:02 STONE-DONE"])
         rc, _, out = self.run_main(["install", "--payload", self.pay, "--answers", self.answers()], dev=dev)
         self.assertEqual(rc, 1); self.assertIn("FAILED and was rolled back", out); self.assertIn("could not set the Wi-Fi", out)
-        self.assertFalse(os.path.exists(os.path.join(self.home, ".heimdallstone", "ui.token")))
+        self.assertFalse(os.path.exists(os.path.join(self.home, ".pillowforrt", "ui.token")))
 
     def test_mode_switch_when_only_the_normal_mode_shows(self):
         rc, dev, _ = self.run_main(["install", "--payload", self.pay, "--answers", self.answers()], dev=FakeDevice(pids=(0xF626,)))

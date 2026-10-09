@@ -1,6 +1,6 @@
 # Logo and brand assets
 
-The Stone of Heimdall mark: a six-arc bridge (Bifröst, the bridge Heimdall guards) in sepia tones, with a small watching stone and its one lit eye at its foot. Parchment is the lead presentation; the dark versions are for dark surfaces.
+The PillowForrT mark: a six-arc bridge (Bifröst, the bridge Heimdall guards) in sepia tones, with a small watching stone and its one lit eye at its foot. Parchment is the lead presentation; the dark versions are for dark surfaces.
 
 **Licence:** MIT, the same as the project (see `../LICENSE`). Use, modify and share them freely; keep the copyright notice.
 

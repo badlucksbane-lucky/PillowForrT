@@ -1,8 +1,8 @@
 package main
 
-// The Orbic's view: GET /status.json reports what it sees from its vantage point
+// The box's view: GET /status.json reports what it sees from its vantage point
 // (outside the companion computer's NAT, on the carrier's edge). POST|GET /beat is a companion computer's heartbeat;
-// if the beats stop, the Orbic notices from outside and runs the event hook.
+// if the beats stop, the box notices from outside and runs the event hook.
 
 import (
 	"crypto/subtle"
@@ -23,7 +23,7 @@ const version = "0.48.0"
 
 var startTime = time.Now()
 
-// ---- uplink probe: can the Orbic itself reach the internet, and how fast ----
+// ---- uplink probe: can the box itself reach the internet, and how fast ----
 
 type uplinkState struct {
 	OK        bool    `json:"ok"`
@@ -105,7 +105,7 @@ func fireEvent(ev string) {
 		return
 	}
 	cmd := exec.Command(*eventHook, ev)
-	cmd.Env = append(os.Environ(), "ORBIC_EVENT="+ev)
+	cmd.Env = append(os.Environ(), "PILLOWFORRT_EVENT="+ev)
 	go func() {
 		out, err := cmd.CombinedOutput()
 		log.Printf("event hook %s %s: err=%v out=%q", *eventHook, ev, err, strings.TrimSpace(string(out)))
@@ -200,7 +200,7 @@ func maxTempC() float64 {
 			m = float64(v)
 		}
 	}
-	return m // the Orbic reports whole degrees C
+	return m // the box reports whole degrees C
 }
 
 // wifiClients counts distinct IPs in the ARP table on the hotspot bridge.
@@ -251,7 +251,7 @@ func serveStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out := map[string]any{
-		"node":    "orbic",
+		"node":    "pillowforrt",
 		"class":   "vantage",
 		"version": version,
 		"time":    now.Unix(),

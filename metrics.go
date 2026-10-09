@@ -1,6 +1,6 @@
 package main
 
-// /metrics: the Orbic's numbers in the Prometheus text format (version 0.0.4), for Prometheus, Grafana Agent, VictoriaMetrics or a plain `curl`. Served on the same two
+// /metrics: the box's numbers in the Prometheus text format (version 0.0.4), for Prometheus, Grafana Agent, VictoriaMetrics or a plain `curl`. Served on the same two
 // listeners as /status.json (plain HTTP on the LAN: http://192.168.1.254/metrics or :3128/metrics, and the HTTPS page), LAN-only like everything else here, and **aggregate
 // only**: no device names, MACs, IP addresses, host names, message text or keys, so it is safe to scrape without a login (anything per-device stays behind the login). The
 // text is built at most every 10 seconds (the expensive reads run once per interval, however many scrapers ask). Counters reset when tinyfwd or the box restarts, which
@@ -117,144 +117,144 @@ type dnsM struct {
 
 func buildMetrics(in metricsIn) string {
 	m := newMB()
-	m.metric("orbic_build_info", "gauge", "tinyfwd version (the value is always 1).", 1, "version", in.Version)
-	m.metric("orbic_daemon_uptime_seconds", "gauge", "Seconds since tinyfwd started.", in.DaemonUptime)
-	m.metric("orbic_daemon_goroutines", "gauge", "Goroutines in tinyfwd.", float64(in.Goroutines))
-	m.metric("orbic_daemon_heap_bytes", "gauge", "Go heap in use by tinyfwd.", float64(in.HeapBytes))
+	m.metric("pillowforrt_build_info", "gauge", "tinyfwd version (the value is always 1).", 1, "version", in.Version)
+	m.metric("pillowforrt_daemon_uptime_seconds", "gauge", "Seconds since tinyfwd started.", in.DaemonUptime)
+	m.metric("pillowforrt_daemon_goroutines", "gauge", "Goroutines in tinyfwd.", float64(in.Goroutines))
+	m.metric("pillowforrt_daemon_heap_bytes", "gauge", "Go heap in use by tinyfwd.", float64(in.HeapBytes))
 	if u := in.Uplink; u != nil {
-		m.metric("orbic_uplink_up", "gauge", "1 if the last probe of the cellular uplink answered.", b2f(u.OK))
-		m.metric("orbic_uplink_latency_seconds", "gauge", "Latency of the last successful uplink probe (TCP connect).", u.LatencyMs/1000)
-		m.metric("orbic_uplink_consecutive_failures", "gauge", "Failed uplink probes in a row.", float64(u.Fails))
-		m.metric("orbic_uplink_last_check_timestamp_seconds", "gauge", "Unix time of the last uplink probe.", float64(u.Checked))
+		m.metric("pillowforrt_uplink_up", "gauge", "1 if the last probe of the cellular uplink answered.", b2f(u.OK))
+		m.metric("pillowforrt_uplink_latency_seconds", "gauge", "Latency of the last successful uplink probe (TCP connect).", u.LatencyMs/1000)
+		m.metric("pillowforrt_uplink_consecutive_failures", "gauge", "Failed uplink probes in a row.", float64(u.Fails))
+		m.metric("pillowforrt_uplink_last_check_timestamp_seconds", "gauge", "Unix time of the last uplink probe.", float64(u.Checked))
 	}
 	if c := in.Cell; c != nil {
-		m.metric("orbic_uplink_interface_up", "gauge", "1 if the cellular data interface is up.", b2f(c.Up))
-		m.metric("orbic_uplink_receive_bytes_total", "counter", "Bytes received on the cellular interface since boot.", float64(c.RxBytes))
-		m.metric("orbic_uplink_transmit_bytes_total", "counter", "Bytes sent on the cellular interface since boot.", float64(c.TxBytes))
-		m.metric("orbic_uplink_receive_packets_total", "counter", "Packets received on the cellular interface since boot.", float64(c.RxPackets))
-		m.metric("orbic_uplink_transmit_packets_total", "counter", "Packets sent on the cellular interface since boot.", float64(c.TxPackets))
-		m.metric("orbic_uplink_receive_errors_total", "counter", "Receive errors on the cellular interface.", float64(c.RxErrors))
-		m.metric("orbic_uplink_transmit_errors_total", "counter", "Transmit errors on the cellular interface.", float64(c.TxErrors))
-		m.metric("orbic_uplink_receive_drops_total", "counter", "Receive drops on the cellular interface.", float64(c.RxDrops))
-		m.metric("orbic_uplink_transmit_drops_total", "counter", "Transmit drops on the cellular interface.", float64(c.TxDrops))
-		m.metric("orbic_uplink_cgnat", "gauge", "1 if the uplink address is carrier-grade NAT (nothing can reach in).", b2f(c.CGNAT))
+		m.metric("pillowforrt_uplink_interface_up", "gauge", "1 if the cellular data interface is up.", b2f(c.Up))
+		m.metric("pillowforrt_uplink_receive_bytes_total", "counter", "Bytes received on the cellular interface since boot.", float64(c.RxBytes))
+		m.metric("pillowforrt_uplink_transmit_bytes_total", "counter", "Bytes sent on the cellular interface since boot.", float64(c.TxBytes))
+		m.metric("pillowforrt_uplink_receive_packets_total", "counter", "Packets received on the cellular interface since boot.", float64(c.RxPackets))
+		m.metric("pillowforrt_uplink_transmit_packets_total", "counter", "Packets sent on the cellular interface since boot.", float64(c.TxPackets))
+		m.metric("pillowforrt_uplink_receive_errors_total", "counter", "Receive errors on the cellular interface.", float64(c.RxErrors))
+		m.metric("pillowforrt_uplink_transmit_errors_total", "counter", "Transmit errors on the cellular interface.", float64(c.TxErrors))
+		m.metric("pillowforrt_uplink_receive_drops_total", "counter", "Receive drops on the cellular interface.", float64(c.RxDrops))
+		m.metric("pillowforrt_uplink_transmit_drops_total", "counter", "Transmit drops on the cellular interface.", float64(c.TxDrops))
+		m.metric("pillowforrt_uplink_cgnat", "gauge", "1 if the uplink address is carrier-grade NAT (nothing can reach in).", b2f(c.CGNAT))
 	}
 	if in.UsageSet {
-		m.metric("orbic_data_cycle_receive_bytes", "gauge", "Bytes downloaded in the current billing cycle (counted by the vantage node).", in.UsageDown)
-		m.metric("orbic_data_cycle_transmit_bytes", "gauge", "Bytes uploaded in the current billing cycle.", in.UsageUp)
+		m.metric("pillowforrt_data_cycle_receive_bytes", "gauge", "Bytes downloaded in the current billing cycle (counted by the vantage node).", in.UsageDown)
+		m.metric("pillowforrt_data_cycle_transmit_bytes", "gauge", "Bytes uploaded in the current billing cycle.", in.UsageUp)
 	}
-	m.metric("orbic_proxy_connections_total", "counter", "Proxy connections accepted since tinyfwd started.", float64(in.ProxyConnsTot))
-	m.metric("orbic_proxy_connections_active", "gauge", "Proxy connections open now.", float64(in.ProxyConnsAct))
-	m.metric("orbic_proxy_upload_bytes_total", "counter", "Bytes the proxy sent upstream.", float64(in.ProxyUp))
-	m.metric("orbic_proxy_download_bytes_total", "counter", "Bytes the proxy received from upstream.", float64(in.ProxyDown))
+	m.metric("pillowforrt_proxy_connections_total", "counter", "Proxy connections accepted since tinyfwd started.", float64(in.ProxyConnsTot))
+	m.metric("pillowforrt_proxy_connections_active", "gauge", "Proxy connections open now.", float64(in.ProxyConnsAct))
+	m.metric("pillowforrt_proxy_upload_bytes_total", "counter", "Bytes the proxy sent upstream.", float64(in.ProxyUp))
+	m.metric("pillowforrt_proxy_download_bytes_total", "counter", "Bytes the proxy received from upstream.", float64(in.ProxyDown))
 	if s := in.Sys; s != nil {
-		m.metric("orbic_uptime_seconds", "gauge", "Seconds since the Orbic booted.", float64(s.UptimeS))
-		m.metric("orbic_load1", "gauge", "1-minute load average (one core).", s.Load[0])
-		m.metric("orbic_load5", "gauge", "5-minute load average.", s.Load[1])
-		m.metric("orbic_load15", "gauge", "15-minute load average.", s.Load[2])
-		m.metric("orbic_memory_total_bytes", "gauge", "Total RAM.", float64(s.MemTotalKB)*1024)
-		m.metric("orbic_memory_available_bytes", "gauge", "Available RAM.", float64(s.MemAvailKB)*1024)
+		m.metric("pillowforrt_uptime_seconds", "gauge", "Seconds since the box booted.", float64(s.UptimeS))
+		m.metric("pillowforrt_load1", "gauge", "1-minute load average (one core).", s.Load[0])
+		m.metric("pillowforrt_load5", "gauge", "5-minute load average.", s.Load[1])
+		m.metric("pillowforrt_load15", "gauge", "15-minute load average.", s.Load[2])
+		m.metric("pillowforrt_memory_total_bytes", "gauge", "Total RAM.", float64(s.MemTotalKB)*1024)
+		m.metric("pillowforrt_memory_available_bytes", "gauge", "Available RAM.", float64(s.MemAvailKB)*1024)
 		for _, t := range s.Temps {
-			m.metric("orbic_temperature_celsius", "gauge", "Temperature of a thermal sensor.", t.C, "sensor", t.Name)
+			m.metric("pillowforrt_temperature_celsius", "gauge", "Temperature of a thermal sensor.", t.C, "sensor", t.Name)
 		}
 		for _, d := range s.Disks {
-			m.metric("orbic_filesystem_size_bytes", "gauge", "Size of a filesystem.", float64(d.TotalB), "mount", d.Path)
-			m.metric("orbic_filesystem_free_bytes", "gauge", "Free space on a filesystem.", float64(d.FreeB), "mount", d.Path)
+			m.metric("pillowforrt_filesystem_size_bytes", "gauge", "Size of a filesystem.", float64(d.TotalB), "mount", d.Path)
+			m.metric("pillowforrt_filesystem_free_bytes", "gauge", "Free space on a filesystem.", float64(d.FreeB), "mount", d.Path)
 		}
 		if s.Battery.Known {
-			m.metric("orbic_battery_voltage_volts", "gauge", "Battery voltage as the firmware logs it.", float64(s.Battery.MV)/1000)
-			m.metric("orbic_battery_level", "gauge", "Battery level on the firmware's own scale.", float64(s.Battery.Level))
-			m.metric("orbic_battery_temperature_celsius", "gauge", "Battery temperature.", float64(s.Battery.TempC))
+			m.metric("pillowforrt_battery_voltage_volts", "gauge", "Battery voltage as the firmware logs it.", float64(s.Battery.MV)/1000)
+			m.metric("pillowforrt_battery_level", "gauge", "Battery level on the firmware's own scale.", float64(s.Battery.Level))
+			m.metric("pillowforrt_battery_temperature_celsius", "gauge", "Battery temperature.", float64(s.Battery.TempC))
 		}
 		for _, sv := range s.Services {
 			slug := serviceSlug(sv.Name)
 			if slug == "hostapd_5ghz" && in.Wifi5Up == nil {
 				continue // the 5 GHz network is switched off: its absence is not a failure
 			}
-			m.metric("orbic_service_up", "gauge", "1 if the service is running (or held stopped on purpose).", b2f(sv.State == "running" || sv.State == "held"), "service", slug)
+			m.metric("pillowforrt_service_up", "gauge", "1 if the service is running (or held stopped on purpose).", b2f(sv.State == "running" || sv.State == "held"), "service", slug)
 		}
 	}
 	if in.Wifi24Up != nil {
-		m.metric("orbic_wifi_radio_up", "gauge", "1 if the Wi-Fi radio is up.", b2f(*in.Wifi24Up), "band", "2.4ghz")
-		m.metric("orbic_wifi_clients", "gauge", "Devices associated with the radio.", float64(in.Wifi24Clients), "band", "2.4ghz")
+		m.metric("pillowforrt_wifi_radio_up", "gauge", "1 if the Wi-Fi radio is up.", b2f(*in.Wifi24Up), "band", "2.4ghz")
+		m.metric("pillowforrt_wifi_clients", "gauge", "Devices associated with the radio.", float64(in.Wifi24Clients), "band", "2.4ghz")
 	}
 	if in.Wifi5Up != nil {
-		m.metric("orbic_wifi_radio_up", "gauge", "1 if the Wi-Fi radio is up.", b2f(*in.Wifi5Up), "band", "5ghz")
-		m.metric("orbic_wifi_clients", "gauge", "Devices associated with the radio.", float64(in.Wifi5Clients), "band", "5ghz")
+		m.metric("pillowforrt_wifi_radio_up", "gauge", "1 if the Wi-Fi radio is up.", b2f(*in.Wifi5Up), "band", "5ghz")
+		m.metric("pillowforrt_wifi_clients", "gauge", "Devices associated with the radio.", float64(in.Wifi5Clients), "band", "5ghz")
 	}
-	m.metric("orbic_dhcp_leases_active", "gauge", "DHCP leases currently active.", float64(in.Leases))
-	m.metric("orbic_dhcp_pool_size", "gauge", "Addresses in the dynamic DHCP pool.", float64(in.PoolSize))
-	m.metric("orbic_dhcp_reservations", "gauge", "DHCP reservations.", float64(in.Reservations))
-	m.metric("orbic_firewall_blocked_devices", "gauge", "Devices on the block list.", float64(in.BlockedDevices))
-	m.metric("orbic_firewall_blocked_destinations", "gauge", "Blocked destination addresses or ranges.", float64(in.BlockedDests))
-	m.metric("orbic_firewall_schedules", "gauge", "Internet schedules.", float64(in.Schedules))
-	m.metric("orbic_firewall_paused_devices", "gauge", "Devices whose internet is paused right now.", float64(in.PausedDevices))
+	m.metric("pillowforrt_dhcp_leases_active", "gauge", "DHCP leases currently active.", float64(in.Leases))
+	m.metric("pillowforrt_dhcp_pool_size", "gauge", "Addresses in the dynamic DHCP pool.", float64(in.PoolSize))
+	m.metric("pillowforrt_dhcp_reservations", "gauge", "DHCP reservations.", float64(in.Reservations))
+	m.metric("pillowforrt_firewall_blocked_devices", "gauge", "Devices on the block list.", float64(in.BlockedDevices))
+	m.metric("pillowforrt_firewall_blocked_destinations", "gauge", "Blocked destination addresses or ranges.", float64(in.BlockedDests))
+	m.metric("pillowforrt_firewall_schedules", "gauge", "Internet schedules.", float64(in.Schedules))
+	m.metric("pillowforrt_firewall_paused_devices", "gauge", "Devices whose internet is paused right now.", float64(in.PausedDevices))
 	if d := in.DNS; d != nil {
-		m.metric("orbic_dns_queries_total", "counter", "DNS queries answered since tinyfwd started.", float64(d.Queries))
-		m.metric("orbic_dns_blocked_total", "counter", "DNS queries blocked by the filter.", float64(d.Blocked))
-		m.metric("orbic_dns_cached_total", "counter", "DNS queries answered from the cache.", float64(d.Cached))
-		m.metric("orbic_dns_upstream_doh_total", "counter", "Queries sent upstream over DoH.", float64(d.DoH))
-		m.metric("orbic_dns_errors_total", "counter", "DNS errors.", float64(d.Errors))
-		m.metric("orbic_dns_cache_entries", "gauge", "Entries in the DNS cache.", float64(d.CacheEntries))
-		m.metric("orbic_dns_upstream_failing", "gauge", "1 if encrypted DNS is failing and lookups are being refused (nothing is ever sent as plain DNS).", b2f(d.Fallback))
-		m.metric("orbic_dns_filter_enabled", "gauge", "1 if the DNS filter is on (any mode but off).", b2f(d.Mode != "off" && d.Mode != ""))
+		m.metric("pillowforrt_dns_queries_total", "counter", "DNS queries answered since tinyfwd started.", float64(d.Queries))
+		m.metric("pillowforrt_dns_blocked_total", "counter", "DNS queries blocked by the filter.", float64(d.Blocked))
+		m.metric("pillowforrt_dns_cached_total", "counter", "DNS queries answered from the cache.", float64(d.Cached))
+		m.metric("pillowforrt_dns_upstream_doh_total", "counter", "Queries sent upstream over DoH.", float64(d.DoH))
+		m.metric("pillowforrt_dns_errors_total", "counter", "DNS errors.", float64(d.Errors))
+		m.metric("pillowforrt_dns_cache_entries", "gauge", "Entries in the DNS cache.", float64(d.CacheEntries))
+		m.metric("pillowforrt_dns_upstream_failing", "gauge", "1 if encrypted DNS is failing and lookups are being refused (nothing is ever sent as plain DNS).", b2f(d.Fallback))
+		m.metric("pillowforrt_dns_filter_enabled", "gauge", "1 if the DNS filter is on (any mode but off).", b2f(d.Mode != "off" && d.Mode != ""))
 		for _, l := range d.Lists {
-			m.metric("orbic_dns_list_entries", "gauge", "Entries in a block list.", float64(l.Entries), "list", l.Name)
+			m.metric("pillowforrt_dns_list_entries", "gauge", "Entries in a block list.", float64(l.Entries), "list", l.Name)
 			if !l.Updated.IsZero() {
-				m.metric("orbic_dns_list_age_seconds", "gauge", "Seconds since a block list was last updated.", in.Now.Sub(l.Updated).Seconds(), "list", l.Name)
+				m.metric("pillowforrt_dns_list_age_seconds", "gauge", "Seconds since a block list was last updated.", in.Now.Sub(l.Updated).Seconds(), "list", l.Name)
 			}
 		}
 	}
 	if v := in.VPN; v != nil && v.Registered {
-		m.metric("orbic_vpn_enabled", "gauge", "1 if the VPN exit is switched on.", b2f(v.Enabled))
-		m.metric("orbic_vpn_up", "gauge", "1 if the VPN tunnel is up.", b2f(v.Up))
-		m.metric("orbic_vpn_handshake_age_seconds", "gauge", "Seconds since the last VPN handshake.", float64(v.HandshakeS))
-		m.metric("orbic_vpn_receive_bytes_total", "counter", "Bytes received through the VPN.", float64(v.Rx))
-		m.metric("orbic_vpn_transmit_bytes_total", "counter", "Bytes sent through the VPN.", float64(v.Tx))
+		m.metric("pillowforrt_vpn_enabled", "gauge", "1 if the VPN exit is switched on.", b2f(v.Enabled))
+		m.metric("pillowforrt_vpn_up", "gauge", "1 if the VPN tunnel is up.", b2f(v.Up))
+		m.metric("pillowforrt_vpn_handshake_age_seconds", "gauge", "Seconds since the last VPN handshake.", float64(v.HandshakeS))
+		m.metric("pillowforrt_vpn_receive_bytes_total", "counter", "Bytes received through the VPN.", float64(v.Rx))
+		m.metric("pillowforrt_vpn_transmit_bytes_total", "counter", "Bytes sent through the VPN.", float64(v.Tx))
 	}
 	if in.CertNotAfter > 0 {
-		m.metric("orbic_web_certificate_expiry_timestamp_seconds", "gauge", "Unix time the web page certificate expires.", float64(in.CertNotAfter))
-		m.metric("orbic_web_certificate_days_left", "gauge", "Days until the web page certificate expires.", float64(in.CertDaysLeft))
+		m.metric("pillowforrt_web_certificate_expiry_timestamp_seconds", "gauge", "Unix time the web page certificate expires.", float64(in.CertNotAfter))
+		m.metric("pillowforrt_web_certificate_days_left", "gauge", "Days until the web page certificate expires.", float64(in.CertDaysLeft))
 	}
-	m.metric("orbic_ssh_logins", "gauge", "Successful ssh logins since the last reboot (the log is in RAM).", float64(in.SSHLogins))
-	m.metric("orbic_ssh_failed_attempts", "gauge", "Failed ssh login attempts since the last reboot.", float64(in.SSHFailed))
-	m.metric("orbic_events_unseen_attention", "gauge", "Events that need attention and have not been marked seen.", float64(in.EventsUnseen))
+	m.metric("pillowforrt_ssh_logins", "gauge", "Successful ssh logins since the last reboot (the log is in RAM).", float64(in.SSHLogins))
+	m.metric("pillowforrt_ssh_failed_attempts", "gauge", "Failed ssh login attempts since the last reboot.", float64(in.SSHFailed))
+	m.metric("pillowforrt_events_unseen_attention", "gauge", "Events that need attention and have not been marked seen.", float64(in.EventsUnseen))
 	if in.StockAdminOff != nil {
-		m.metric("orbic_stock_admin_off", "gauge", "1 if the stock admin is switched off for the network.", b2f(*in.StockAdminOff))
+		m.metric("pillowforrt_stock_admin_off", "gauge", "1 if the stock admin is switched off for the network.", b2f(*in.StockAdminOff))
 	}
 	if d := in.Dnsmasq; d != nil {
-		m.metric("orbic_dnsmasq_running", "gauge", "1 if dnsmasq (DHCP and DNS) is running.", b2f(d.Running))
-		m.metric("orbic_dnsmasq_upgraded", "gauge", "1 if the running dnsmasq is our 2.91 build, not the stock 2.73.", b2f(d.Ours))
-		m.metric("orbic_dnsmasq_dhcp_hook", "gauge", "1 if dnsmasq runs our DHCP hook script.", b2f(d.Hook))
+		m.metric("pillowforrt_dnsmasq_running", "gauge", "1 if dnsmasq (DHCP and DNS) is running.", b2f(d.Running))
+		m.metric("pillowforrt_dnsmasq_upgraded", "gauge", "1 if the running dnsmasq is our 2.91 build, not the stock 2.73.", b2f(d.Ours))
+		m.metric("pillowforrt_dnsmasq_dhcp_hook", "gauge", "1 if dnsmasq runs our DHCP hook script.", b2f(d.Hook))
 	}
 	if r := in.Rogue; r != nil {
-		m.metric("orbic_rogue_dhcp_servers", "gauge", "Other DHCP servers that answered on the network in the last day (should be 0).", float64(len(r.Servers)))
+		m.metric("pillowforrt_rogue_dhcp_servers", "gauge", "Other DHCP servers that answered on the network in the last day (should be 0).", float64(len(r.Servers)))
 	}
 	if st := in.Steer; st != nil {
-		m.metric("orbic_steer_alerts", "gauge", "IPv6 router advertisements and ICMP redirects from anything other than the Orbic in the last day (should be 0).", float64(st.Alerts))
+		m.metric("pillowforrt_steer_alerts", "gauge", "IPv6 router advertisements and ICMP redirects from anything other than the box in the last day (should be 0).", float64(st.Alerts))
 	}
 	if sp := in.Speed; sp != nil && sp.Last != nil && sp.Last.Err == "" {
-		m.metric("orbic_speedtest_download_bytes_per_second", "gauge", "Download rate of the last scheduled speed test (a small test, for trends).", sp.Last.Down)
-		m.metric("orbic_speedtest_upload_bytes_per_second", "gauge", "Upload rate of the last speed test.", sp.Last.Up)
-		m.metric("orbic_speedtest_timestamp_seconds", "gauge", "Unix time of the last speed test.", float64(sp.Last.T))
+		m.metric("pillowforrt_speedtest_download_bytes_per_second", "gauge", "Download rate of the last scheduled speed test (a small test, for trends).", sp.Last.Down)
+		m.metric("pillowforrt_speedtest_upload_bytes_per_second", "gauge", "Upload rate of the last speed test.", sp.Last.Up)
+		m.metric("pillowforrt_speedtest_timestamp_seconds", "gauge", "Unix time of the last speed test.", float64(sp.Last.T))
 	}
 	if a := in.ARP; a != nil {
-		m.metric("orbic_arp_spoof_alerts", "gauge", "Gateway-impersonation and reserved-address conflicts seen in the last 24 hours (should be 0).", float64(a.Alerts))
-		m.metric("orbic_arp_address_changes", "gauge", "Addresses that quickly changed owner in the last 24 hours.", float64(len(a.Findings)-a.Alerts-a.Sweeps))
-		m.metric("orbic_arp_sweeps", "gauge", "Host scans of the LAN seen in the last 24 hours (one device asking for 20 or more addresses within a minute).", float64(a.Sweeps))
+		m.metric("pillowforrt_arp_spoof_alerts", "gauge", "Gateway-impersonation and reserved-address conflicts seen in the last 24 hours (should be 0).", float64(a.Alerts))
+		m.metric("pillowforrt_arp_address_changes", "gauge", "Addresses that quickly changed owner in the last 24 hours.", float64(len(a.Findings)-a.Alerts-a.Sweeps))
+		m.metric("pillowforrt_arp_sweeps", "gauge", "Host scans of the LAN seen in the last 24 hours (one device asking for 20 or more addresses within a minute).", float64(a.Sweeps))
 	}
 	if l := in.Link; l != nil && l.Probes > 0 {
-		m.metric("orbic_uplink_probe_loss_ratio_24h", "gauge", "Share of uplink probes (a TCP connect every 30 s) that failed in the last 24 hours.", l.LossPct/100)
-		m.metric("orbic_uplink_outages_24h", "gauge", "Uplink outages (3 failed probes in a row) that began in the last 24 hours.", float64(l.Outages24))
+		m.metric("pillowforrt_uplink_probe_loss_ratio_24h", "gauge", "Share of uplink probes (a TCP connect every 30 s) that failed in the last 24 hours.", l.LossPct/100)
+		m.metric("pillowforrt_uplink_outages_24h", "gauge", "Uplink outages (3 failed probes in a row) that began in the last 24 hours.", float64(l.Outages24))
 	}
 	if t := in.Tor; t != nil && (t.Enabled || len(t.Devices) > 0) {
-		m.metric("orbic_tor_running", "gauge", "1 if the Tor client process is running.", b2f(t.Running))
-		m.metric("orbic_tor_ready", "gauge", "1 if Tor has finished bootstrapping.", b2f(t.Ready))
-		m.metric("orbic_tor_devices", "gauge", "Devices whose traffic is forced through Tor.", float64(len(t.Devices)))
-		m.metric("orbic_tor_memory_bytes", "gauge", "Resident memory of the Tor process.", t.RSSMB*1024*1024)
-		m.metric("orbic_tor_restarts_total", "counter", "Unexpected Tor restarts since tinyfwd started.", float64(t.Restarts))
+		m.metric("pillowforrt_tor_running", "gauge", "1 if the Tor client process is running.", b2f(t.Running))
+		m.metric("pillowforrt_tor_ready", "gauge", "1 if Tor has finished bootstrapping.", b2f(t.Ready))
+		m.metric("pillowforrt_tor_devices", "gauge", "Devices whose traffic is forced through Tor.", float64(len(t.Devices)))
+		m.metric("pillowforrt_tor_memory_bytes", "gauge", "Resident memory of the Tor process.", t.RSSMB*1024*1024)
+		m.metric("pillowforrt_tor_restarts_total", "counter", "Unexpected Tor restarts since tinyfwd started.", float64(t.Restarts))
 	}
-	m.metric("orbic_graph_samples", "gauge", "Samples in the one-hour graph ring.", float64(in.GraphSamples))
+	m.metric("pillowforrt_graph_samples", "gauge", "Samples in the one-hour graph ring.", float64(in.GraphSamples))
 	return m.b.String()
 }
 

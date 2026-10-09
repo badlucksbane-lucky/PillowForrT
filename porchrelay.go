@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// The porch relay: the Orbic's outside ports 80, 443, 8080 and 8443 over IPv6 lead to a service you run on the LAN (the porchMap targets; there are none in this build). The Orbic has no IPv6 NAT and the phone cannot
+// The porch relay: the box's outside ports 80, 443, 8080 and 8443 over IPv6 lead to a service you run on the LAN (the porchMap targets; there are none in this build). The box has no IPv6 NAT and the phone cannot
 // bind below 1024, so this is a plain TCP relay that tells the trap who is really calling with a PROXY protocol v1 line. Ports 80 and 443 are shared with the stock admin, which is moved to
 // 81 and 444 (see PORCH.md): a connection that arrives on a LAN address is passed through to it unchanged, and one that arrives on a public address goes to the trap, and only while the
 // flag file exists. The firewall (wpad-guard.sh) opens the public ports under the same flag, so this is a second lock, not the only one.
@@ -20,7 +20,7 @@ const porchFlag = "/data/proxy/porch.enabled"
 var porchMap = map[int]string{} // no relay targets in the public build (the -porch-relay flag is inert)
 var stockMap = map[int]string{80: "127.0.0.1:81", 443: "127.0.0.1:444"}
 
-// ourMap is where a LAN client at the Orbic's own address goes once the stock admin is switched off: the PAC/redirect server (3128) and the web page (3129).
+// ourMap is where a LAN client at the box's own address goes once the stock admin is switched off: the PAC/redirect server (3128) and the web page (3129).
 var ourMap = map[int]string{80: "127.0.0.1:3128", 443: "127.0.0.1:3129"}
 
 // stockAdminOff reports whether the stock admin is switched off (set at start; nil means it never is).
@@ -114,7 +114,7 @@ func (p *porchRelay) handleForTest(c net.Conn, local, remote string) {
 }
 
 func (p *porchRelay) route(c net.Conn, local, remote *net.TCPAddr, port int) {
-	if !publicAddr(local.IP) { // a LAN client at the Orbic's own address: the stock admin, untouched
+	if !publicAddr(local.IP) { // a LAN client at the box's own address: the stock admin, untouched
 		m := stockMap
 		if stockAdminOff != nil && stockAdminOff() {
 			m = ourMap

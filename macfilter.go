@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-const macBlockHeader = "# Block list (one MAC per line), managed from https://orbic/ . Enforced by tinyfwd (iptables chain HS_MACBLOCK and deauthentication).\n"
+const macBlockHeader = "# Block list (one MAC per line), managed from https://pillowforrt.lan/ . Enforced by tinyfwd (iptables chain HS_MACBLOCK and deauthentication).\n"
 
 type macFilter struct {
 	mu       sync.Mutex

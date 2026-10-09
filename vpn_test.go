@@ -369,7 +369,7 @@ func TestKillSwitchBlocksProxyAndDNS(t *testing.T) {
 		t.Errorf("transport with the tunnel down: %v", err)
 	}
 	if tr, err := v.TransportFor("127.0.0.1"); err != nil || tr != transport {
-		t.Error("the Orbic's own traffic must stay direct")
+		t.Error("the box's own traffic must stay direct")
 	}
 	// DNS: a VPN device's lookup with the tunnel down fails closed and never reaches Quad9
 	doh, pool := newFakeDoH(t)

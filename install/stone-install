@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""stone-install -- install Stone of Heimdall on an Orbic RC400L over its USB cable.
+"""stone-install -- install PillowForrT on an Orbic RC400L over its USB cable.
 
   stone-install install   [--payload DIR | --kit DIR] [--answers FILE] [--dry-run] [--yes]
   stone-install check     read-only: stage the checker and report what the unit looks like (changes nothing)
@@ -173,10 +173,10 @@ def choose_key(io, home):
             if valid_pubkey(line) is None: return line
             io["say"]("  " + valid_pubkey(line))
         if c == "g":
-            path = os.path.join(home, ".ssh", "stone_orbic_ed25519")
+            path = os.path.join(home, ".ssh", "pillowforrt_ed25519")
             if os.path.exists(path): io["say"]("  %s already exists: choose it from the list instead" % path); continue
             os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
-            if subprocess.run(["ssh-keygen", "-t", "ed25519", "-f", path, "-C", "stone-of-heimdall"]).returncode != 0: raise Fatal("ssh-keygen failed")
+            if subprocess.run(["ssh-keygen", "-t", "ed25519", "-f", path, "-C", "pillowforrt"]).returncode != 0: raise Fatal("ssh-keygen failed")
             return read_text(path + ".pub").strip()
 
 def gather(args, io, home):
@@ -336,7 +336,7 @@ def ensure_ready(dev, io, yes):
     if not pids: raise Fatal("no Orbic on the USB cable (looked for vendor 05c6): check the cable between this computer and the unit")
     ready = {0xF601, 0xF622}
     if not (set(pids) & ready):
-        if 0xF626 not in pids: raise Fatal("the Orbic is on USB as an unknown product %s" % ", ".join("%04x" % p for p in pids))
+        if 0xF626 not in pids: raise Fatal("the box is on USB as an unknown product %s" % ", ".join("%04x" % p for p in pids))
         io["say"]("The unit is in its normal mode (no serial port). It must be switched into command mode (it restarts its USB side; nothing is changed on it).")
         if not yes and io["input"]("switch now? [Y/n] ").strip().lower() == "n": raise Fatal("cancelled")
         dev.mode_switch()
@@ -368,9 +368,9 @@ def summary(io, a, pay, files, ident, states, args):
 def after(io, a, home):
     io["say"]("\nDone. Next:")
     io["say"]("  1. Join the new Wi-Fi \"%s\" with the password you chose (the unit restarted its Wi-Fi)." % a["ssid"])
-    io["say"]("  2. SSH: add this to ~/.ssh/config, then `ssh orbic`:\n       Host orbic\n           HostName 192.168.1.254\n           User root\n           IdentitiesOnly yes\n           IdentityFile <the private key matching the public key you chose>")
-    io["say"]("  3. Web page: https://orbic/   (self-signed certificate: compare the fingerprint on the sign-in page with your browser's)")
-    if a["token"]: io["say"]("  4. Your script token is in %s (scripts/orbic-api.sh uses it)." % os.path.join(home, ".heimdallstone", "ui.token"))
+    io["say"]("  2. SSH: add this to ~/.ssh/config, then `ssh pillowforrt`:\n       Host pillowforrt\n           HostName 192.168.1.254\n           User root\n           IdentitiesOnly yes\n           IdentityFile <the private key matching the public key you chose>")
+    io["say"]("  3. Web page: https://pillowforrt.lan/   (self-signed certificate: compare the fingerprint on the sign-in page with your browser's)")
+    if a["token"]: io["say"]("  4. Your script token is in %s (scripts/pf-api.sh uses it)." % os.path.join(home, ".pillowforrt", "ui.token"))
 
 def main(argv=None, dev=None, io=None, home=None):
     ap = argparse.ArgumentParser(prog="stone-install", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -417,7 +417,7 @@ def main(argv=None, dev=None, io=None, home=None):
             io["say"]("\nThe install FAILED and was rolled back: the unit is as it was. The lines above say which step.")
             return 1
         if a["token"]:
-            d = os.path.join(home, ".heimdallstone"); os.makedirs(d, mode=0o700, exist_ok=True); p = os.path.join(d, "ui.token")
+            d = os.path.join(home, ".pillowforrt"); os.makedirs(d, mode=0o700, exist_ok=True); p = os.path.join(d, "ui.token")
             if os.path.exists(p): shutil.copy2(p, p + ".old")
             fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             with os.fdopen(fd, "w") as f: f.write(a["token_value"] + "\n")

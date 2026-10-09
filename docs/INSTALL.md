@@ -1,4 +1,4 @@
-# Installing Stone of Heimdall
+# Installing PillowForrT
 
 **Where this stands.** Building it, updating a unit that already runs it, setting the login and first sign-in are written down and match the scripts.
 **The first install on a factory-fresh unit now has an installer, `install/stone-install`, and it is EXPERIMENTAL and UNTESTED from a factory-fresh unit**:
@@ -24,10 +24,10 @@ Cross-builds `tinyfwd` for the hotspot (ARM, one core, roughly 77 MB of usable m
 extras modest) and prints its SHA-256. Keep that hash: the deploy script checks it on the unit.
 
 ## 2. Reach the unit over SSH
-Every script below runs `ssh orbic`, key-only, as root, and never prompts (`BatchMode`). Put this
+Every script below runs `ssh pillowforrt`, key-only, as root, and never prompts (`BatchMode`). Put this
 in `~/.ssh/config` on your computer:
 ```
-Host orbic
+Host pillowforrt
     HostName 192.168.1.254
     User root
     IdentityFile ~/.ssh/<your key>
@@ -35,7 +35,7 @@ Host orbic
 ```
 Your public key must be in `/data/dropbear/ssh/authorized_keys` on the unit. Test it:
 ```
-ssh orbic true && echo ok
+ssh pillowforrt true && echo ok
 ```
 The first connection asks you to accept the unit's host key. Do that only from the trusted LAN.
 
@@ -100,10 +100,10 @@ session, turn on the **script token**:
 
 1. Make a long random secret on your computer, for example `openssl rand -hex 32 > ui.token`.
 2. Put it on the unit, readable by root only:
-   `scripts/orbic-push.sh ui.token /data/proxy/ui.token 600`
+   `scripts/pf-push.sh ui.token /data/proxy/ui.token 600`
 3. Start `tinyfwd` with `-ui-token-file=/data/proxy/ui.token` (the init script that starts it must
    pass the flag), then restart it.
-4. Keep a copy in `~/.heimdallstone/ui.token`. `scripts/orbic-api.sh GET /api/wifi` then calls the API
+4. Keep a copy in `~/.pillowforrt/ui.token`. `scripts/pf-api.sh GET /api/wifi` then calls the API
    over HTTPS with the header `X-UI-Token`, pinning the unit's certificate.
 
 Things to know:
@@ -117,7 +117,7 @@ Things to know:
   computer. It is off and hidden by default, and fails closed in the same way.
 
 ## 6. First sign-in
-Open `https://orbic/` (plain HTTP requests are redirected there). The web page uses a **self-signed
+Open `https://pillowforrt.lan/` (plain HTTP requests are redirected there). The web page uses a **self-signed
 certificate**, so your browser will warn. The sign-in page prints the certificate's SHA-256
 fingerprint: compare it with the one your browser shows before you type the password.
 
@@ -206,7 +206,7 @@ unit will not fetch that list on its own. It ships empty and so, until you popul
 fires. To turn it on, put one `<md5 hash>,<name>` pair per line in `/data/proxy/ja3-blocklist.txt` from a
 threat-intel JA3 feed you trust (e.g. Abuse.ch's SSL Blacklist):
 ```
-scripts/orbic-push.sh ja3-blocklist.txt /data/proxy/ja3-blocklist.txt 644
+scripts/pf-push.sh ja3-blocklist.txt /data/proxy/ja3-blocklist.txt 644
 ```
 Keep it current yourself; a stale list means silence, not "nothing is wrong". A match is reported as
 `tls_ja3_match`, at the **alert** level, since a fingerprint match is a stronger signal than the plain
@@ -218,7 +218,7 @@ relay addresses, and the unit will not fetch one on its own. It ships with the l
 check off. To turn it on, put one IP or CIDR per line (`#` comments allowed) in
 `/data/proxy/tor-exits.txt`:
 ```
-scripts/orbic-push.sh tor-exits.txt /data/proxy/tor-exits.txt 644
+scripts/pf-push.sh tor-exits.txt /data/proxy/tor-exits.txt 644
 ```
 Keep it current yourself; relays change by the hour, and a stale list means silence, not "nothing is
 wrong". The `.onion` half of the same card (`tor_bypass_onion`) needs no list.
@@ -238,6 +238,22 @@ card and the diagnostics say whether the chain holds or where it breaks. Clearin
 starts a new chain with a marker event, so a cleared log is never mistaken for a wiped one. Copy the
 head hash shown on the card somewhere else now and then: someone with a root shell can rewrite the
 whole file, hashes included, and the copy is what tells you that happened.
+
+### .onion settings (SSH only)
+
+Nothing about `.onion` can be changed from the web page or its API, so a stolen session cannot open a door. Both features are **off** until you switch them on over SSH with the program itself:
+
+```
+/data/proxy/tinyfwd -onion status
+/data/proxy/tinyfwd -onion "house=on"                         # .onion names for devices on the network (Tor must be on: Tor card)
+/data/proxy/tinyfwd -onion "add=laptop:<its 52-letter x25519 public key>,door=on"
+/data/proxy/tinyfwd -onion "write=on"                         # let the page change things through the door (off by default)
+/data/proxy/tinyfwd -onion "remove=laptop"                    # the last device going switches the door off
+```
+
+The changes are saved to `/data/proxy/tor.json`; restart the program to apply them (`/etc/init.d/http_proxy stop; sleep 1; /etc/init.d/http_proxy start`), and do it straight away, since a
+running program writes that file back from memory the next time anything in the Tor card changes. The door's web listener (loopback only) starts only while the door is on; the
+`-onion-listen` flag can pin another loopback address. The door needs at least one authorized device and refuses to run without one.
 
 ### Turn one off
 **Canary** and **DNS canary** have a switch on their cards. The rest are on while the daemon runs, with
@@ -271,14 +287,14 @@ Scripts use the API token (above) as `X-UI-Token`.
 
 ### Grafana
 `/metrics` needs no login. Scrape `http://192.168.1.254/metrics` with Prometheus and import
-`contrib/grafana/stone-of-heimdall.json`; `contrib/grafana/README.md` has the scrape config.
+`contrib/grafana/pillowforrt.json`; `contrib/grafana/README.md` has the scrape config.
 
 ### The event stream (Suricata EVE JSON)
 ```
-curl -sN -H "X-UI-Token: $TOKEN" "https://orbic:3129/api/events/stream?since=0&follow=1"
+curl -sN -H "X-UI-Token: $TOKEN" "https://pillowforrt.lan:3129/api/events/stream?since=0&follow=1"
 ```
 One JSON object per line, in the shape of Suricata's `eve.json`: `timestamp`, `event_type` (always
-`alert`), `alert.signature` ("Stone of Heimdall: arp spoof"), `alert.signature_id` (stable per kind,
+`alert`), `alert.signature` ("PillowForrT: arp spoof"), `alert.signature_id` (stable per kind,
 `gid` 9000), `alert.severity` (1 alert, 2 to look at, 3 info), and a `stone` object with the event's
 id, kind, severity, page text, generic sentence and chain hashes. `since` is the last id you have (the
 card shows the newest); `follow=1` keeps the connection open and writes each new event as it happens.
@@ -295,8 +311,8 @@ text. "Send a test line" sends one informational message.
 ### The packet tap (Suricata, Snort, Zeek, Wireshark)
 Switch it on in the card (it asks you to confirm), then on a companion computer:
 ```
-curl -sN -H "X-UI-Token: $TOKEN" "https://orbic:3129/api/tap?filter=all&seconds=600" | suricata -r /dev/stdin
-curl -sN -H "X-UI-Token: $TOKEN" "https://orbic:3129/api/tap?filter=dns" | wireshark -k -i -
+curl -sN -H "X-UI-Token: $TOKEN" "https://pillowforrt.lan:3129/api/tap?filter=all&seconds=600" | suricata -r /dev/stdin
+curl -sN -H "X-UI-Token: $TOKEN" "https://pillowforrt.lan:3129/api/tap?filter=dns" | wireshark -k -i -
 ```
 `filter` is `all`, `arp`, `dns` (UDP 53), `dhcp`, `tls` (TCP 443) or `icmp`; `seconds` runs up to
 3600 (default 300); `snaplen` up to 2048 bytes (default 1600). The output is a classic pcap file,
@@ -309,7 +325,7 @@ when you are done: while it is on, anyone signed in or holding the token can rea
 ### Home Assistant (MQTT)
 Give the broker's `ip:port` (plain MQTT 3.1.1; Mosquitto's add-on default is `<HA address>:1883`),
 a user name and password if the broker wants them, and tick "connect". With MQTT discovery on in
-Home Assistant (it is by default) a device called **Stone of Heimdall** appears with: uplink, uplink
+Home Assistant (it is by default) a device called **PillowForrT** appears with: uplink, uplink
 latency, Wi-Fi clients, temperature, events needing attention, last event, data used this cycle,
 DNS queries and blocks, encrypted DNS, VPN, Tor; and one `device_tracker` per device the presence
 watch knows (home / not home, named by its label on the Devices card, else its host name, else its
@@ -352,7 +368,7 @@ Assistant state (LAN only, if you turned it on) carries the current cell and sig
 
 ## If something goes wrong
 - The program does not answer: the deploy script already rolled back. To check by hand,
-  `ssh orbic 'wget -q -O - http://127.0.0.1:3128/status.json'`.
+  `ssh pillowforrt 'wget -q -O - http://127.0.0.1:3128/status.json'`.
 - A bad update that did start: the old binary is `/data/proxy/tinyfwd.prev`, the old guard is
   `/data/proxy/wpad-guard.sh.prev`.
 - The web login is lost: run `scripts/set-login.sh` again.
@@ -367,7 +383,7 @@ whether what they report matches what the web page says it is doing.
 ## First install (experimental, untested on a factory-fresh unit)
 **Status: written and rehearsed in pieces, never yet run from a factory-fresh unit.** Read the risks below before you use it.
 
-`install/stone-install` puts Stone of Heimdall on an Orbic RC400L over its **USB cable**, with questions you answer in the terminal. It needs:
+`install/stone-install` puts PillowForrT on an Orbic RC400L over its **USB cable**, with questions you answer in the terminal. It needs:
 - a Linux or macOS computer with `python3`, `adb`, and the system `libusb-1.0` (no pip packages), and the cable between it and the unit;
 - the three programs for the unit, built for 32-bit ARM and statically linked, in one folder you give with `--payload`:
   `tinyfwd` (build it with `./build.sh`), `dnsmasq` (version 2.91 or newer: the stock one is 2.73) and `dropbearmulti` (the dropbear multi-call binary

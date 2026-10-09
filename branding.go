@@ -1,6 +1,6 @@
 package main
 
-// The product is Stone of Heimdall. The mark (assets/mark.svg, the sepia Bifrost bridge with its watching stone) is embedded once and served at /favicon.svg:
+// The product is PillowForrT. The mark (assets/mark.svg, the sepia Bifrost bridge with its watching stone) is embedded once and served at /favicon.svg:
 // it is the browser tab icon and the picture in the page headers. It needs no sign-in (the sign-in page shows it too); it is a static, cacheable file.
 
 import (

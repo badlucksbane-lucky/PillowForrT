@@ -273,7 +273,7 @@ func TestRogueAllowValidates(t *testing.T) {
 		t.Error("a bad MAC is refused")
 	}
 	if w.Allow(bridgeMAC.String(), true) == nil {
-		t.Error("the Orbic's own MAC never needs allowing")
+		t.Error("the box's own MAC never needs allowing")
 	}
 	for i := 0; i < 8; i++ {
 		if err := w.Allow(fmt.Sprintf("02:00:00:00:01:%02x", i), true); err != nil {

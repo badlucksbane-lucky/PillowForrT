@@ -1,12 +1,12 @@
 #!/bin/bash
-# deploy-tinyfwd.sh [binary] -- deploy a built tinyfwd to the Orbic over SSH (no AT channel): push, hash-check, swap, wait for /status.json, and ROLL BACK by itself if it never answers.
+# deploy-tinyfwd.sh [binary] -- deploy a built tinyfwd to the box over SSH (no AT channel): push, hash-check, swap, wait for /status.json, and ROLL BACK by itself if it never answers.
 # The swap runs detached on the device, so a dropped SSH session cannot leave it half-done. Default binary: ./tinyfwd (from build.sh).
 set -eu
 HERE="$(cd "$(dirname "$0")" && pwd)"
 BIN="${1:-./tinyfwd}"
 WANT="$(sha256sum "$BIN" | cut -d' ' -f1)"
-"$HERE/orbic-push.sh" "$BIN" /data/proxy/tinyfwd.new 755 | tail -1
-ssh -o BatchMode=yes orbic "cat > /tmp/deploy-tinyfwd.sh" <<REMOTE
+"$HERE/pf-push.sh" "$BIN" /data/proxy/tinyfwd.new 755 | tail -1
+ssh -o BatchMode=yes pillowforrt "cat > /tmp/deploy-tinyfwd.sh" <<REMOTE
 exec > /tmp/deploy-tinyfwd.log 2>&1
 P=/data/proxy
 [ "\$(sha256sum \$P/tinyfwd.new | cut -d' ' -f1)" = "$WANT" ] || { echo HASH MISMATCH; exit 1; }
@@ -20,6 +20,6 @@ if [ \$ok = 1 ]; then echo "DEPLOYED OK after \${i}s"; else
   echo "NO ANSWER - ROLLING BACK"; /etc/init.d/http_proxy stop; sleep 1; cp \$P/tinyfwd.prev \$P/tinyfwd; /etc/init.d/http_proxy start; sleep 2; echo ROLLED BACK; fi
 echo FINISHED
 REMOTE
-ssh -o BatchMode=yes orbic 'rm -f /tmp/deploy-tinyfwd.log; sh -c "nohup sh /tmp/deploy-tinyfwd.sh >/dev/null 2>&1 </dev/null &"'
-for i in $(seq 1 40); do sleep 2; if ssh -o BatchMode=yes -o ConnectTimeout=5 orbic 'grep -q FINISHED /tmp/deploy-tinyfwd.log' 2>/dev/null; then break; fi; done
-ssh -o BatchMode=yes orbic 'cat /tmp/deploy-tinyfwd.log'
+ssh -o BatchMode=yes pillowforrt 'rm -f /tmp/deploy-tinyfwd.log; sh -c "nohup sh /tmp/deploy-tinyfwd.sh >/dev/null 2>&1 </dev/null &"'
+for i in $(seq 1 40); do sleep 2; if ssh -o BatchMode=yes -o ConnectTimeout=5 pillowforrt 'grep -q FINISHED /tmp/deploy-tinyfwd.log' 2>/dev/null; then break; fi; done
+ssh -o BatchMode=yes pillowforrt 'cat /tmp/deploy-tinyfwd.log'

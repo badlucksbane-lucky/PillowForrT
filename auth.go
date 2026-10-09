@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	sessionCookie  = "orbic_session"
+	sessionCookie  = "pillowforrt_session"
 	sessionLife    = 12 * time.Hour
 	maxSessions    = 20
 	minPasswordLen = 10

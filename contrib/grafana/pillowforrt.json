@@ -35,12 +35,12 @@
    "version": ""
   }
  ],
- "title": "Stone of Heimdall",
- "uid": "stone-of-heimdall",
- "description": "The Orbic hotspot as tinyfwd's /metrics reports it: uplink, DNS, exits, detectors, system. Aggregate numbers only; nothing per device.",
+ "title": "PillowForrT",
+ "uid": "pillowforrt",
+ "description": "The box hotspot as tinyfwd's /metrics reports it: uplink, DNS, exits, detectors, system. Aggregate numbers only; nothing per device.",
  "tags": [
-  "stone-of-heimdall",
-  "orbic"
+  "pillowforrt",
+  "pillowforrt"
  ],
  "timezone": "browser",
  "editable": true,
@@ -117,7 +117,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_uplink_up",
+     "expr": "pillowforrt_uplink_up",
      "legendFormat": ""
     }
    ],
@@ -191,7 +191,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "1 - orbic_dns_upstream_failing",
+     "expr": "1 - pillowforrt_dns_upstream_failing",
      "legendFormat": ""
     }
    ],
@@ -265,7 +265,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_vpn_up",
+     "expr": "pillowforrt_vpn_up",
      "legendFormat": ""
     }
    ],
@@ -339,7 +339,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_tor_ready",
+     "expr": "pillowforrt_tor_ready",
      "legendFormat": ""
     }
    ],
@@ -402,7 +402,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_events_unseen_attention",
+     "expr": "pillowforrt_events_unseen_attention",
      "legendFormat": ""
     }
    ],
@@ -457,7 +457,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "sum(orbic_wifi_clients)",
+     "expr": "sum(pillowforrt_wifi_clients)",
      "legendFormat": ""
     }
    ],
@@ -504,7 +504,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_uplink_latency_seconds",
+     "expr": "pillowforrt_uplink_latency_seconds",
      "legendFormat": "latency"
     }
    ],
@@ -548,7 +548,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "rate(orbic_uplink_receive_bytes_total[5m])",
+     "expr": "rate(pillowforrt_uplink_receive_bytes_total[5m])",
      "legendFormat": "down"
     },
     {
@@ -557,7 +557,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "rate(orbic_uplink_transmit_bytes_total[5m])",
+     "expr": "rate(pillowforrt_uplink_transmit_bytes_total[5m])",
      "legendFormat": "up"
     }
    ],
@@ -600,7 +600,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "rate(orbic_dns_queries_total[5m])*60",
+     "expr": "rate(pillowforrt_dns_queries_total[5m])*60",
      "legendFormat": "queries"
     },
     {
@@ -609,7 +609,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "rate(orbic_dns_blocked_total[5m])*60",
+     "expr": "rate(pillowforrt_dns_blocked_total[5m])*60",
      "legendFormat": "blocked"
     },
     {
@@ -618,7 +618,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "C",
-     "expr": "rate(orbic_dns_cached_total[5m])*60",
+     "expr": "rate(pillowforrt_dns_cached_total[5m])*60",
      "legendFormat": "cached"
     }
    ],
@@ -661,7 +661,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "rate(orbic_dns_upstream_doh_total[5m])*60",
+     "expr": "rate(pillowforrt_dns_upstream_doh_total[5m])*60",
      "legendFormat": "DoH"
     },
     {
@@ -670,7 +670,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "rate(orbic_dns_errors_total[5m])*60",
+     "expr": "rate(pillowforrt_dns_errors_total[5m])*60",
      "legendFormat": "errors"
     }
    ],
@@ -714,7 +714,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_temperature_celsius",
+     "expr": "pillowforrt_temperature_celsius",
      "legendFormat": "{{sensor}}"
     },
     {
@@ -723,7 +723,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "orbic_battery_temperature_celsius",
+     "expr": "pillowforrt_battery_temperature_celsius",
      "legendFormat": "battery"
     }
    ],
@@ -767,7 +767,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_memory_available_bytes",
+     "expr": "pillowforrt_memory_available_bytes",
      "legendFormat": "available"
     },
     {
@@ -776,7 +776,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "orbic_daemon_heap_bytes",
+     "expr": "pillowforrt_daemon_heap_bytes",
      "legendFormat": "tinyfwd heap"
     },
     {
@@ -785,7 +785,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "C",
-     "expr": "orbic_tor_memory_bytes",
+     "expr": "pillowforrt_tor_memory_bytes",
      "legendFormat": "tor"
     }
    ],
@@ -829,7 +829,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_data_cycle_receive_bytes",
+     "expr": "pillowforrt_data_cycle_receive_bytes",
      "legendFormat": "received"
     },
     {
@@ -838,7 +838,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "orbic_data_cycle_transmit_bytes",
+     "expr": "pillowforrt_data_cycle_transmit_bytes",
      "legendFormat": "sent"
     }
    ],
@@ -881,7 +881,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "increase(orbic_arp_spoof_alerts[1h])",
+     "expr": "increase(pillowforrt_arp_spoof_alerts[1h])",
      "legendFormat": "spoof alerts (1h)"
     },
     {
@@ -890,7 +890,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "increase(orbic_arp_address_changes[1h])",
+     "expr": "increase(pillowforrt_arp_address_changes[1h])",
      "legendFormat": "address changes (1h)"
     }
    ],
@@ -933,7 +933,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_firewall_blocked_devices",
+     "expr": "pillowforrt_firewall_blocked_devices",
      "legendFormat": "blocked"
     },
     {
@@ -942,7 +942,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "orbic_firewall_paused_devices",
+     "expr": "pillowforrt_firewall_paused_devices",
      "legendFormat": "paused"
     },
     {
@@ -951,7 +951,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "C",
-     "expr": "orbic_firewall_schedules",
+     "expr": "pillowforrt_firewall_schedules",
      "legendFormat": "schedules"
     }
    ],
@@ -994,7 +994,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_ssh_logins",
+     "expr": "pillowforrt_ssh_logins",
      "legendFormat": "logins"
     },
     {
@@ -1003,7 +1003,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "orbic_ssh_failed_attempts",
+     "expr": "pillowforrt_ssh_failed_attempts",
      "legendFormat": "failed"
     }
    ],
@@ -1074,7 +1074,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_service_up",
+     "expr": "pillowforrt_service_up",
      "legendFormat": "{{service}}"
     }
    ],
@@ -1138,7 +1138,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_web_certificate_days_left",
+     "expr": "pillowforrt_web_certificate_days_left",
      "legendFormat": ""
     }
    ],
@@ -1194,7 +1194,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "A",
-     "expr": "orbic_speedtest_download_bytes_per_second",
+     "expr": "pillowforrt_speedtest_download_bytes_per_second",
      "legendFormat": "down"
     },
     {
@@ -1203,7 +1203,7 @@
       "uid": "${DS_PROMETHEUS}"
      },
      "refId": "B",
-     "expr": "orbic_speedtest_upload_bytes_per_second",
+     "expr": "pillowforrt_speedtest_upload_bytes_per_second",
      "legendFormat": "up"
     }
    ],

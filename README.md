@@ -1,13 +1,13 @@
-<p align="center"><img src="assets/logo-parchment.svg" width="560" alt="Stone of Heimdall: a watchman for your hotspot"></p>
+<p align="center"><img src="assets/logo-parchment.svg" width="560" alt="PillowForrT: a watchman for your hotspot"></p>
 
-# Stone of Heimdall
+# PillowForrT
 https://badlucksbane-lucky.github.io/stone-of-heimdall/
 
 **A privacy and intrusion-watching firmware layer for the Orbic RC400L cellular hotspot.** One static Go binary (`tinyfwd`) replaces the stock admin page and takes over DNS, the firewall, Wi-Fi settings and the exits, then sits on the LAN bridge and watches the wire. It filters DNS and forces it to leave encrypted, sends chosen devices through a VPN or Tor, closes the IPv6 and WebRTC address leaks, blocks outbound services you have not approved, and raises an event when something on your network behaves like a scanner, a spoofer, a rogue router, malware phoning home, or an interception box sitting in the path to the internet.
 
 **It watches before it guards.** A fresh install only reports what your devices tried to reach (the "would be refused" list), and you decide what to allow before anything is enforced. Every detector is passive: nothing is ever sent, nothing is decrypted, and the text of an event never names a device or an address.
 
-<p align="center"><img src="assets/screenshot-ui.jpg" width="420" alt="The Stone of Heimdall web UI: collapsible cards for the DNS filter, Tor, events, ARP watch, devices, Wi-Fi and more, with today's query, block and encryption counts at the top"></p>
+<p align="center"><img src="assets/screenshot-ui.jpg" width="420" alt="The PillowForrT web UI: collapsible cards for the DNS filter, Tor, events, ARP watch, devices, Wi-Fi and more, with today's query, block and encryption counts at the top"></p>
 
 ## Contents
 - [What it guards](#what-it-guards)
@@ -34,7 +34,7 @@ Tested on one unit; see ["Check it yourself"](docs/INSTALL.md#check-it-yourself)
 - **Plain HTTP is sent to HTTPS first.** Port 80 stays open, but a connection to it from a device is answered by the box with a redirect to the `https://` address of the same page (nothing is proxied or decrypted). If the same device comes straight back for the same site and no TLS connection to it exists, the upgrade did not work: that is counted, noted as an info event with no names in it, and that one request is let through. It is on by default and can be switched off globally or left off for one device on the Outbound services card; a client that cannot follow redirects (curl without `-L`, some gadgets and firmware updaters) needs that. IPv4, port 80 only. In enforce mode DNS and DNS-over-TLS are also refused by the first rules of the outbound chain, ahead of anything ticked.
 - **Blocked devices that stay blocked.** The stock Wi-Fi deny list does not hold on this driver (a dropped device walked straight back in), so a blocked MAC is dropped in the firewall and deauthenticated whenever it reappears.
 - **Blocked destinations** (IP or CIDR, for every device and for the router's own proxied traffic), and **internet schedules and pauses** per device that cut the internet but keep the LAN, DHCP and this page.
-- **House-wide `.onion`.** A small client-only Tor runs on the box. Any device can open a v3 `.onion` name with no setup: the stub answers with an address from `198.18.0.0/16` and the firewall sends that TCP through a bridge into Tor's SOCKS port. A `.onion` name never reaches a public resolver.
+- **House-wide `.onion`** (off until you switch it on over SSH: [`.onion` settings](docs/INSTALL.md#onion-settings-ssh-only)). A small client-only Tor runs on the box. With it on, any device can open a v3 `.onion` name with no setup: the stub answers with an address from `198.18.0.0/16` and the firewall sends that TCP through a bridge into Tor's SOCKS port. A `.onion` name never reaches a public resolver.
 - **The stock admin switched off** for the network (reversibly), the carrier's firmware-update and remote-management engines kept suspended, and WPS forced off every five minutes in case a reset turns it back on.
 - **A web page over HTTPS** behind one bcrypt login with a session cookie and CSRF token; optional API-key token for scripts, off by default. Key-only SSH. No telemetry. Nothing leaves the house unless you configure it.
 
@@ -75,7 +75,7 @@ One single-page web UI with collapsible cards. Besides the filter, exits and det
 - **Backup**: settings snapshots kept on the box and downloadable, restorable per section, with a "before restore" snapshot taken first. Identity (VPN key, login, TLS key, tokens) is deliberately not in them.
 - **Certificate**: the self-signed HTTPS certificate renews itself at 60 days left or on demand, without a restart, and can be downloaded to trust on a device.
 - **SSH access**: dropbear's authorized keys (public keys only, ed25519, forwarding always off), the host fingerprint, and a login audit trail. The last key cannot be removed from the page.
-- **Onion door**: a Tor onion service that reaches this page from anywhere with no open port, behind three locks (v3 client authorization, the login, read-only unless you turn remote write on). With no authorized client the service is not rendered at all.
+- **Onion door** (off until you switch it on over SSH; the web page has no setting for it): a Tor onion service that reaches this page from anywhere with no open port, behind three locks (v3 client authorization, the login, read-only unless you turn remote write on). With no authorized client the service is not rendered at all.
 - **System** and **cellular** pages read straight from `/proc`, `/sys` and the stock config files; a confirmed reboot; no IMEI, serials or factory reset on offer. A read-only **SMS inbox** from the stock SQLite file, queried from a RAM copy and never written.
 - **Node**: `/status.json` reports what the box sees from the carrier's edge, a `/beat` heartbeat lets a companion computer be noticed when it goes silent, and `/metrics` serves aggregate-only numbers in the Prometheus text format, safe to scrape without a login.
 - A built-in **PAC file and forward proxy** on `:3128` (the daemon's original job), LAN-only, with a destination guard so a client cannot use it to reach the hotspot's own loopback services.

@@ -1,6 +1,7 @@
 package main
 
-// The onion door (design: ONION-SERVICE.md): a Tor onion service on the Orbic that lets a few keyed devices reach the web page (read-only) from anywhere, with no open port. There is no SSH through
+// The onion door (design: ONION-SERVICE.md): a Tor onion service on the box that lets a few keyed devices reach the web page (read-only) from anywhere, with no open port. It is off until it is
+// switched on over SSH with `tinyfwd -onion ...` (onionCLI below); the web page has no setting for it and no API to change it. There is no SSH through
 // it (no SSH logins over the door). Three locks: (1) v3 client authorization, so a visitor without a listed key cannot even find the service; (2) the web login; (3) a read-only
 // web page unless remote_write is on.
 // This file is the pure part (validation, torrc lines, the authorized_clients directory) and the manager's settings methods. Everything fails closed: with no authorized client the service is
@@ -10,11 +11,8 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -37,7 +35,7 @@ var (
 
 type onionClient struct {
 	Name string `json:"name"`
-	Pub  string `json:"pub"` // the x25519 PUBLIC key, 52 base32 characters; the private half never reaches the Orbic
+	Pub  string `json:"pub"` // the x25519 PUBLIC key, 52 base32 characters; the private half never reaches the box
 }
 
 type onionDoor struct {
@@ -294,60 +292,105 @@ func (m *torMgr) RemoteWrite() bool {
 	return m.cfg.Door.RemoteWrite
 }
 
-// handleOnionAPI serves the door's settings: GET tor/onion, POST tor/onion/set, tor/onion/client, tor/onion/client/remove. The management calls are refused for anything that came through
-// the onion listener (the wrapper there refuses them first; this is the second lock), and no response ever carries a key: clients are listed by name and fingerprint.
-func handleOnionAPI(w http.ResponseWriter, r *http.Request, path string) {
-	if torMgrG == nil {
-		writeJSON(w, 200, map[string]any{"available": false})
-		return
+// DoorEnabled says whether the door is switched on in the settings (the web listener for onion visitors starts only then).
+func (m *torMgr) DoorEnabled() bool {
+	if m == nil {
+		return false
 	}
-	if r.Method == http.MethodGet && path == "tor/onion" {
-		writeJSON(w, 200, torMgrG.DoorView())
-		return
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cfg.Door.Enabled
+}
+
+// SetHouseOnion changes the house-wide .onion setting in the settings file and nothing else (no firewall or Tor change): it is for the SSH command, which runs with tinyfwd stopped or about
+// to be restarted.
+func (m *torMgr) SetHouseOnion(on bool) {
+	m.mu.Lock()
+	m.cfg.Onion = on
+	m.save()
+	m.mu.Unlock()
+}
+
+// onionCLI is the only way to change the .onion settings: `tinyfwd -onion "door=on,add=laptop:KEY"` over SSH. Nothing in the web page or its API can switch a .onion feature on or off, so a
+// logged-in browser, or anyone who got hold of a session, cannot open one. Everything is off until set here. spec is a comma-separated list, done in order:
+//
+//	status               just show the state
+//	house=on|off         .onion names for devices on this network (needs Tor on, from the Tor card)
+//	door=on|off          publish the web page over a Tor onion service (needs at least one authorized device)
+//	write=on|off         let the web page change things when reached through the door (off by default)
+//	add=NAME:PUBKEY      authorize a device by its x25519 public key (52 base32 characters)
+//	remove=NAME          remove a device (the last one going switches the door off)
+//
+// The changes are saved; a running tinyfwd reads them at its next start.
+func onionCLI(m *torMgr, spec string) (string, error) {
+	onoff := func(v string) (bool, error) {
+		switch v {
+		case "on":
+			return true, nil
+		case "off":
+			return false, nil
+		}
+		return false, fmt.Errorf("%q: say on or off", v)
 	}
-	if r.Method != http.MethodPost || viaOnion(r) {
-		writeJSON(w, 403, map[string]string{"error": "the onion door can only be changed from the LAN page"})
-		return
+	for _, part := range strings.Split(spec, ",") {
+		k, v, _ := strings.Cut(strings.TrimSpace(part), "=")
+		var err error
+		switch k {
+		case "", "status":
+		case "house":
+			var b bool
+			if b, err = onoff(v); err == nil {
+				m.SetHouseOnion(b)
+			}
+		case "door", "write":
+			var b bool
+			if b, err = onoff(v); err == nil {
+				m.mu.Lock()
+				d := m.cfg.Door
+				m.mu.Unlock()
+				if k == "door" {
+					err = m.DoorSet(b, d.RemoteWrite)
+				} else {
+					err = m.DoorSet(d.Enabled, b)
+				}
+			}
+		case "add":
+			name, pub, ok := strings.Cut(v, ":")
+			if !ok {
+				err = errors.New("add=NAME:PUBKEY")
+			} else {
+				err = m.DoorAddClient(name, pub)
+			}
+		case "remove":
+			err = m.DoorRemoveClient(v)
+		default:
+			err = fmt.Errorf("unknown setting %q", k)
+		}
+		if err != nil {
+			return "", err
+		}
 	}
-	body := io.LimitReader(r.Body, 4096)
-	var err error
-	switch path {
-	case "tor/onion/set":
-		var b struct {
-			Enabled     bool `json:"enabled"`
-			RemoteWrite bool `json:"remote_write"`
+	v := m.DoorView()
+	m.mu.Lock()
+	house := m.cfg.Onion
+	m.mu.Unlock()
+	var b strings.Builder
+	yes := func(x bool) string {
+		if x {
+			return "on"
 		}
-		if json.NewDecoder(body).Decode(&b) != nil {
-			writeJSON(w, 400, map[string]string{"error": "bad request"})
-			return
-		}
-		err = torMgrG.DoorSet(b.Enabled, b.RemoteWrite)
-	case "tor/onion/client":
-		var b struct {
-			Name string `json:"name"`
-			Pub  string `json:"pub"`
-		}
-		if json.NewDecoder(body).Decode(&b) != nil {
-			writeJSON(w, 400, map[string]string{"error": "bad request"})
-			return
-		}
-		err = torMgrG.DoorAddClient(b.Name, b.Pub)
-	case "tor/onion/client/remove":
-		var b struct {
-			Name string `json:"name"`
-		}
-		if json.NewDecoder(body).Decode(&b) != nil {
-			writeJSON(w, 400, map[string]string{"error": "bad request"})
-			return
-		}
-		err = torMgrG.DoorRemoveClient(b.Name)
-	default:
-		http.Error(w, "not found", 404)
-		return
+		return "off"
 	}
-	if err != nil {
-		writeJSON(w, 400, map[string]string{"error": err.Error()})
-		return
+	fmt.Fprintf(&b, "house-wide .onion: %s\nonion door:        %s\nchanges through it: %s\n", yes(house), yes(v.Enabled), yes(v.RemoteWrite))
+	for _, c := range v.Clients {
+		fmt.Fprintf(&b, "  device %s  key %s\n", c.Name, c.Fingerprint)
 	}
-	writeJSON(w, 200, torMgrG.DoorView())
+	if v.Address != "" {
+		fmt.Fprintf(&b, "address: %s.onion (keep it private)\n", v.Address)
+	}
+	if v.Note != "" {
+		fmt.Fprintln(&b, v.Note)
+	}
+	b.WriteString("Restart tinyfwd to apply: /etc/init.d/http_proxy stop; sleep 1; /etc/init.d/http_proxy start\n")
+	return b.String(), nil
 }

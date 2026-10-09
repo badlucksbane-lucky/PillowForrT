@@ -24,7 +24,7 @@ import (
 
 // dnsCanaryDomains are decoy or suspicious names: anyone asking for one is looking around, not browsing. Lower-case, no trailing dot.
 var dnsCanaryDomains = []string{
-	"heimdall-canary.invalid",
+	"pillowforrt-canary.invalid",
 	"internal-admin.local",
 	"c2-checkin.invalid",
 }

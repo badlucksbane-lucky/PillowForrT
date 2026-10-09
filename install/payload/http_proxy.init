@@ -21,7 +21,7 @@ case "$1" in
     if [ -x /data/proxy/dnsmasq-swap.sh ] && ! { [ -f /tmp/dnsmasq-swap.pid ] && kill -0 "$(cat /tmp/dnsmasq-swap.pid)" 2>/dev/null; }; then
       ( /data/proxy/dnsmasq-swap.sh loop >/dev/null 2>&1 & echo $! > /tmp/dnsmasq-swap.pid )
     fi
-    # `wpad` and `orbic` live at 192.168.1.254 with port 80 sent to the proxy daemon (wpad-guard.sh keeps the address and the DNAT; one copy only)
+    # `wpad` and `pillowforrt` live at 192.168.1.254 with port 80 sent to the proxy daemon (wpad-guard.sh keeps the address and the DNAT; one copy only)
     if [ -x /data/proxy/wpad-guard.sh ] && ! { [ -f /tmp/wpad-guard.pid ] && kill -0 "$(cat /tmp/wpad-guard.pid)" 2>/dev/null; }; then
       ( /data/proxy/wpad-guard.sh >/dev/null 2>&1 & echo $! > /tmp/wpad-guard.pid )
     fi

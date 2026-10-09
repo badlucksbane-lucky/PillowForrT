@@ -1,8 +1,8 @@
 package main
 
 // Rogue DHCP detection: a second DHCP server on the house network (a plugged-in router, a phone sharing its connection, a hostile device) can hand out its own gateway and DNS and
-// steer every device that listens to it. The Orbic is the only legitimate server, so tinyfwd watches the bridge, through an AF_PACKET socket with a kernel filter that lets only
-// UDP frames from port 67 through, and looks at every DHCP reply (offer, ack, nak). A reply is honest only if it comes from one of the Orbic's own addresses AND from the bridge's
+// steer every device that listens to it. The box is the only legitimate server, so tinyfwd watches the bridge, through an AF_PACKET socket with a kernel filter that lets only
+// UDP frames from port 67 through, and looks at every DHCP reply (offer, ack, nak). A reply is honest only if it comes from one of the box's own addresses AND from the bridge's
 // own MAC address (so a device that merely forges the gateway's IP is caught too). Anything else is a rogue server: one event per server per 10 minutes, and the page lists it.
 // Purely passive: nothing is ever sent. Honest limit: a reply the radio relays Wi-Fi to Wi-Fi without touching the bridge is invisible, though a DHCP reply to a client's
 // broadcast normally is not.
@@ -191,7 +191,7 @@ func (w *rogueWatch) Allow(mac string, add bool) error {
 			return errors.New("too many allowed servers (8 is the limit)")
 		}
 		if mac == w.selfMAC() {
-			return errors.New("that is the Orbic's own address: it is always trusted")
+			return errors.New("that is the box's own address: it is always trusted")
 		}
 		keep = append(keep, mac)
 		for k, s := range w.servers {
@@ -328,7 +328,7 @@ type rogueServerView struct {
 
 type rogueAllowedView struct {
 	MAC     string `json:"mac"`
-	IP      string `json:"ip,omitempty"` // the address it last answered from, if it has answered since the Orbic started
+	IP      string `json:"ip,omitempty"` // the address it last answered from, if it has answered since the box started
 	Replies int    `json:"replies"`
 	Last    int64  `json:"last,omitempty"`
 }

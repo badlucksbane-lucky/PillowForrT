@@ -53,7 +53,7 @@ func TestDetectorRestartMessage(t *testing.T) {
 	in := base(time.Now())
 	in.SysUptime = 60
 	es := d.step(in)
-	if es[0].Text != "The Orbic restarted" {
+	if es[0].Text != "The box restarted" {
 		t.Errorf("%q", es[0].Text)
 	}
 	d2 := newDetector(nil)
@@ -190,8 +190,8 @@ func TestEventStoreNotifiesOnlyWhenAskedAndGenerically(t *testing.T) {
 	if err := s.SetNotify(notifyCfg{URL: "https://ntfy.sh/secret-topic", Min: sevAttention, Enabled: true}); err != nil {
 		t.Fatal(err)
 	}
-	s.Add([]evt{{Kind: "uplink_down", Sev: sevAlert, Text: "private", Public: "The Orbic's internet connection is down"}, {Kind: "restart", Sev: sevInfo, Public: "restarted"}})
-	if len(*posts) != 1 || (*posts)[0] != "The Orbic's internet connection is down" {
+	s.Add([]evt{{Kind: "uplink_down", Sev: sevAlert, Text: "private", Public: "The box's internet connection is down"}, {Kind: "restart", Sev: sevInfo, Public: "restarted"}})
+	if len(*posts) != 1 || (*posts)[0] != "The box's internet connection is down" {
 		t.Fatalf("only events at or above the chosen level, with the generic text: %v", *posts)
 	}
 	s.Add([]evt{{Kind: "uplink_down", Sev: sevAlert, Public: "again"}})
@@ -348,7 +348,7 @@ func TestPostNtfyReallySends(t *testing.T) {
 		gotBody, gotTitle, gotPrio = string(b[:n]), r.Header.Get("Title"), r.Header.Get("Priority")
 	}))
 	defer srv.Close()
-	if err := postNtfy(srv.URL+"/topic", "Orbic", "hello", 4); err != nil || gotBody != "hello" || gotTitle != "Orbic" || gotPrio != "4" {
+	if err := postNtfy(srv.URL+"/topic", "PillowForrT", "hello", 4); err != nil || gotBody != "hello" || gotTitle != "PillowForrT" || gotPrio != "4" {
 		t.Errorf("%v %q %q %q", err, gotBody, gotTitle, gotPrio)
 	}
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(500) }))

@@ -245,7 +245,7 @@ func TestCellStoreRecordFixAndCSV(t *testing.T) {
 	}
 	csv := string(wigleCSV(s.obs, time.UTC))
 	lines := strings.Split(strings.TrimSpace(csv), "\n")
-	if !strings.HasPrefix(lines[0], "WigleWifi-1.6,appRelease=stone-of-heimdall") || !strings.HasPrefix(lines[1], "MAC,SSID,AuthMode,FirstSeen,Channel,Frequency,RSSI,CurrentLatitude") {
+	if !strings.HasPrefix(lines[0], "WigleWifi-1.6,appRelease=pillowforrt") || !strings.HasPrefix(lines[1], "MAC,SSID,AuthMode,FirstSeen,Channel,Frequency,RSSI,CurrentLatitude") {
 		t.Errorf("header: %q %q", lines[0], lines[1])
 	}
 	if len(lines) != 2+3 {

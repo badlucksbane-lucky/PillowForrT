@@ -170,7 +170,7 @@ func testSteer() (*steerWatch, *[]evt, *time.Time) {
 
 func TestSteerRogueAdvertisement(t *testing.T) {
 	w, got, now := testSteer()
-	// the Orbic's own advertisements (radish, the withdraw) are honest
+	// the box's own advertisements (radish, the withdraw) are honest
 	own, _ := parseSteer(ipv6Frame(bridgeMAC, 58, "fe80::aa", allNodes, ra(0, 0)))
 	w.Observe(own, *now)
 	w.Observe(own, *now)
@@ -233,7 +233,7 @@ func TestSteerRogueRedirects(t *testing.T) {
 	if p := (*got)[1].Public; strings.Contains(p, "192.168") || strings.Contains(p, "02:00") {
 		t.Errorf("public text must be generic: %q", p)
 	}
-	// the Orbic's own redirects are honest
+	// the box's own redirects are honest
 	own, _ := parseSteer(ipv4Frame(bridgeMAC, 1, 64, [4]byte{192, 168, 1, 1}, lanDev, redirect4([4]byte{192, 168, 1, 2}, [4]byte{192, 168, 1, 2})))
 	w.Observe(own, *now)
 	if len(*got) != 2 || w.View().Honest != 1 {
@@ -263,7 +263,7 @@ func TestSteerAllowedRouter(t *testing.T) {
 		t.Errorf("but is counted: %+v", v.Allowed)
 	}
 	if err := w.Allow(bridgeMAC.String(), true); err == nil {
-		t.Error("the Orbic's own MAC cannot be on the list")
+		t.Error("the box's own MAC cannot be on the list")
 	}
 	if err := w.Allow("not-a-mac", true); err == nil {
 		t.Error("a malformed MAC is refused")

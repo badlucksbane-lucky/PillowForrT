@@ -2,7 +2,7 @@ package main
 
 // The packet tap: GET /api/tap streams what the LAN bridge sees as a pcap file, so Suricata, Snort, Zeek or Wireshark on a companion computer can read it live:
 //
-//   curl -sN -H "X-UI-Token: $TOKEN" "https://orbic:3129/api/tap?filter=all&seconds=600" | suricata -r /dev/stdin
+//   curl -sN -H "X-UI-Token: $TOKEN" "https://pillowforrt.lan:3129/api/tap?filter=all&seconds=600" | suricata -r /dev/stdin
 //
 // Neither Suricata nor Snort fits in 77 MB of RAM, but they do not need to run here: the box already reads the bridge through AF_PACKET for the detectors, and this is the
 // same socket with a filter you choose and pcap framing on the way out. Honest limits: the bridge never sees traffic the radio relays Wi-Fi-to-Wi-Fi, so an IDS fed from

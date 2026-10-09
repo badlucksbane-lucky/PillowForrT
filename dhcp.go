@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const dhcpHeader = "# DHCP reservations (MAC,IP,name), managed from https://orbic/ . dnsmasq re-reads this file on SIGHUP. Edit here only if the web page is unavailable.\n"
+const dhcpHeader = "# DHCP reservations (MAC,IP,name), managed from https://pillowforrt.lan/ . dnsmasq re-reads this file on SIGHUP. Edit here only if the web page is unavailable.\n"
 
 var (
 	macRe  = regexp.MustCompile(`^[0-9a-f]{2}(:[0-9a-f]{2}){5}$`)
@@ -79,7 +79,7 @@ func validateReservation(r reservation, others []reservation) error {
 	}
 	ip := net.ParseIP(r.IP).To4()
 	if ip == nil || ip[0] != 192 || ip[1] != 168 || ip[2] != 1 || ip[3] < 2 || ip[3] > 252 {
-		return errors.New("the address must be 192.168.1.2 to 192.168.1.252 (.1 and .254 belong to the Orbic, .253 is the canary)")
+		return errors.New("the address must be 192.168.1.2 to 192.168.1.252 (.1 and .254 belong to the box, .253 is the canary)")
 	}
 	if !nameRe.MatchString(r.Name) {
 		return errors.New("the name must be 1 to 32 letters, digits, - or _ (starting with a letter or digit)")
