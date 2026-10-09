@@ -80,3 +80,14 @@ Tor has been **off** (`tor.json`: enabled false, installed true) for all playbac
 ## Pitfalls I hit
 
 `pkill -f` can match and kill your own shell (use `pkill -x`); an unquoted `*` inside a curl option string expands to the files in the current directory; the box's busybox has no `ls --full-time`; the deploy script's rollback does not cover DNS or certificate changes.
+
+## Freeze investigation: progress (later on 2026-10-09)
+
+Deferred by Ben after the first step; **a watcher keeps logging meanwhile.**
+
+- **Watcher:** `~/freeze-watch/watch.sh` runs detached on the Pi (start it again with `cd ~/freeze-watch && setsid nohup ./watch.sh >/dev/null 2>&1 </dev/null &` if `pgrep -x watch.sh` is empty). One line per 15 s in `~/freeze-watch/watch.log` (rotates at 5 MB to `.1`): box uptime, load, daemon CPU ticks, RSS, MemAvailable, handshake-error count, daemon pid, heap bytes, goroutines. **A freeze shows as a gap or `no answer`; a cold reboot as `up` dropping to a small number; a daemon restart as a new `pid`.** `session-1-playback.log` there is the 5 s log of the playback test.
+- **Playback test (about 40 min, one Pixel, Sintel-free: a Star Trek episode):** no freeze. Load 2.5 to 3.4, daemon about 65 to 70 % CPU, MemAvailable 37 to 47 MB, heap 54 to 63 MB, goroutines 115 to 150, handshake errors nearly flat. One steady phone does not freeze it; the earlier freezes followed connection bursts.
+- **Idle after a fresh restart (nobody playing):** about 35 % of the core (351 CPU ticks in 10 s), heap flat at 53 MB, over the 48 MB `SetMemoryLimit`. Load 1.6 to 2.0 at idle.
+- **New lead, not yet checked:** `/data/dnsfilter` holds about 30 MB of blocklists (hagezi gambling 10 MB, tif 10 MB, pro 3.7 MB, phishing-army 2.9 MB, others) and `flt.Load()` keeps them in memory (main.go, right after the limit is set). The comment at main.go:401 says the live heap is small; with these lists it probably is not. If the live set is above 48 MB the GC runs at its CPU cap all the time. To check: how `Filter` stores the domains (map of strings vs a compact structure), then a heap profile; also try disabling the biggest lists to see idle CPU drop.
+- **Deployed this session:** the audio-codec warning in `browse.html` (`df73a98`, not pushed). Daemon binary sha256 starts `d9a3b6ada1cfd5d9`. The Pixel's wireless-debugging port changes often.
+- **Audio (separate, deferred):** the test file's audio is E-AC-3, which Chrome on Android cannot decode. Plan: WASM decoder (libav.js, AC-3/E-AC-3/DTS only) to a Web Audio worklet synced to the video; encode half would be native `AudioEncoder`. See the conversation notes; nothing built yet.
