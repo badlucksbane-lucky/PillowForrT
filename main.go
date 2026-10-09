@@ -207,6 +207,11 @@ func allowed(remote string) bool {
 }
 
 func handleConnect(w http.ResponseWriter, r *http.Request) {
+	client := clientIP(r.RemoteAddr)
+	if !proxyLimit.admit(w, client) {
+		return
+	}
+	defer proxyLimit.release(client)
 	var dst net.Conn
 	var err error
 	if isTor, terr := torMgrG.torProxyAllowed(r); isTor { // Tor over Mullvad (torvpn.go): the tunnel or nothing
@@ -216,7 +221,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		}
 		dst, err = dialTor(r.Context(), r.Host)
 	} else {
-		dst, err = vpn.DialFor(r.Context(), clientIP(r.RemoteAddr), "tcp", r.Host)
+		dst, err = vpn.DialFor(r.Context(), client, "tcp", r.Host)
 	}
 	if err != nil {
 		log.Printf("CONNECT dial error for %s: %v", r.Host, err)
@@ -234,16 +239,14 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		dst.Close()
 		return
 	}
+	keepAlive(src)
 	src.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 	connsTotal.Add(1)
 	connsActive.Add(1)
 	defer connsActive.Add(-1)
-	client, host := clientIP(r.RemoteAddr), hostOnly(r.Host)
-	upDone := make(chan uint64, 1)
-	go func() { n := countedCopy(dst, src); dst.Close(); upDone <- n }()
-	down := countedCopy(src, dst)
-	src.Close()
-	account(client, host, <-upDone, down, true)
+	host := hostOnly(r.Host)
+	up, down := spliceTunnel(src, dst)
+	account(client, host, up, down, true)
 }
 
 func handleHTTP(w http.ResponseWriter, r *http.Request) {
@@ -251,6 +254,10 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this is a forward proxy; use an absolute URI", http.StatusBadRequest)
 		return
 	}
+	if !proxyLimit.admit(w, clientIP(r.RemoteAddr)) {
+		return
+	}
+	defer proxyLimit.release(clientIP(r.RemoteAddr))
 	out := r.Clone(r.Context())
 	out.RequestURI = ""
 	out.Close = false
