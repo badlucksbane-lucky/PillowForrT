@@ -22,6 +22,7 @@ button.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 input.ed{font:inherit;flex:1;min-width:0;height:44px;border:1px solid var(--ac);border-radius:10px;padding:0 10px;background:var(--bg);color:var(--fg)}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.dot{background:var(--ln)}.dot.ok{background:var(--okc)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.sw{position:relative;width:60px;height:36px;border-radius:18px;background:var(--ln);border:0;padding:0;flex:none;min-height:0;transition:background .15s}.sw::before{content:"";position:absolute;top:4px;left:4px;width:28px;height:28px;border-radius:50%;background:var(--card);transition:transform .15s}.sw.on{background:var(--ac)}.sw.on::before{transform:translateX(24px)}
 .scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch}.scroll .chip{flex:none}.chip.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
+.sub{margin-top:12px;padding-top:12px;border-top:1px solid var(--ln)}
 .kvr{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--ln)}.kvr:last-child{border:0}.kvr>span:last-child{text-align:right;min-width:0;word-break:break-all}
 .bar{height:4px;background:var(--ln);border-radius:2px;margin-top:6px}.bar>i{display:block;height:4px;background:var(--ac);border-radius:2px}
 input{font:inherit;padding:6px 8px;border:1px solid var(--ln);border-radius:8px;background:var(--bg);color:var(--fg);min-width:0;flex:1}
@@ -133,7 +134,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 <div class="card"><h2>Top asked</h2><table id="tq"></table></div>
 <div class="card"><h2>Recent</h2><table id="rc"></table></div>
 <div class="sec">Devices</div>
-<div class="card" id="c-wifi"><h2>Wi-Fi</h2><div id="wifi" class="mut">loading</div><div id="wmsg" class="msg"></div></div>
+<div class="card" id="c-wifi"><h2>Wi-Fi <span id="wibadge"></span></h2><div id="wifi" class="mut">loading</div><div id="wmsg" class="msg"></div></div>
 <div class="card"><h2>Blocked devices</h2><div id="blk" class="mut">loading</div><div id="bmsg" class="msg"></div></div>
 <div class="card"><h2>Internet schedules</h2><div id="fws" class="mut">loading</div><div id="fmsg" class="msg"></div></div>
 <div class="sec">Network</div>
@@ -264,39 +265,48 @@ async function apost(p,b){const r=await api('/api/'+p,{method:'POST',headers:hdr
 const dur=s=>s>=86400?Math.floor(s/86400)+' d':s>=3600?Math.floor(s/3600)+' h':s>=60?Math.floor(s/60)+' min':s+' s';
 let W=null,Dh=null,wpoll=null;
 function guard(el,force){return !force&&el.contains(document.activeElement)&&document.activeElement!==el&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)}
-function wrender(force){const el=$('wifi');if(!W||guard(el,force))return;const s=W.settings,L=W.live;
- const cl=(W.clients||[]).map(c=>'<tr><td>'+esc(c.name||c.mac)+(c.name?' <span class="mut">'+esc(c.mac)+'</span>':'')+'</td><td>'+esc(c.ip||'')+'</td><td class="mut">'+esc(c.band||'2.4 GHz')+'</td><td>'+dur(c.connected_s)+'</td><td><button onclick="wkick(\''+c.mac+'\')">Disconnect</button></td></tr>').join('')||'<tr><td class="mut">no devices connected</td></tr>';
- const st=W.state==='waiting'?'<div class="err"><b>Waiting for a device to rejoin ... '+Math.floor(W.wait_left_s/60)+':'+String(W.wait_left_s%60).padStart(2,'0')+' left.</b> Connect one device with the new Wi-Fi settings. If none joins in time, the old settings come back by themselves. <button onclick="wrestore()">Revert now</button></div>':W.state==='applying'?'<div class="err">'+esc(W.message)+' ... Wi-Fi drops for about 10 seconds.</div>':W.state==='failed'?'<div class="err">'+esc(W.message)+'</div>':W.state==='ok'?'<div class="mut">'+esc(W.message)+'</div>':'';
- const opt=(v,t,cur)=>'<option value="'+v+'"'+(String(cur)===String(v)?' selected':'')+'>'+t+'</option>';
- const chs=[0,1,2,3,4,5,6,7,8,9,10,11].map(c=>opt(c,c?('Channel '+c):'Automatic',s.channel)).join('');
- const mx=[1,2,3,4,5,6,7,8,9,10].map(c=>opt(c,c,s.max_clients)).join('');
- const f5=s.five||{},L5=W.live5;
- const ch5=[[36,'Channel 36 (5180 MHz, lower band)'],[149,'Channel 149 (5745 MHz, upper band)']].map(c=>opt(c[0],c[1],f5.channel)).join('');
- const five='<div style="margin-top:12px"><b>5 GHz network</b> '+(f5.enabled?(L5&&L5.hostapd==='ENABLED'?'<b style="color:var(--ac)">up</b> on channel '+L5.channel+' ('+L5.freq_mhz+' MHz)':'<b class="err">'+esc(L5?L5.hostapd||'down':'down')+'</b>'):'<span class="mut">off</span>')+'</div>'+
-  '<div class="row" style="margin-top:6px"><label><input type="checkbox" id="w5_on" '+(f5.enabled?'checked':'')+'> On</label><label>Name <input id="w5_ssid" maxlength="32" value="'+esc(f5.ssid||'')+'" placeholder="not the same as the 2.4 GHz name"></label><label><select id="w5_ch">'+ch5+'</select></label><label><input type="checkbox" id="w5_hid" '+(f5.hidden?'checked':'')+'> Hidden</label></div>'+
-  '<div class="row" style="margin-top:6px"><label>New password <input id="w5_pw" type="password" autocomplete="new-password" placeholder="blank = keep (a 2.4 GHz password change carries over if they match)" maxlength="63" style="min-width:260px"></label><label>Again <input id="w5_pw2" type="password" autocomplete="new-password" maxlength="63"></label></div>'+
-  '<div class="mut" style="margin-top:4px">Two real channel choices: 36 or 149. 5 GHz has shorter range through walls.</div>';
- el.innerHTML='<div><b>'+esc(s.ssid)+'</b>'+(s.hidden?' (hidden)':'')+' on '+(L.channel?('channel '+L.channel+' ('+L.freq_mhz+' MHz)'):'-')+' - Wi-Fi '+(L.hostapd==='ENABLED'?'<b style="color:var(--ac)">up</b>':'<b class="err">'+esc(L.hostapd||'down')+'</b>')+' - '+(W.clients||[]).length+' of '+s.max_clients+' devices</div>'+st+
-  '<table style="margin:8px 0">'+cl+'</table>'+
-  '<div class="row"><label>Name <input id="w_ssid" maxlength="32" value="'+esc(s.ssid)+'"></label><label>New password <input id="w_pw" type="password" autocomplete="new-password" placeholder="leave blank to keep" maxlength="63"></label><label>Again <input id="w_pw2" type="password" autocomplete="new-password" placeholder="type it again" maxlength="63"></label><label><input type="checkbox" onchange="wshow(this.checked)"> show</label></div>'+
-  '<div class="row" style="margin-top:6px"><label><select id="w_ch">'+chs+'</select></label><label>Max devices <select id="w_mx">'+mx+'</select></label><label><input type="checkbox" id="w_hid" '+(s.hidden?'checked':'')+'> Hidden network</label></div>'+
-  '<div class="row" style="margin-top:6px"><label><input type="checkbox" id="w_iso" '+(s.ap_isolate?'checked':'')+'> Isolate devices from each other <span class="err">(cuts computers off from the phones: the cluster stops working)</span></label></div>'+
-  five+
-  '<div class="row" style="margin-top:8px"><button class="on" onclick="wapply()">Apply</button>'+(W.backups&&W.backups.length?'<button onclick="wrestore()">Undo last change ('+esc(W.backups[0].replace(/^(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)\d\d$/,'$1-$2-$3 $4:$5'))+')</button>':'')+'</div>'}
+let Wd=null,Wdirty=false;
+function wdraft(){const t=W.settings,f=t.five||{};return {ssid:t.ssid,pw:'',pw2:'',ch:t.channel,mx:t.max_clients,hid:!!t.hidden,iso:!!t.ap_isolate,show:false,f:{on:!!f.enabled,ssid:f.ssid||'',pw:'',pw2:'',hid:!!f.hidden,ch:f.channel}}}
+function wset(k,v,five){(five?Wd.f:Wd)[k]=v;Wdirty=true;wrender(true)}
+function wtype(k,v,five){(five?Wd.f:Wd)[k]=v;Wdirty=true}
+function wdiscard(){Wd=null;Wdirty=false;wrender(true)}
+function wrender(force){const el=$('wifi');if(!W||guard(el,force))return;const t=W.settings,L=W.live,f5=t.five||{},L5=W.live5;
+ if(!Wd||!Wdirty)Wd=wdraft();const d=Wd,n=(W.clients||[]).length;
+ $('wibadge').innerHTML=chip(n+'/'+t.max_clients,'','devices connected');
+ const band=(lab,ssid,live,on,hid)=>'<div class="row" style="margin-top:8px"><span class="dot'+(on?(live&&live.hostapd==='ENABLED'?' ok':' bad'):'')+'"></span><b>'+esc(ssid||'-')+'</b>'+chip(lab)+(on&&live&&live.channel?chip('ch '+live.channel,'',live.freq_mhz+' MHz'):'')+(hid?chip('hidden'):'')+(on?'':chip('off'))+'</div>';
+ const st=W.state==='waiting'?'<div class="row" style="margin-top:10px"><span class="dot warn"></span><b>'+Math.floor(W.wait_left_s/60)+':'+String(W.wait_left_s%60).padStart(2,'0')+'</b><span class="mut" title="Join one device with the new settings. If none joins in time, the old settings come back by themselves.">waiting for a device</span><span style="flex:1"></span><button class="on" onclick="wrestore()">Revert now</button></div>':W.state==='applying'?'<div class="row" style="margin-top:10px"><span class="dot warn"></span><span>'+esc(W.message||'Applying')+'</span>'+chip('~10 s','warn','Wi-Fi drops for about 10 seconds')+'</div>':W.state==='failed'?'<div class="err" style="margin-top:10px">'+esc(W.message)+'</div>':W.state==='ok'&&W.message?'<div class="mut" style="margin-top:10px">'+esc(W.message)+'</div>':'';
+ const chips=a=>'<div class="scroll">'+a.map(o=>'<button type="button" class="chip'+(String(o[2])===String(o[3])?' on':'')+'" onclick="'+o[4]+'">'+o[0]+'</button>').join('')+'</div>';
+ const row=(lab,ctl,tip)=>'<div class="row" style="margin-top:12px"><span'+(tip?' title="'+esc(tip)+'"':'')+'>'+lab+'</span><span style="flex:1"></span>'+ctl+'</div>';
+ const inp=(id,lab,val,k,five,type,ph)=>'<input id="'+id+'" type="'+(type||'text')+'" aria-label="'+lab+'" placeholder="'+esc(ph||lab)+'" title="'+(/pw/.test(id)?'Leave blank to keep the current password':'')+'" maxlength="'+(type==='password'||d.show?63:32)+'" value="'+esc(val)+'" autocomplete="'+(type==='password'||d.show&&/pw/.test(id)?'new-password':'off')+'" oninput="wtype(\''+k+'\',this.value'+(five?',true':'')+')" style="flex:1;min-width:140px">';
+ const pwt=d.show?'text':'password';
+ const chA=chips([['Auto','','0',d.ch,"wset('ch',0)"]].concat([1,2,3,4,5,6,7,8,9,10,11].map(c=>[c,'',c,d.ch,"wset('ch',"+c+")"])).map(o=>[o[0],o[1],o[2],o[3],o[4]]));
+ const dirty=Wdirty?'<div class="row" style="margin-top:12px"><button class="on" onclick="wapply()">Apply</button><button onclick="wdiscard()">Discard</button></div>':'';
+ el.innerHTML=band('2.4',t.ssid,L,true,t.hidden)+band('5',f5.ssid||'',L5,!!f5.enabled,f5.hidden)+st+
+  '<details style="margin-top:12px"><summary><b>Settings</b></summary>'+
+  '<div class="row" style="margin-top:10px">'+inp('w_ssid','Name',d.ssid,'ssid',0)+'</div>'+
+  '<div class="row" style="margin-top:8px">'+inp('w_pw','New password',d.pw,'pw',0,pwt,'New password')+inp('w_pw2','Again',d.pw2,'pw2',0,pwt,'Again')+'<button class="ib'+(d.show?' on':'')+'" aria-label="Show passwords" onclick="wset(\'show\','+(!d.show)+')">'+ic('eye')+'</button></div>'+
+  '<div class="mut" style="margin-top:12px">Channel</div>'+chA+
+  row('Max devices','<span class="seg"><button type="button" onclick="wset(\'mx\','+Math.max(1,d.mx-1)+')">&minus;</button><button type="button" class="on" style="min-width:44px">'+d.mx+'</button><button type="button" onclick="wset(\'mx\','+Math.min(10,d.mx+1)+')">+</button></span>')+
+  row('Hidden',sw(d.hid,"wset('hid',"+(!d.hid)+")",'Hidden network'))+
+  row('Isolate devices',sw(d.iso,"wset('iso',"+(!d.iso)+")",'Isolate devices from each other'),'Cuts computers off from the phones: the cluster stops working')+
+  '<div class="sub"><div class="row"><b>5 GHz</b><span style="flex:1"></span>'+sw(d.f.on,"wset('on',"+(!d.f.on)+",true)",'5 GHz network')+'</div>'+
+  (d.f.on?'<div class="row" style="margin-top:10px">'+inp('w5_ssid','Name',d.f.ssid,'ssid',1,0,'Name')+'</div>'+
+   '<div class="row" style="margin-top:8px">'+inp('w5_pw','New password',d.f.pw,'pw',1,pwt,'New password')+inp('w5_pw2','Again',d.f.pw2,'pw2',1,pwt,'Again')+'</div>'+
+   '<div class="row" style="margin-top:12px"><span class="mut">Channel</span><span class="seg" role="radiogroup" aria-label="5 GHz channel"><button type="button" class="'+(+d.f.ch===36?'on':'')+'" title="5180 MHz, lower band" onclick="wset(\'ch\',36,true)">36</button><button type="button" class="'+(+d.f.ch===149?'on':'')+'" title="5745 MHz, upper band" onclick="wset(\'ch\',149,true)">149</button></span></div>'+
+   row('Hidden',sw(d.f.hid,"wset('hid',"+(!d.f.hid)+",true)",'Hide the 5 GHz network')):'')+'</div>'+
+  (W.backups&&W.backups.length?'<div class="row" style="margin-top:14px"><button onclick="wrestore()">Undo last change</button>'+chip(esc(W.backups[0].replace(/^(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)\d\d$/,'$2-$3 $4:$5')))+'</div>':'')+'</details>'+dirty}
 async function wload(){try{W=await (await api('/api/wifi')).json();wrender();if((W.state==='waiting'||W.state==='applying')&&!wpoll)wpollStart();return true}catch(e){return false}}
-async function wkick(mac){if(!confirm('Disconnect '+mac+'? It will rejoin by itself.'))return;const r=await apost('wifi/kick',{mac});$('wmsg').textContent=r.j.error||r.j.status||'';setTimeout(wload,3000)}
-function wshow(on){$('w_pw').type=$('w_pw2').type=on?'text':'password'}
 function wpollStart(){clearInterval(wpoll);let n=0;wpoll=setInterval(async()=>{n++;const ok=await wload();if(ok&&W.state!=='applying'&&W.state!=='waiting'){clearInterval(wpoll);return}if(!ok)$('wmsg').textContent='Wi-Fi is restarting. If you changed the name or password, reconnect with the new details, then reload this page.';if(n>130)clearInterval(wpoll)},3000)}
 async function wapply(){const s=W.settings,c={},what=[];
- const pw2=$('w_pw2').value;if($('w_pw').value!==pw2){$('wmsg').textContent='The two password boxes differ: type the new password twice, identically.';return}
- const ssid=$('w_ssid').value,pw=$('w_pw').value,ch=+$('w_ch').value,mx=+$('w_mx').value,hid=$('w_hid').checked,iso=$('w_iso').checked;
+ const pw2=Wd.pw2;if(Wd.pw!==pw2){$('wmsg').textContent='The two password boxes differ: type the new password twice, identically.';return}
+ const d=Wd,ssid=d.ssid,pw=d.pw,ch=+d.ch,mx=+d.mx,hid=d.hid,iso=d.iso;
  if(ssid!==s.ssid){c.ssid=ssid;what.push('rename the network to "'+ssid+'" (every device must pick it again)')}
  if(pw){c.password=pw;c.password_confirm=pw2;what.push('change the password to the one you typed (every device must enter the new one; a typo locks every device out until the automatic revert)')}
  if(hid!==s.hidden){c.hidden=hid;what.push(hid?'hide the network':'show the network')}
  if(mx!==s.max_clients){c.max_clients=mx;what.push('limit to '+mx+' devices')}
  if(ch!==s.channel){c.channel=ch;what.push(ch?'use channel '+ch:'choose the channel automatically')}
  if(iso!==s.ap_isolate){c.ap_isolate=iso;what.push(iso?'ISOLATE devices from each other (breaks computer-to-phone traffic)':'stop isolating devices')}
- const f5=s.five||{},c5={};const on5=$('w5_on').checked,n5=$('w5_ssid').value,pw5=$('w5_pw').value,pw52=$('w5_pw2').value,h5=$('w5_hid').checked,k5=+$('w5_ch').value;
+ const f5=s.five||{},c5={};const on5=Wd.f.on,n5=Wd.f.ssid,pw5=Wd.f.pw,pw52=Wd.f.pw2,h5=Wd.f.hid,k5=+Wd.f.ch;
  if(pw5!==pw52){$('wmsg').textContent='The two 5 GHz password boxes differ: type it twice, identically.';return}
  if(on5!==!!f5.enabled){c5.enabled=on5;what.push(on5?'turn the 5 GHz network ON':'turn the 5 GHz network OFF (devices on it lose Wi-Fi until they join the 2.4 GHz one)')}
  if(n5!==(f5.ssid||'')){c5.ssid=n5;what.push('name the 5 GHz network "'+n5+'"')}
@@ -306,8 +316,8 @@ async function wapply(){const s=W.settings,c={},what=[];
  if(Object.keys(c5).length)c.five=c5;
  if(!what.length){$('wmsg').textContent='Nothing to change.';return}
  if(!confirm('This restarts Wi-Fi: every device disconnects for about 10 seconds.\n\nChanges:\n- '+what.join('\n- ')+'\n\nA backup is saved first. If the radio does not come back, or if no device manages to rejoin within 5 minutes, the old settings are restored automatically. Have the new details ready to enter on a device straight away. Continue?'))return;
- const r=await apost('wifi/apply',c);$('wmsg').textContent=r.j.error||'';if(r.ok){$('w_pw').value='';$('w_pw2').value='';$('w5_pw').value='';$('w5_pw2').value='';wpollStart()}}
-async function wrestore(){if(!confirm('Put back the Wi-Fi settings from before the last change? Wi-Fi restarts.'))return;const r=await apost('wifi/restore',{});$('wmsg').textContent=r.j.error||'';if(r.ok)wpollStart()}
+ const r=await apost('wifi/apply',c);$('wmsg').textContent=r.j.error||'';if(r.ok){Wd=null;Wdirty=false;wpollStart()}}
+async function wrestore(){if(!confirm('Put back the Wi-Fi settings from before the last change? Wi-Fi restarts.'))return;const r=await apost('wifi/restore',{});$('wmsg').textContent=r.j.error||'';if(r.ok){Wd=null;Wdirty=false;wpollStart()}}
 function drender(force){const el=$('dhcp');if(!Dh||guard(el,force))return;
  const rows=(Dh.reservations||[]).map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+esc(r.ip)+'</td><td class="mut">'+esc(r.mac)+'</td><td>'+(r.online?(r.seen_as?'<span class="err">online as '+esc(r.seen_as)+'</span> <button onclick="dmove(\''+r.mac+'\')">Move now</button>':'<span style="color:var(--ac)">online</span>'):'<span class="mut">offline</span>')+'</td><td><button onclick="dedit(\''+r.mac+'\')">Edit</button> <button onclick="ddel(\''+r.mac+'\',\''+esc(r.name)+'\')">Delete</button></td></tr>').join('')||'<tr><td class="mut">none</td></tr>';
  const free=(Dh.devices||[]).filter(d=>!d.reserved);
