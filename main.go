@@ -224,7 +224,7 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 		dst, err = vpn.DialFor(r.Context(), client, "tcp", r.Host)
 	}
 	if err != nil {
-		log.Printf("CONNECT dial error for %s: %v", r.Host, err)
+		logProxyError("CONNECT dial error", r.Host, err)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -271,7 +271,7 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := tr.RoundTrip(out)
 	if err != nil {
-		log.Printf("upstream error for %s %s: %v", r.Method, r.URL, err)
+		logProxyError("upstream error", r.Method+" "+r.URL.Host, err)
 		http.Error(w, "upstream: "+err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -317,6 +317,7 @@ func main() {
 	porchRelayOn = flag.Bool("porch-relay", false, "relay the outside ports 80/443/8080/8443 to a service on the LAN (needs the stock admin moved to 81/444; off by default)")
 	flag.Parse()
 	log.SetOutput(os.Stderr)
+	startLogRotation()
 	if *setLogin != "" {
 		pw, _ := io.ReadAll(io.LimitReader(os.Stdin, 4096))
 		a := NewAuth(filepath.Join(*secureDir, "auth.json"))
@@ -398,6 +399,7 @@ func main() {
 	srv := &http.Server{
 		Addr:         *listenAddr,
 		Handler:      h,
+		ErrorLog:     httpErrorLog(),
 		ReadTimeout:  0,
 		WriteTimeout: 0,
 	}
@@ -579,7 +581,7 @@ func main() {
 			log.Printf("web page certificate SHA-256: %s", cm.Fingerprint())
 			go cm.Run()
 			ui := &webUI{auth: webAuth, fpFn: cm.Fingerprint}
-			hs := &http.Server{Addr: *uiListen, Handler: ui.handler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10,
+			hs := &http.Server{Addr: *uiListen, Handler: ui.handler(), ErrorLog: httpErrorLog(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10,
 				TLSConfig: &tls.Config{GetCertificate: cm.GetCertificate, MinVersion: tls.VersionTLS12}}
 			go func() { log.Printf("web page: %v", hs.ListenAndServeTLS("", "")) }()
 			onionAddr := *onionListen
@@ -590,7 +592,7 @@ func main() {
 				if !isLoopbackAddr(onionAddr) {
 					log.Printf("onion web page off: %q is not a loopback address", onionAddr)
 				} else {
-					ohs := &http.Server{Addr: onionAddr, Handler: ui.onionHandler(func() bool { return torMgrG.RemoteWrite() }), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10}
+					ohs := &http.Server{Addr: onionAddr, ErrorLog: httpErrorLog(), Handler: ui.onionHandler(func() bool { return torMgrG.RemoteWrite() }), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10}
 					go func() { log.Printf("onion web page: %v", ohs.ListenAndServe()) }()
 				}
 			}
