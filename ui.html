@@ -22,6 +22,9 @@ button.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 input.ed{font:inherit;flex:1;min-width:0;height:44px;border:1px solid var(--ac);border-radius:10px;padding:0 10px;background:var(--bg);color:var(--fg)}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.dot{background:var(--ln)}.dot.ok{background:var(--okc)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.sw{position:relative;width:60px;height:36px;border-radius:18px;background:var(--ln);border:0;padding:0;flex:none;min-height:0;transition:background .15s}.sw::before{content:"";position:absolute;top:4px;left:4px;width:28px;height:28px;border-radius:50%;background:var(--card);transition:transform .15s}.sw.on{background:var(--ac)}.sw.on::before{transform:translateX(24px)}
 .scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch}.scroll .chip{flex:none}.chip.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
+.wall{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.tile{aspect-ratio:1;border-radius:14px;border:1px solid var(--ln);background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:12px;color:var(--mut);padding:4px;min-height:0}
+.tile i{width:16px;height:16px;border-radius:50%;background:var(--okc)}.tile.warn i{background:var(--warn)}.tile.bad i{background:var(--bad)}
 .rl{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 0;border-bottom:1px solid var(--ln)}.rl:last-child{border:0}.rl .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .days{display:flex;gap:4px}.days i{width:22px;height:22px;border-radius:6px;font:12px/22px system-ui,sans-serif;text-align:center;font-style:normal;background:var(--ln);color:var(--mut)}.days i.on{background:var(--ac);color:var(--onac)}
 .sub{margin-top:12px;padding-top:12px;border-top:1px solid var(--ln)}
@@ -108,6 +111,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 <div class="card empty" id="c-px"><h2>Proxy</h2><div id="pxpol"></div></div>
 <div class="card" id="c-mv"><h2>Mullvad <span id="vpnbadge"></span></h2><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div></div>
 <div class="card" id="c-tor"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
+<div class="card" id="c-wall"><h2>Detectors <span id="dtbadge"></span></h2><div class="wall" id="wall"></div></div>
 <div class="sec">Monitoring</div>
 <div class="card"><h2>Events <span id="evbadge"></span></h2><div id="ev" class="mut">loading</div><div id="evmsg" class="msg"></div></div>
 <div class="card"><h2>Latency history <span id="lhbadge"></span></h2><div id="lh" class="mut">loading</div></div>
@@ -989,11 +993,12 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
 (function(){
  let st={};try{st=JSON.parse(localStorage.getItem('cc')||'{}')}catch(e){}
  const save=()=>{try{localStorage.setItem('cc',JSON.stringify(st))}catch(e){}};
+ const DETS=[['ARP watch','ARP'],['Rogue DHCP','DHCP'],['Steering watch','Steer'],['Canary','Canary'],['MAC churn','MAC'],['DNS canary','DNS'],['NXDOMAIN flood','NXD'],['Beacon patterns','Beacon'],['Tor / proxy bypass','Bypass'],['Bare-IP TLS','TLS'],['Certificate change','Cert'],['DHCP fingerprint drift','Finger'],['Resolver cross-check','XCheck'],['LAN announcements','LAN'],['ARP / DNS correlation','Corr'],['Hidden router','Router'],['Stock admin tripwire','Admin'],['Rebinding refusal','Rebind']];
  const cards=[...document.querySelectorAll('.card')];
- function setClosed(c,h,k,closed){c.classList.toggle('closed',closed);h.setAttribute('aria-expanded',closed?'false':'true');if(closed)st[k]=1;else delete st[k]}
+ function setClosed(c,h,k,closed){c.classList.toggle('closed',closed);h.setAttribute('aria-expanded',closed?'false':'true');if(closed)st[k]=1;else st[k]=0}
  cards.forEach(c=>{const h=c.querySelector(':scope>h2');if(!h)return;const k=(h.firstChild&&h.firstChild.textContent||'').trim();if(!k)return;
   h.classList.add('cc');h.setAttribute('role','button');h.tabIndex=0;
-  setClosed(c,h,k,!!st[k]);
+  setClosed(c,h,k,k in st?!!st[k]:DETS.some(d=>d[0]===k));
   const tog=()=>{setClosed(c,h,k,!c.classList.contains('closed'));save()};
   h.addEventListener('click',tog);h.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();tog()}})});
  window.ccAll=closed=>{cards.forEach(c=>{const h=c.querySelector(':scope>h2.cc');if(h)setClosed(c,h,(h.firstChild.textContent||'').trim(),closed)});save();secs.forEach(s=>setSecClosed(s,s.textContent.trim(),closed));saveSec()};
@@ -1011,7 +1016,7 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
  const IC={bridge:'M2 18h20M4 18v-4c0-4 3.5-7 8-7s8 3 8 7v4M8 18v-5M12 18v-6M16 18v-5',devices:'M4 5h16v11H4zM8 20h8M12 16v4',eye:'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',grid:'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',pause:'M8 5v14M16 5v14',play:'M7 4l13 8-13 8z',block:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8',pen:'M4 20l4-1 11-11-3-3L5 16l-1 4z',chev:'M6 9l6 6 6-6',check:'M5 12l5 5 9-10',x:'M6 6l12 12M18 6L6 18',restore:'M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3',chart:'M4 20V10M10 20V4M16 20v-8M22 20H2',shield:'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',lock:'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',globe:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18',wall:'M3 5h18v14H3zM3 10h18M3 15h18M9 5v5M15 10v5M9 15v4',tower:'M12 13v8M8 21h8M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2M12 11.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z',wifi:'M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01'};
  const ic=n=>'<svg class="i" viewBox="0 0 24 24"><path d="'+IC[n]+'"/></svg>';window.ic=ic;
  const SECS={'Bridge control':['none','bridge'],'Monitoring':['watch','watch'],'Security':['watch','watch'],'DNS':['watch','watch'],'Devices':['none','devices'],'Network':['more','more'],'System':['more','more']};
- const CARDS={'Devices':'bridge','Blocked devices':'devices','Internet schedules':'devices','Wi-Fi':'devices','Cellular':'bridge'};
+ const CARDS={'Devices':'bridge','Blocked devices':'devices','Internet schedules':'devices','Wi-Fi':'devices','Cellular':'bridge','Detectors':'watch'};
  const main=document.querySelector('main');
  const hero=main.querySelector('.card.hero');
  const lights=document.createElement('div');lights.className='lights';lights.id='lights';hero.after(lights);
@@ -1045,6 +1050,16 @@ async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),ap
  lightsRender();setInterval(lightsRender,1500);
  const gt=document.getElementById('gtog'),gr=document.getElementById('gr');let gopen=false;try{gopen=localStorage.getItem('gr')==='1'}catch(e){}
  const gset=o=>{gopen=o;gr.hidden=!o;gt.setAttribute('aria-expanded',o);gt.innerHTML=ic('chart')+'<span class="cv" style="display:inline-flex;transform:rotate('+(o?180:0)+'deg)">'+ic('chev')+'</span>';try{localStorage.setItem('gr',o?'1':'0')}catch(e){}};gt.onclick=()=>gset(!gopen);gset(gopen);
+ // wall of lights: one tile per detector, coloured from the badge that detector already fills in
+ const titleOf=c=>{const h=c.querySelector(':scope>h2');return h&&h.firstChild?h.firstChild.textContent.trim():''};
+ const dcards=DETS.map(d=>cards.find(c=>titleOf(c)===d[0]));
+ dcards.forEach((c,i)=>{if(c)c.id='d-'+i});
+ const wall=document.getElementById('wall');let lastW='';
+ function wallRender(){let w=0,b=0;const h=DETS.map((d,i)=>{const c=dcards[i],bd=c&&c.querySelector('h2 [id$="badge"]'),t=bd?bd.innerHTML.trim():'',k=!t?0:/class="err"/.test(t)?2:1;if(k===1)w++;if(k===2)b++;
+   return '<button type="button" class="tile'+(k===1?' warn':k===2?' bad':'')+'" title="'+d[0]+'" onclick="goCard(\'watch\',\'d-'+i+'\')"><i></i>'+d[1]+'</button>'}).join('');
+  const bh=(b?chip(b,'bad','alerts'):'')+(w?chip(w,'warn','to look at'):'');
+  if(h+bh!==lastW){lastW=h+bh;wall.innerHTML=h;document.getElementById('dtbadge').innerHTML=bh}}
+ wallRender();setInterval(wallRender,1500);
  // every <details> remembers open/closed across re-renders and page reloads
  let dst={};try{dst=JSON.parse(localStorage.getItem('dt')||'{}')}catch(e){}
  let dapplying=false;
