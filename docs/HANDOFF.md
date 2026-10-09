@@ -11,7 +11,7 @@
 
 ## Audit and fixes (2026-10-09)
 
-Eight commits, all deployed to the box, **none pushed** (`origin` is behind by eight). The binary on the box is the build of `30dab50`, sha256 starting `5772f759f08848795fd11cef8d9f19261e763b3e66f48ed9100ad41b507f3129` (full hash in `./build.sh` output).
+Eight commits, all deployed to the box and pushed (`origin/main` at `55289d9`). The binary on the box is the build of `30dab50`, sha256 starting `5772f759f08848795fd11cef8d9f19261e763b3e66f48ed9100ad41b507f3129` (full hash in `./build.sh` output).
 
 | Commit | What | Measured effect |
 |---|---|---|
@@ -77,7 +77,7 @@ All times below are the **box's clock (EDT)**; the Pi's clock (CDT, `~/freeze-wa
 | | |
 |---|---|
 | Repo | `github.com/badlucksbane-lucky/PillowForrT` (`origin`, public, full history). The old repo is the `stone-of-heimdall` remote, untouched. |
-| Head | `30dab50` plus this file. The binary on the box is the build of `30dab50`, sha256 starting `5772f759f08848795fd`. Eight commits (`2b94e26` to `30dab50`) are **not pushed**. |
+| Head | `30dab50` plus this file. The binary on the box is the build of `30dab50`, sha256 starting `5772f759f08848795fd`. Everything is pushed (`origin/main` at `55289d9`, this file's last commit). |
 | Web page | `https://pillowforrt.lan/` (also `pillowforrt`). SSH alias `pillowforrt`. Local config in `~/.pillowforrt` (`tls.pem` pinned certificate, `ui.token`). |
 | Certificate | Self-signed, marked as a CA limited by critical name constraints to this box's own names and two addresses (Android's installer only installs a CA). SHA-256 begins `4C:A4:AD:90`. Valid 800 days from 2026-10-09. |
 | Deploy | `./build.sh` then `scripts/deploy-tinyfwd.sh` (rolls back by itself if the daemon doesn't answer). Always ask Ben before committing or deploying: he says "commit, build and deploy" each time. |
