@@ -24,6 +24,7 @@ input.ed{font:inherit;flex:1;min-width:0;height:44px;border:1px solid var(--ac);
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}.dot{background:var(--ln)}.dot.ok{background:var(--okc)}.dot.warn{background:var(--warn)}.dot.bad{background:var(--bad)}.cnt{display:inline-block;min-width:18px;padding:0 6px;border:1px solid var(--ln);border-radius:9px;font:12px/18px system-ui,sans-serif;text-align:center;color:var(--mut);text-transform:none;letter-spacing:0;margin-left:6px}.sw{position:relative;width:60px;height:36px;border-radius:18px;background:var(--ln);border:0;padding:0;flex:none;min-height:0;transition:background .15s}.sw::before{content:"";position:absolute;top:4px;left:4px;width:28px;height:28px;border-radius:50%;background:var(--card);transition:transform .15s}.sw.on{background:var(--ac)}.sw.on::before{transform:translateX(24px)}
 .scroll{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;-webkit-overflow-scrolling:touch}.scroll .chip{flex:none}.chip.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 .ev{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--ln);cursor:pointer}.ev:last-child{border:0}.ev .dot{margin-top:6px}.ev .et{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ev .et.open{white-space:normal;word-break:break-word}.ev.un .et{font-weight:600}.ev .ts{flex:none;font-size:13px}
+.evw{border-bottom:1px solid var(--ln)}.evw:last-child{border:0}.evw .ev{border:0}
 .wall{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .tile{aspect-ratio:1;border-radius:14px;border:1px solid var(--ln);background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;font-size:12px;color:var(--mut);padding:4px;min-height:0}
 .tile i{width:16px;height:16px;border-radius:50%;background:var(--okc)}.tile.warn i{background:var(--warn)}.tile.bad i{background:var(--bad)}
@@ -413,16 +414,25 @@ function sprender(force){const el=$('sp');if(!Sp||guard(el,force))return;
 async function spload(){try{Sp=await (await api('/api/speed')).json();sprender()}catch(e){}}
 async function spset(en,h){const r=await apost('speed/set',{enabled:en,interval_h:h});$('spmsg').textContent=r.j.error||'';spload()}
 async function spnow(){const r=await apost('speed/run',{});$('spmsg').textContent=r.j.error||'';if(!r.ok)return;Sp.running=true;sprender(true);clearInterval(SpPoll);let k=0;SpPoll=setInterval(async()=>{await spload();if(++k>14||!Sp.running){clearInterval(SpPoll)}},4000)}
+let DOpen={};
+const dstate=v=>v==='bad'?' bad':v==='warn'?' warn':v==='ok'?' ok':'';
+const dwhen=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+function dtog(fn,k){const key=fn+':'+k;DOpen[key]=!DOpen[key];window[fn](true)}
+function dfind(fn,r){const k=String(r.k).replace(/[^A-Za-z0-9_.:-]/g,'_'),op=DOpen[fn+':'+k];
+ return '<div class="evw"><div class="ev" onclick="dtog(\''+fn+'\',\''+k+'\')"><span class="dot'+dstate(r.sev===undefined?'warn':r.sev)+'"></span><span class="et'+(op?' open':'')+'">'+r.title+'</span>'+(r.t?'<span class="mut ts" title="'+esc(dwhen(r.t))+'">'+evrel(r.t)+'</span>':'')+'</div>'+(op?'<div style="padding:0 0 10px 18px">'+(r.detail?'<div class="mut">'+r.detail+'</div>':'')+(r.act?'<div class="row" style="margin-top:8px">'+r.act+'</div>':'')+'</div>':'')+'</div>'}
+function det(el,fn,o){el.innerHTML='<div class="row" title="'+esc(o.tip||'')+'"><span class="dot'+dstate(o.sev)+'"></span><b>'+o.label+'</b>'+(o.chips||'')+'<span style="flex:1"></span>'+(o.sw||'')+'</div>'+((o.rows||[]).length?'<div style="margin-top:6px">'+o.rows.map(r=>dfind(fn,r)).join('')+'</div>':'')+(o.foot||'')}
+const dsec=(name,n,body)=>body?'<details style="margin-top:12px"><summary><b>'+name+'</b><span class="cnt">'+n+'</span></summary>'+body+'</details>':'';
+const dx2=(label,fn)=>'<button class="ib" aria-label="'+label+'" title="'+label+'" onclick="'+fn+'">'+ic('x')+'</button>';
 let Ar=null;
 function arrender(force){const el=$('ar');if(!Ar||guard(el,force))return;
  if(Ar.available===false){el.textContent='The ARP watch is not running on this build.';return}
  const f=Ar.findings||[],al=Ar.alerts||0;
  $('arbadge').innerHTML=al?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+al+' impersonation'+(al===1?'':'s')+'</span>':f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const what={arp_gateway:'<b class="err">impersonating the router</b>',arp_conflict:'<b class="err">claims a reserved address</b>',arp_flip:'address changed owner',arp_sweep:'scanned the network'};
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip||'(no address)')+'</b></td><td>'+(what[x.kind]||esc(x.kind))+'<div class="mut">'+(x.kind==='arp_sweep'?esc(x.mac)+(x.name?' ('+esc(x.name)+')':'')+' asked for '+x.count+' addresses within a minute':'now '+esc(x.mac)+(x.name?' ('+esc(x.name)+')':'')+(x.other?', was '+esc(x.other):''))+'</div></td></tr>').join('');
- el.innerHTML='<div class="row"><span>'+(Ar.capture_ok?(al?'<b class="err">something is impersonating an address</b>':f.length?'<b>nothing hostile, a few things to look at</b>':'<b style="color:var(--ac)">no impersonation seen</b>'):'<b class="err">watcher not running</b>')+'</span><span class="mut">'+Ar.claims_seen+' claims, '+Ar.addresses+' addresses watched</span></div>'+
-  '<div class="mut" style="margin:6px 0">Passive ARP monitoring. Alerts on gateway impersonation or reserved-address conflicts. Address changes within 10 min are flagged (random MAC rejoins look the same), and so is one device asking for 20 or more addresses within a minute: a host scan, which a new phone looking for printers also does once.</div>'+(rows?'<table>'+rows+'</table>':'')+(al?'<div style="margin-top:8px"><div class="mut">Allowed servers</div>'+al+'</div>':'')+'<div id="rdmsg" class="msg"></div>'}
+ const wh={arp_gateway:['impersonating the router',1],arp_conflict:['claims a reserved address',1],arp_flip:['address changed owner',0],arp_sweep:['scanned the network',0]};
+ det(el,'arrender',{sev:!Ar.capture_ok?'bad':al?'bad':f.length?'warn':'ok',label:!Ar.capture_ok?'Not running':al?'Impersonation':f.length?'To look at':'Quiet',chips:chip(Ar.claims_seen+' claims','','ARP claims seen')+chip(Ar.addresses+' addr','','addresses watched'),
+  tip:'Passive ARP monitoring. Alerts on gateway impersonation or reserved-address conflicts. Address changes within 10 minutes are flagged (random MAC rejoins look the same), and so is one device asking for 20 or more addresses within a minute: a host scan.',
+  rows:f.map(x=>{const w=wh[x.kind]||[esc(x.kind),0];return {k:x.t+x.mac,t:x.t,sev:w[1]?'bad':'warn',title:'<b>'+esc(x.ip||'(no address)')+'</b> '+w[0],detail:(x.kind==='arp_sweep'?esc(x.mac)+(x.name?' ('+esc(x.name)+')':'')+' asked for '+x.count+' addresses within a minute':'now '+esc(x.mac)+(x.name?' ('+esc(x.name)+')':'')+(x.other?', was '+esc(x.other):''))}}),
+  foot:'<div id="rdmsg" class="msg"></div>'})}
 async function rdallow(mac,on){if(on&&!confirm('Allow '+mac+' to answer DHCP on this network? Only do this for a server you run yourself: everything it hands out (gateway, DNS) will be trusted.'))return;const r=await apost('rogue-dhcp/allow',{mac,allow:on});if(!r.ok){const m=$('rdmsg');if(m)m.textContent=r.j.error||'failed';return}rdload()}
 async function arload(){try{Ar=await (await api('/api/arp')).json();arrender()}catch(e){}}
 let Rd=null;
@@ -430,24 +440,22 @@ function rdrender(force){const el=$('rd');if(!Rd||guard(el,force))return;
  if(Rd.available===false){el.textContent='The DHCP watch is not running on this build.';return}
  const n=(Rd.servers||[]).length;
  $('rdbadge').innerHTML=n?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+n+' other server'+(n===1?'':'s')+'</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=(Rd.servers||[]).map(x=>'<tr><td><b>'+esc(x.ip)+'</b><div class="mut">'+esc(x.mac)+'</div></td><td>'+x.replies+' repl'+(x.replies===1?'y':'ies')+' ('+esc((x.types||[]).join(', '))+')'+(x.offered?'<div class="mut">offered '+esc(x.offered)+'</div>':'')+'</td><td class="mut">'+esc(when(x.first))+' to '+esc(when(x.last))+'</td><td><button onclick="rdallow(\''+x.mac+'\',true)">Allow this server</button></td></tr>').join('');
- const al=(Rd.allowed||[]).map(a=>'<div>'+esc(a.mac)+(a.replies?' <span class="mut">answered '+a.replies+' time'+(a.replies===1?'':'s')+(a.ip?' from '+esc(a.ip):'')+'</span>':' <span class="mut">not seen answering</span>')+' <button onclick="rdallow(\''+a.mac+'\',false)">Stop allowing</button></div>').join('');
- el.innerHTML='<div class="row"><span>'+(Rd.capture_ok?(n?'<b class="err">another server is answering</b>':'<b style="color:var(--ac)">only the Orbic answers</b>'):'<b class="err">watcher not running</b>')+'</span><span class="mut">'+Rd.honest_replies+' honest repl'+(Rd.honest_replies===1?'y':'ies')+' seen</span></div>'+
-  '<div class="mut" style="margin:6px 0">Passive DHCP listener. Only the Orbic may answer; a second server or a forged gateway is an alert.</div>'+(rows?'<table>'+rows+'</table>':'')}
+ det(el,'rdrender',{sev:!Rd.capture_ok?'bad':n?'bad':'ok',label:!Rd.capture_ok?'Not running':n?'Rogue server':'Only the Orbic',chips:chip(Rd.honest_replies+' replies','','honest replies seen'),
+  tip:'Passive DHCP listener. Only the Orbic may answer; a second server or a forged gateway is an alert.',
+  rows:(Rd.servers||[]).map(x=>({k:x.mac,t:x.last,sev:'bad',title:'<b>'+esc(x.ip)+'</b> '+x.replies+' repl'+(x.replies===1?'y':'ies'),detail:esc(x.mac)+' &middot; '+esc((x.types||[]).join(', '))+(x.offered?' &middot; offered '+esc(x.offered):'')+' &middot; '+esc(dwhen(x.first))+' to '+esc(dwhen(x.last)),act:'<button class="on" onclick="rdallow(\''+x.mac+'\',true)">Allow this server</button>'})),
+  foot:dsec('Allowed',(Rd.allowed||[]).length,(Rd.allowed||[]).map(a=>'<div class="rl"><span class="t">'+esc(a.mac)+'</span>'+chip(a.replies?a.replies+' answers':'not seen','')+dx2('Stop allowing',"rdallow('"+a.mac+"',false)")+'</div>').join(''))})}
 async function rdload(){try{Rd=await (await api('/api/rogue-dhcp')).json();rdrender()}catch(e){}}
 let St=null;
 function strender(force){const el=$('st');if(!St||guard(el,force))return;
  if(St.available===false){el.textContent='The steering watch is off on this build.';return}
  const n=St.alerts||0,ms=St.messages||[];
  $('stbadge').innerHTML=n?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+St.sources+' other router'+(St.sources===1?'':'s')+'</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const what=x=>{if(x.kind==='ra'){const d=[x.lifetime>0?'default router for '+x.lifetime+' s':'router lifetime 0 (withdrawal)'];if(x.managed)d.push('addresses by DHCPv6');if((x.prefixes||[]).length)d.push('prefix '+x.prefixes.map(esc).join(', '));if((x.dns||[]).length)d.push('<b class="err">DNS servers '+x.dns.map(esc).join(', ')+'</b>');else if(x.search)d.push('<b class="err">a DNS search list</b>');return '<b class="err">IPv6 router advertisement</b><div class="mut">'+d.join('; ')+'</div>'}
-  return '<b class="err">'+(x.kind==='redirect6'?'ICMPv6':'ICMP')+' redirect</b><div class="mut">telling '+esc(x.victim||'?')+' to use '+esc(x.via||'?')+(x.dest?' for '+esc(x.dest):'')+'</div>'};
- const rows=ms.slice(0,30).map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.mac)+'</b>'+(x.name?' <span class="mut">'+esc(x.name)+'</span>':'')+'<div class="mut">'+esc(x.ip)+'</div></td><td>'+what(x)+'</td><td><button onclick="stallow(\''+x.mac+'\',true)">Allow this router</button></td></tr>').join('');
- const al=(St.allowed||[]).map(a=>'<div>'+esc(a.mac)+(a.seen?' <span class="mut">announced '+a.seen+' time'+(a.seen===1?'':'s')+(a.last?', last '+esc(when(a.last)):'')+'</span>':' <span class="mut">not seen announcing</span>')+' <button onclick="stallow(\''+a.mac+'\',false)">Stop allowing</button></div>').join('');
- el.innerHTML='<div class="row"><span>'+(St.capture_ok?(n?'<b class="err">something else is announcing routes</b>':'<b style="color:var(--ac)">only the Orbic announces routes</b>'):'<b class="err">watcher not running</b>')+'</span><span class="mut">'+St.honest+' of the Orbic\'s own seen</span></div>'+
-  '<div class="mut" style="margin:6px 0">Passive watch for IPv6 router advertisements and ICMP redirects, the messages that tell a device to change its router. Only the Orbic may send them; a second router you run yourself can be allowed by its MAC. LAN IPv6 being off does not stop devices from listening to a rogue advertiser on the LAN, which is how mitm6-style attacks start.</div>'+(rows?'<table>'+rows+'</table>':'')+(al?'<div style="margin-top:8px"><div class="mut">Allowed routers</div>'+al+'</div>':'')}
+ const sd=x=>{if(x.kind==='ra'){const d=[x.lifetime>0?'default router for '+x.lifetime+' s':'router lifetime 0 (withdrawal)'];if(x.managed)d.push('addresses by DHCPv6');if((x.prefixes||[]).length)d.push('prefix '+x.prefixes.map(esc).join(', '));if((x.dns||[]).length)d.push('DNS servers '+x.dns.map(esc).join(', '));else if(x.search)d.push('a DNS search list');return {t:'IPv6 router advertisement',d:d.join('; ')}}
+  return {t:(x.kind==='redirect6'?'ICMPv6':'ICMP')+' redirect',d:'telling '+esc(x.victim||'?')+' to use '+esc(x.via||'?')+(x.dest?' for '+esc(x.dest):'')}};
+ det(el,'strender',{sev:!St.capture_ok?'bad':n?'bad':'ok',label:!St.capture_ok?'Not running':n?'Another router':'Only the Orbic',chips:chip(St.honest+' own','','of the Orbic\'s own announcements seen'),
+  tip:'Passive watch for IPv6 router advertisements and ICMP redirects, the messages that tell a device to change its router. Only the Orbic may send them; a second router you run yourself can be allowed by its MAC.',
+  rows:ms.slice(0,30).map(x=>{const q=sd(x);return {k:x.t+x.mac,t:x.t,sev:'bad',title:'<b>'+esc(x.name||x.mac)+'</b> '+q.t,detail:esc(x.mac)+' &middot; '+esc(x.ip)+' &middot; '+q.d,act:'<button class="on" onclick="stallow(\''+x.mac+'\',true)">Allow this router</button>'}}),
+  foot:dsec('Allowed',(St.allowed||[]).length,(St.allowed||[]).map(a=>'<div class="rl"><span class="t">'+esc(a.mac)+'</span>'+chip(a.seen?a.seen+' seen':'not seen')+dx2('Stop allowing',"stallow('"+a.mac+"',false)")+'</div>').join(''))})}
 async function stallow(mac,on){if(on&&!confirm('Allow '+mac+' to announce routes on this network? Only do this for a router you run yourself: devices that listen to it will send their traffic, and maybe their name lookups, through it.'))return;const r=await apost('steer/allow',{mac,allow:on});if(!r.ok){const m=$('stmsg');if(m)m.textContent=r.j.error||'failed';return}St=r.j;strender(true)}
 async function stload(){try{St=await (await api('/api/steer')).json();strender()}catch(e){}}
 let Cn=null;
@@ -455,13 +463,13 @@ function cnrender(force){const el=$('cn');if(!Cn||guard(el,force))return;
  if(Cn.available===false){el.textContent='The canary is not configured on this build.';return}
  $('cnbadge').innerHTML=(Cn.sources||[]).length?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+Cn.sources.length+' visitor'+(Cn.sources.length===1?'':'s')+'</span>':'';
  const ok=Cn.enabled&&Cn.alias_ok&&Cn.capture_ok;
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const src=(Cn.sources||[]).map(x=>'<tr><td><b>'+esc(x.src)+'</b>'+(x.name?' <span class="mut">'+esc(x.name)+'</span>':'')+'<div class="mut">'+esc(x.mac||'')+'</div></td><td>'+x.hits+' touch'+(x.hits===1?'':'es')+'<div class="mut">'+esc(when(x.first))+' to '+esc(when(x.last))+'</div></td><td class="mut">'+esc((x.ports||[]).join(', ')||'ping or ARP only')+'</td><td>'+(x.mac?'<button onclick="cnignore(\''+x.mac+'\')">Ignore this device</button>':'')+'</td></tr>').join('')||'<tr><td class="mut">nobody has touched it</td></tr>';
- const ig=(Cn.ignore||[]).map(m=>esc(m)+' <button onclick="cnunignore(\''+m+'\')">stop ignoring</button>').join(' &middot; ');
- el.innerHTML='<div class="row"><span>'+(Cn.enabled?(ok?'<b style="color:var(--ac)">watching</b>':'<b class="err">not fully in place</b> (address '+(Cn.alias_ok?'ok':'missing')+', watcher '+(Cn.capture_ok?'ok':'not running')+')'):'<span class="mut">switched off</span>')+' <code>'+esc(Cn.address)+'</code></span><button class="'+(Cn.enabled?'':'on')+'" onclick="cnset('+(!Cn.enabled)+')">'+(Cn.enabled?'Switch off':'Switch on')+'</button></div>'+
-  '<div class="mut" style="margin:6px 0">Decoy host on '+esc((Cn.listening||[]).join(', ')||'no ports')+' (tarpit). Any touch is an event; 5+ ports in 10 min = scan. Never handed out by DHCP.</div>'+
-  '<table>'+src+'</table>'+(ig?'<div class="mut" style="margin-top:6px">Ignored: '+ig+'</div>':'')+
-  ((Cn.hits||[]).length?'<details style="margin-top:6px"><summary class="mut">The last '+Cn.hits.length+' touches</summary><table>'+Cn.hits.map(h=>'<tr><td class="mut">'+esc(when(h.t))+'</td><td>'+esc(h.src)+'</td><td>'+esc(h.proto+(h.port?' '+h.port:''))+'</td><td class="mut">'+esc(h.kind)+'</td></tr>').join('')+'</table></details>':'')}
+ const nsrc=(Cn.sources||[]).length,ig=Cn.ignore||[];
+ det(el,'cnrender',{sev:!Cn.enabled?'':nsrc?'bad':ok?'ok':'warn',label:!Cn.enabled?'Off':nsrc?'Touched':ok?'Watching':'Not in place',chips:chip(esc(Cn.address),'','decoy address')+(Cn.enabled&&!ok?chip(Cn.alias_ok?'address ok':'address missing',Cn.alias_ok?'':'bad')+chip(Cn.capture_ok?'watcher ok':'watcher off',Cn.capture_ok?'':'bad'):''),
+  sw:sw(Cn.enabled,'cnset('+(!Cn.enabled)+')','Canary'),
+  tip:'Decoy host on '+((Cn.listening||[]).join(', ')||'no ports')+' (tarpit). Any touch is an event; 5+ ports in 10 minutes is a scan. Never handed out by DHCP.',
+  rows:(Cn.sources||[]).map(x=>({k:x.src,t:x.last,sev:'bad',title:'<b>'+esc(x.src)+'</b> '+x.hits+' touch'+(x.hits===1?'':'es'),detail:(x.name?esc(x.name)+' &middot; ':'')+esc(x.mac||'')+' &middot; ports '+esc((x.ports||[]).join(', ')||'ping or ARP only')+' &middot; '+esc(dwhen(x.first))+' to '+esc(dwhen(x.last)),act:x.mac?'<button onclick="cnignore(\''+x.mac+'\')">Ignore this device</button>':''})),
+  foot:dsec('Ignored',ig.length,'<div class="chips" style="margin-top:8px">'+ig.map(m=>'<button class="chip" onclick="cnunignore(\''+m+'\')">'+esc(m)+' &times;</button>').join('')+'</div>')+
+   dsec('Touches',(Cn.hits||[]).length,(Cn.hits||[]).map(h=>'<div class="rl"><span class="t">'+esc(h.src)+' <span class="mut">'+esc(h.proto+(h.port?' '+h.port:''))+'</span></span><span class="mut ts">'+evrel(h.t)+'</span></div>').join(''))})}
 async function cnload(){try{Cn=await (await api('/api/canary')).json();cnrender()}catch(e){}}
 async function cndo(p,b){const r=await apost(p,b);$('cnmsg').textContent=r.j.error||'';cnload()}
 function cnset(on){cndo('canary/set',{enabled:on})}
@@ -471,39 +479,38 @@ let Mc=null;
 function mcrender(force){const el=$('mc');if(!Mc||guard(el,force))return;
  const f=Mc.findings||[];
  $('mcbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.key)+'</b><div class="mut">'+(x.kind==='mac_churn_ip'?'this address':'this device')+'</div></td><td>'+(x.others||[]).length+' distinct '+(x.kind==='mac_churn_ip'?'MACs':'addresses')+'<div class="mut">'+esc((x.others||[]).join(', '))+'</div></td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">Widens the ARP watch\'s address-flip check into a short history: one address claimed by several MACs, or one MAC claiming several addresses, within 10 minutes. A device rejoining with a randomized MAC can look the same, so this is one to look at, not proof.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'mcrender',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',
+  tip:'Widens the ARP watch\'s address-flip check into a short history: one address claimed by several MACs, or one MAC claiming several addresses, within 10 minutes. A device rejoining with a randomized MAC can look the same, so this is one to look at, not proof.',
+  rows:f.map(x=>({k:x.t+x.key,t:x.t,title:'<b>'+esc(x.key)+'</b> '+(x.others||[]).length+' distinct '+(x.kind==='mac_churn_ip'?'MACs':'addresses'),detail:(x.kind==='mac_churn_ip'?'this address':'this device')+': '+esc((x.others||[]).join(', '))}))})}
 async function mcload(){try{Mc=await (await api('/api/macchurn')).json();mcrender()}catch(e){}}
 let Dc=null;
 function dcrender(force){const el=$('dc');if(!Dc||guard(el,force))return;
  if(Dc.available===false){el.textContent='The DNS canary is not available (the DNS filter is off).';return}
  const h=Dc.hits||[];
  $('dcbadge').innerHTML=h.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+h.length+' hit'+(h.length===1?'':'s')+'</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
  const what={canary:'decoy name',exfil:'tunneling-shaped lookups'};
- const rows=h.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'</td><td class="mut">'+(what[x.kind]||esc(x.kind))+'</td></tr>').join('')||'<tr><td class="mut">nothing yet</td></tr>';
- el.innerHTML='<div class="row"><span>'+(Dc.enabled?'<b style="color:var(--ac)">watching</b>':'<span class="mut">switched off</span>')+'</span><button class="'+(Dc.enabled?'':'on')+'" onclick="dcset('+(!Dc.enabled)+')">'+(Dc.enabled?'Switch off':'Switch on')+'</button></div>'+
-  '<div class="mut" style="margin:6px 0">Watches every DNS query for decoy names, plain DNS while encrypted DNS is in use, and tunneling-shaped runs of lookups.</div>'+
-  '<table>'+rows+'</table>'}
+ det(el,'dcrender',{sev:!Dc.enabled?'':h.length?'warn':'ok',label:!Dc.enabled?'Off':h.length?'Hits':'Watching',sw:sw(Dc.enabled,'dcset('+(!Dc.enabled)+')','DNS canary'),
+  tip:'Watches every DNS query for decoy names, plain DNS while encrypted DNS is in use, and tunneling-shaped runs of lookups.',
+  rows:h.map(x=>({k:x.t+x.client,t:x.t,title:'<b>'+esc(x.client)+'</b> '+esc(x.name),detail:(what[x.kind]||esc(x.kind))+(x.mac?' &middot; '+esc(x.mac):'')}))})}
 async function dcload(){try{Dc=await (await api('/api/dnscanary')).json();dcrender()}catch(e){}}
 async function dcset(on){const r=await apost('dnscanary/set',{enabled:on});$('dcmsg').textContent=r.j.error||'';dcload()}
 let Dg2=null;
 function dg2render(force){const el=$('dg2');if(!Dg2||guard(el,force))return;
  const f=Dg2.findings||[];
  $('dgbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+x.count+' different failed lookups</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">A client racking up many different failed (NXDOMAIN) lookups in a short window is the shape of a domain-generation-algorithm beacon burning through candidate names.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'dg2render',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',
+  tip:'A client racking up many different failed (NXDOMAIN) lookups in a short window is the shape of a domain-generation-algorithm beacon burning through candidate names.',
+  rows:f.map(x=>({k:x.t+x.client,t:x.t,title:'<b>'+esc(x.client)+'</b> '+x.count+' failed lookups',detail:x.mac?esc(x.mac):''}))})}
 async function dg2load(){try{Dg2=await (await api('/api/dganxdomain')).json();dg2render()}catch(e){}}
 let Bc=null;
 function bcrender(force){const el=$('bc');if(!Bc||guard(el,force))return;
  const f=Bc.findings||[];
  $('bcbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.dst)+'</td><td>every ~'+Math.round(x.period_s)+'s, '+x.n+' times</td><td><button onclick="bcignore(\''+esc(x.src)+'\',\''+esc(x.dst)+'\')">Mark expected</button></td></tr>').join('');
- const ig=(Bc.ignore||[]).map(k=>{const[s,d]=k.split('|');return esc(s)+' &rarr; '+esc(d)+' <button onclick="bcunignore(\''+esc(s)+'\',\''+esc(d)+'\')">stop ignoring</button>'}).join(' &middot; ');
- el.innerHTML='<div class="mut" style="margin:6px 0">A device connecting to the same address on a very regular schedule: the shape of a check-in beacon, though plenty of ordinary apps (chat heartbeats, cloud sync, IMAP idle) look the same. Mark a pair expected once you have checked it.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')+(ig?'<div class="mut" style="margin-top:6px">Marked expected: '+ig+'</div>':'')}
+ const ig=(Bc.ignore||[]).map(k=>k.split('|'));
+ det(el,'bcrender',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',
+  tip:'A device connecting to the same address on a very regular schedule: the shape of a check-in beacon, though plenty of ordinary apps (chat heartbeats, cloud sync, IMAP idle) look the same. Mark a pair expected once you have checked it.',
+  rows:f.map(x=>({k:x.t+x.src+x.dst,t:x.t,title:'<b>'+esc(x.src)+'</b> &rarr; '+esc(x.dst),detail:(x.mac?esc(x.mac)+' &middot; ':'')+'every ~'+Math.round(x.period_s)+' s, '+x.n+' times',act:'<button onclick="bcignore(\''+esc(x.src)+'\',\''+esc(x.dst)+'\')">Mark expected</button>'})),
+  foot:dsec('Expected',ig.length,ig.map(([a,b])=>'<div class="rl"><span class="t">'+esc(a)+' &rarr; '+esc(b)+'</span>'+dx2('Stop ignoring',"bcunignore('"+esc(a)+"','"+esc(b)+"')")+'</div>').join(''))})}
 async function bcload(){try{Bc=await (await api('/api/beacon')).json();bcrender()}catch(e){}}
 async function bcignore(src,dst){const r=await apost('beacon/ignore',{src,dst,ignore:true});$('bcmsg').textContent=r.j.error||'';bcload()}
 async function bcunignore(src,dst){const r=await apost('beacon/ignore',{src,dst,ignore:false});$('bcmsg').textContent=r.j.error||'';bcload()}
@@ -512,72 +519,69 @@ function tb2render(force){const el=$('tb2');if(!Tb2||guard(el,force))return;
  if(Tb2.available===false){el.textContent='No Tor relay/bridge list is loaded, so direct-exit detection is off; .onion-attempt detection still works.';return}
  const f=Tb2.findings||[];
  $('tbbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
  const what={tor_bypass_exit:'connected directly to a known Tor relay',tor_bypass_onion:'asked for a .onion name while not assigned to Tor'};
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+(what[x.kind]||esc(x.kind))+(x.dst?'<div class="mut">'+esc(x.dst)+'</div>':'')+(x.name?'<div class="mut">'+esc(x.name)+'</div>':'')+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">Devices reaching Tor outside the Orbic\'s own Tor path (tor.go), or attempting a .onion lookup the router refused. A device already sent through Tor on this page is never flagged.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'tb2render',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',
+  tip:'Devices reaching Tor outside the Orbic\'s own Tor path, or attempting a .onion lookup the router refused. A device already sent through Tor on this page is never flagged.',
+  rows:f.map(x=>({k:x.t+x.ip,t:x.t,title:'<b>'+esc(x.ip)+'</b> '+(what[x.kind]||esc(x.kind)),detail:(x.mac?esc(x.mac):'')+(x.dst?' &middot; '+esc(x.dst):'')+(x.name?' &middot; '+esc(x.name):'')}))})}
 async function tb2load(){try{Tb2=await (await api('/api/torbypass')).json();tb2render()}catch(e){}}
 let Ts=null;
 function tsrender(force){const el=$('ts');if(!Ts||guard(el,force))return;
  const f=Ts.findings||[];
  $('tsbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>{let what;
-  if(x.ja3_name){what='<b class="err">TLS fingerprint matches known '+esc(x.ja3_name)+' client</b>'+(x.name?' <span class="mut">(server name: '+esc(x.name)+')</span>':'')+' <span class="mut">JA3 '+esc(x.ja3)+'</span>'}
-  else if(x.name===x.dst){what='sent the address itself as the TLS server name'}
-  else{what='no server name (SNI) at all'}
-  return '<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.dst)+'</td><td class="mut">'+what+'</td></tr>'}).join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">Almost every browser and app sends the hostname it wants in the clear, in the TLS ClientHello, even though everything after it is encrypted. A connection with no server name, or one whose server name is literally the destination address, is unusual (a few IoT devices and hand-configured tools do this on purpose). The ClientHello is also fingerprinted (JA3) and checked against an operator-supplied blocklist; a match is flagged here even when the server name looks ordinary, since it is a stronger signal than SNI alone. Needs no decryption; TLS 1.3 still hides the certificate itself, so this cannot also check for a self-signed cert.'+(Ts.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'tsrender',{sev:!Ts.capture_ok?'bad':f.length?'warn':'ok',label:!Ts.capture_ok?'Not running':f.length?'To look at':'Quiet',
+  tip:'A connection with no TLS server name, or one whose server name is literally the destination address, is unusual (a few IoT devices and hand-configured tools do this on purpose). The ClientHello is also fingerprinted (JA3) and checked against an operator-supplied blocklist. Needs no decryption.',
+  rows:f.map(x=>{const w=x.ja3_name?'matches known '+esc(x.ja3_name)+' client':x.name===x.dst?'sent the address as the server name':'no server name (SNI)';return {k:x.t+x.src+x.dst,t:x.t,sev:x.ja3_name?'bad':'warn',title:'<b>'+esc(x.src)+'</b> &rarr; '+esc(x.dst),detail:w+(x.name&&x.ja3_name?' &middot; server name '+esc(x.name):'')+(x.ja3?' &middot; JA3 '+esc(x.ja3):'')+(x.mac?' &middot; '+esc(x.mac):'')}})})}
 async function tsload(){try{Ts=await (await api('/api/tlssni')).json();tsrender()}catch(e){}}
 let Tc=null;
 function tcrender(force){const el=$('tc');if(!Tc||guard(el,force))return;
  const f=Tc.findings||[];
  const alerts=f.filter(x=>x.kind==='tls_cert_selfsigned').length;
  $('tcbadge').innerHTML=f.length?'<span class="'+(alerts?'err':'mut')+'" style="text-transform:none;letter-spacing:0">&bull; '+(alerts?alerts+' alert'+(alerts>1?'s':''):f.length+' to look at')+'</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>{let what;
-  if(x.kind==='tls_cert_selfsigned'){what='<b class="err">self-signed certificate</b> where '+esc(x.was||'a CA')+' signed before'}
-  else if(x.kind==='tls_cert_mismatch'){what='certificate does not cover the name <span class="mut">(issued by '+esc(x.now)+')</span>'}
-  else if(x.kind==='tls_cert_issuer'){what='issuer changed: '+esc(x.was)+' &rarr; '+esc(x.now)}
-  else if(x.kind==='tls_downgrade'){what='negotiated '+esc(x.now)+' where it always did '+esc(x.was)}
-  else{what=esc(x.kind)}
-  return '<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.src)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'<div class="mut">'+esc(x.dst)+'</div></td><td class="mut">'+what+(x.print?'<div class="mut" style="font-size:11px">sha256 '+esc(x.print.slice(0,16))+'&hellip;</div>':'')+'</td></tr>'}).join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">The server\'s side of a TLS handshake is partly in the clear too: every version says which TLS version was agreed, and TLS 1.2 sends the certificate itself in plaintext. For each hostname devices ask for, the box remembers the certificate\'s fingerprint and issuer and the best TLS version seen, and flags what an interception in the path looks like: a public-CA name turning self-signed (alert), a certificate that no longer covers its name, an issuer changing organisation, or a TLS 1.3 name talked down to 1.2. Renewals and first sightings are recorded silently. Nothing is decrypted; TLS 1.3 hides its certificate, so an interceptor that speaks 1.3 is invisible here.'+(Tc.capture_ok?'':' <span class="err">watcher not running</span>')+' <span class="mut">'+Tc.names+' name'+(Tc.names===1?'':'s')+' on file</span></div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'tcrender',{sev:alerts?'bad':f.length?'warn':Tc.capture_ok?'ok':'bad',label:!Tc.capture_ok?'Not running':alerts?'Alerts':f.length?'To look at':'Quiet',chips:chip(Tc.names+' name'+(Tc.names===1?'':'s'),'','certificates on file'),
+  tip:'For each hostname devices ask for, the box remembers the certificate fingerprint and issuer and the best TLS version seen, and flags what an interception looks like: a public-CA name turning self-signed, a certificate that no longer covers its name, an issuer changing, or a TLS 1.3 name talked down to 1.2. Nothing is decrypted.',
+  rows:f.map(x=>{let w;
+   if(x.kind==='tls_cert_selfsigned')w='self-signed certificate where '+esc(x.was||'a CA')+' signed before';
+   else if(x.kind==='tls_cert_mismatch')w='certificate does not cover the name (issued by '+esc(x.now)+')';
+   else if(x.kind==='tls_cert_issuer')w='issuer changed: '+esc(x.was)+' &rarr; '+esc(x.now);
+   else if(x.kind==='tls_downgrade')w='negotiated '+esc(x.now)+' where it always did '+esc(x.was);
+   else w=esc(x.kind);
+   return {k:x.t+x.src+x.name,t:x.t,sev:x.kind==='tls_cert_selfsigned'?'bad':'warn',title:'<b>'+esc(x.name)+'</b> '+(x.kind==='tls_cert_selfsigned'?'self-signed':x.kind==='tls_cert_mismatch'?'wrong certificate':x.kind==='tls_cert_issuer'?'issuer changed':x.kind==='tls_downgrade'?'downgraded':esc(x.kind)),detail:w+' &middot; '+esc(x.src)+(x.mac?' ('+esc(x.mac)+')':'')+' &middot; '+esc(x.dst)+(x.print?' &middot; sha256 '+esc(x.print.slice(0,16))+'&hellip;':'')}})})}
 async function tcload(){try{Tc=await (await api('/api/tlscert')).json();tcrender()}catch(e){}}
 let Dx=null;
 function dxrender(force){const el=$('dx');if(!Dx||guard(el,force))return;
  const f=Dx.findings||[];
  $('dxbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+'</td><td class="mut">'+(x.kind==='dns_xcheck_exists'?'one resolver says it exists, the other says it does not':'one resolver gave an unroutable address')+'<div>'+esc(x.first)+': '+esc((x.answer1||[]).join(' '))+'</div><div>'+esc(x.second)+': '+esc((x.answer2||[]).join(' '))+'</div></td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">One in fifty encrypted answers is put to the other configured resolver as well, and the two are compared. Two honest resolvers name different CDN addresses all the time, so a plain difference is only counted. What is flagged is a disagreement in shape: one says the name exists and the other says it does not, or one hands back a private or unroutable address where the other hands back a public one. It cannot say which resolver is wrong, only that they disagree.</div><div class="mut">'+Dx.sampled+' checked &middot; '+Dx.agree+' agreed &middot; '+Dx.differ+' differed (CDN-shaped) &middot; '+Dx.flagged+' flagged &middot; '+Dx.failed+' unanswered</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'dxrender',{sev:f.length?'warn':'ok',label:f.length?'To look at':'Quiet',chips:chip(Dx.sampled+' checked','','answers compared with a second resolver')+(Dx.flagged?chip(Dx.flagged+' flagged','warn'):''),
+  tip:'One in fifty encrypted answers is put to the other configured resolver as well, and the two are compared. Agreed '+Dx.agree+', differed (CDN-shaped) '+Dx.differ+', flagged '+Dx.flagged+', unanswered '+Dx.failed+'. What is flagged is a disagreement in shape: one says the name exists and the other does not, or one hands back an unroutable address.',
+  rows:f.map(x=>({k:x.t+x.client+x.name,t:x.t,title:'<b>'+esc(x.client)+'</b> '+esc(x.name),detail:(x.kind==='dns_xcheck_exists'?'one resolver says it exists, the other says it does not':'one resolver gave an unroutable address')+'<br>'+esc(x.first)+': '+esc((x.answer1||[]).join(' '))+'<br>'+esc(x.second)+': '+esc((x.answer2||[]).join(' '))+(x.mac?'<br>'+esc(x.mac):'')}))})}
 async function dxload(){try{Dx=await (await api('/api/dnsxcheck')).json();dxrender()}catch(e){}}
 let La=null;
 function larender(force){const el=$('la');if(!La||guard(el,force))return;
  const f=La.findings||[];const look=f.filter(x=>x.kind!=='lan_service_new').length;
  $('labadge').innerHTML=look?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+look+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
  const what={lan_service_new:'new service',lan_host_conflict:'answered for a name another address held',lan_ssdp_elsewhere:'UPnP description at another address'};
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td class="mut">'+(what[x.kind]||esc(x.kind))+'<div>'+esc(x.name)+(x.was?' <span class="mut">(was '+esc(x.was)+')</span>':'')+'</div></td></tr>').join('');
- const devs=(La.devices||[]).map(d=>'<tr><td><b>'+esc(d.ip)+'</b>'+(d.host?'<div class="mut">'+esc(d.host)+'</div>':'')+(d.server?'<div class="mut">'+esc(d.server)+'</div>':'')+'</td><td class="mut">'+(d.services||[]).map(s=>esc(s.type)+(s.instance?' <span class="mut">'+esc(s.instance)+'</span>':'')+(s.port?':'+s.port:'')).join('<br>')+(d.searches?'<div>searched for everything (ssdp:all) '+d.searches+'&times;</div>':'')+'</td><td class="mut">'+esc(when(d.last))+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">What devices say they are, read from their own mDNS (Bonjour) and SSDP (UPnP) announcements. These are multicast, so they reach the bridge even from devices the radio relays directly. A device announcing a service it never announced before is noted; two addresses answering for the same .local name, or a UPnP announcement whose description lives at another address, are worth a look. Nothing is verified and nothing is asked: a device can announce whatever it likes.'+(La.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'')+(devs?'<table>'+devs+'</table>':'<div class="mut">no announcements seen yet</div>')}
+ const lan=(La.devices||[]);
+ det(el,'larender',{sev:!La.capture_ok?'bad':look?'warn':'ok',label:!La.capture_ok?'Not running':look?'To look at':'Quiet',chips:chip(lan.length+' devices','','devices seen announcing'),
+  tip:'What devices say they are, read from their own mDNS (Bonjour) and SSDP (UPnP) announcements. A device announcing a service it never announced before is noted; two addresses answering for the same .local name, or a UPnP announcement whose description lives at another address, are worth a look. Nothing is verified.',
+  rows:f.map(x=>({k:x.t+x.ip+x.kind,t:x.t,sev:x.kind==='lan_service_new'?'':'warn',title:'<b>'+esc(x.ip)+'</b> '+(what[x.kind]||esc(x.kind)),detail:esc(x.name)+(x.was?' (was '+esc(x.was)+')':'')+(x.mac?' &middot; '+esc(x.mac):'')})),
+  foot:dsec('Devices',lan.length,lan.map(d=>dfind('larender',{k:'d'+d.ip,t:d.last,sev:'',title:'<b>'+esc(d.ip)+'</b> '+esc(d.host||d.server||''),detail:(d.services||[]).map(s=>esc(s.type)+(s.instance?' '+esc(s.instance):'')+(s.port?':'+s.port:'')).join('<br>')+(d.searches?'<br>searched for everything (ssdp:all) '+d.searches+'&times;':'')})).join(''))})}
 async function laload(){try{La=await (await api('/api/lanannounce')).json();larender()}catch(e){}}
 let Df=null;
 function dfrender(force){const el=$('df');if(!Df||guard(el,force))return;
  const f=Df.findings||[];
  $('dfbadge').innerHTML=f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.mac)+'</b></td><td class="mut">was '+esc(x.was)+'<br>now '+esc(x.now)+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">A device\'s DHCP client advertises, in the clear, a fingerprint shaped by its OS and network stack. One that holds steady and then suddenly changes is usually new firmware, but can mean a different device is now answering for that address.'+(Df.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'dfrender',{sev:!Df.capture_ok?'bad':f.length?'warn':'ok',label:!Df.capture_ok?'Not running':f.length?'To look at':'Quiet',
+  tip:'A device\'s DHCP client advertises, in the clear, a fingerprint shaped by its OS and network stack. One that holds steady and then suddenly changes is usually new firmware, but can mean a different device is now answering for that address.',
+  rows:f.map(x=>({k:x.t+x.mac,t:x.t,title:'<b>'+esc(x.mac)+'</b> fingerprint changed',detail:'was '+esc(x.was)+'<br>now '+esc(x.now)}))})}
 async function dfload(){try{Df=await (await api('/api/dhcpfp')).json();dfrender()}catch(e){}}
 let Dm=null;
 function dmrender(force){const el=$('dm');if(!Dm||guard(el,force))return;
  const f=Dm.findings||[];
  const al=f.filter(x=>x.corroborated).length;
  $('dmbadge').innerHTML=al?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+al+' confirmed</span>':f.length?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+f.length+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.client)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td>'+esc(x.name)+' &rarr; '+esc(x.lan_ip)+'</td><td>'+(x.corroborated?'<b class="err">alongside an ARP impersonation</b>':'<span class="mut">on its own</span>')+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">A public DNS name that resolves to an address on this network is never something this router does on purpose. On its own it is worth a look; happening within 10 minutes of the ARP watch seeing someone impersonate an address is a much stronger sign of an active man-in-the-middle.</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing to look at</div>')}
+ det(el,'dmrender',{sev:al?'bad':f.length?'warn':'ok',label:al?'Confirmed':f.length?'To look at':'Quiet',
+  tip:'A public DNS name that resolves to an address on this network is never something this router does on purpose. On its own it is worth a look; within 10 minutes of the ARP watch seeing someone impersonate an address it is a much stronger sign of an active man-in-the-middle.',
+  rows:f.map(x=>({k:x.t+x.client+x.name,t:x.t,sev:x.corroborated?'bad':'warn',title:'<b>'+esc(x.client)+'</b> '+esc(x.name)+' &rarr; '+esc(x.lan_ip),detail:(x.corroborated?'alongside an ARP impersonation':'on its own')+(x.mac?' &middot; '+esc(x.mac):'')}))})}
 async function dmload(){try{Dm=await (await api('/api/dnsmitm')).json();dmrender()}catch(e){}}
 let Tt=null;
 function ttrender(force){const el=$('tt');if(!Tt||guard(el,force))return;
@@ -585,12 +589,13 @@ function ttrender(force){const el=$('tt');if(!Tt||guard(el,force))return;
  const f=Tt.findings||[],devs=Tt.devices||[];
  const behind=devs.filter(d=>d.behind>0).length;
  $('ttbadge').innerHTML=behind?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+behind+' to look at</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
  const what={ttl_forwarding:'forwarding for something behind it',ttl_two_stacks:'two operating systems on one address'};
- const rows=f.map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b> <span class="mut">'+esc(x.mac)+'</span></td><td>'+(what[x.kind]||esc(x.kind))+'<div class="mut">'+esc(x.note)+'</div></td><td>'+((Tt.ignore||[]).includes(x.mac)?'':'<button onclick="ttignore(\''+esc(x.mac)+'\')">Mark expected</button>')+'</td></tr>').join('');
- const dv=devs.map(d=>'<tr><td><b>'+esc(d.ip)+'</b><div class="mut">'+esc(d.mac)+'</div></td><td>'+d.direct+' direct'+(d.behind?', <b class="err">'+d.behind+' from behind it</b>':'')+'<div class="mut">'+esc(Object.entries(d.classes||{}).map(([k,v])=>'TTL '+k+' &times;'+v).join(', '))+'</div></td><td class="mut">'+esc(when(d.last))+'</td></tr>').join('');
- const ig=(Tt.ignore||[]).map(m=>esc(m)+' <button onclick="ttunignore(\''+m+'\')">watch again</button>').join(' &middot; ');
- el.innerHTML='<div class="mut" style="margin:6px 0">Every operating system starts its packets with a fixed TTL and every router takes one off, so a connection arriving one short has crossed a router behind the device: a phone re-sharing this hotspot, a travel router, a hidden second machine. A laptop running containers or a virtual machine looks the same, which is why it is only "to look at". Counts are for the last 10 minutes, from the first packet of each connection.'+(Tt.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'')+(dv?'<table style="margin-top:8px">'+dv+'</table>':'<div class="mut">no connections seen yet</div>')+(ig?'<div class="mut" style="margin-top:6px">expected: '+ig+'</div>':'')}
+ const ig=(Tt.ignore||[]);
+ det(el,'ttrender',{sev:!Tt.capture_ok?'bad':behind?'warn':'ok',label:!Tt.capture_ok?'Not running':behind?'To look at':'Quiet',
+  tip:'Every operating system starts its packets with a fixed TTL and every router takes one off, so a connection arriving one short has crossed a router behind the device: a phone re-sharing this hotspot, a travel router, a hidden second machine. A laptop running containers looks the same. Counts are for the last 10 minutes.',
+  rows:f.map(x=>({k:x.t+x.mac,t:x.t,title:'<b>'+esc(x.ip)+'</b> '+(what[x.kind]||esc(x.kind)),detail:esc(x.mac)+' &middot; '+esc(x.note),act:ig.includes(x.mac)?'':'<button onclick="ttignore(\''+esc(x.mac)+'\')">Mark expected</button>'})),
+  foot:dsec('Devices',devs.length,devs.map(d=>dfind('ttrender',{k:'d'+d.mac,t:d.last,sev:d.behind?'warn':'',title:'<b>'+esc(d.ip)+'</b> '+d.direct+' direct'+(d.behind?' &middot; '+d.behind+' from behind':''),detail:esc(d.mac)+' &middot; '+esc(Object.entries(d.classes||{}).map(([k,v])=>'TTL '+k+' &times;'+v).join(', '))})).join(''))+
+   dsec('Expected',ig.length,'<div class="chips" style="margin-top:8px">'+ig.map(m=>'<button class="chip" onclick="ttunignore(\''+m+'\')">'+esc(m)+' &times;</button>').join('')+'</div>')})}
 async function ttload(){try{Tt=await (await api('/api/ttl')).json();ttrender()}catch(e){}}
 async function ttdo(b){const r=await apost('ttl/ignore',b);$('ttmsg').textContent=r.j.error||'';ttload()}
 function ttignore(mac){if(confirm('Mark this device as expected to forward for others? It will no longer raise hidden-router events. (A router or a container host you run on purpose.)'))ttdo({mac,ignore:true})}
@@ -600,18 +605,18 @@ function atrender(force){const el=$('at');if(!At||guard(el,force))return;
  if(At.available===false){el.textContent='The stock admin tripwire is off on this build.';return}
  const k=At.knocks||[];
  $('atbadge').innerHTML=At.sources?'<span class="err" style="text-transform:none;letter-spacing:0">&bull; '+At.sources+' source'+(At.sources===1?'':'s')+' this hour</span>':'';
- const when=t=>new Date(t*1000).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
- const rows=k.slice(0,30).map(x=>'<tr><td class="mut">'+esc(when(x.t))+'</td><td><b>'+esc(x.ip)+'</b>'+(x.mac?' <span class="mut">'+esc(x.mac)+'</span>':'')+'</td><td class="mut">port '+x.port+'</td></tr>').join('');
- el.innerHTML='<div class="mut" style="margin:6px 0">'+(At.armed?'<b style="color:var(--ac)">armed</b>: the stock admin is switched off, so a knock on its ports '+esc(At.ports)+' has no honest reason':'<span class="mut">not armed</span>: the stock admin is still on, so its ports carry real traffic and a knock means nothing')+'. Read off the wire before the firewall rejects it; nothing listens and nothing is sent.'+(At.capture_ok?'':' <span class="err">watcher not running</span>')+'</div>'+(rows?'<table>'+rows+'</table>':'<div class="mut">nothing has knocked</div>')}
+ det(el,'atrender',{sev:!At.capture_ok?'bad':!At.armed?'':At.sources?'bad':'ok',label:!At.capture_ok?'Not running':!At.armed?'Not armed':At.sources?'Knocked':'Armed',chips:At.armed?chip('ports '+esc(At.ports),'','stock admin ports'):'',
+  tip:(At.armed?'Armed: the stock admin is switched off, so a knock on its ports has no honest reason':'Not armed: the stock admin is still on, so its ports carry real traffic and a knock means nothing')+'. Read off the wire before the firewall rejects it; nothing listens and nothing is sent.',
+  rows:k.slice(0,30).map(x=>({k:x.t+x.ip,t:x.t,sev:'bad',title:'<b>'+esc(x.ip)+'</b> port '+x.port,detail:x.mac?esc(x.mac):''}))})}
 async function atload(){try{At=await (await api('/api/admintrip')).json();atrender()}catch(e){}}
 let Rb=null;
 function rbrender(force){const el=$('rb');if(!Rb||guard(el,force))return;
  if(Rb.available===false){el.textContent='Rebinding refusal needs the DNS filter.';return}
  $('rbbadge').innerHTML=Rb.refused?'<span class="mut" style="text-transform:none;letter-spacing:0">&bull; '+Rb.refused+' refused</span>':'';
- const al=(Rb.allow||[]).map(p=>'<span><code>'+esc(p)+'</code> <button onclick="rballow(\''+esc(p)+'\',true)">remove</button></span>').join(' &middot; ');
- el.innerHTML='<div class="row"><span>'+(Rb.enabled?'<b style="color:var(--ac)">on</b>':'<span class="mut">off</span>')+'</span><button class="'+(Rb.enabled?'':'on')+'" onclick="rbset('+(!Rb.enabled)+')">'+(Rb.enabled?'Switch off':'Switch on')+'</button></div>'+
-  '<div class="mut" style="margin:6px 0">A public name that resolves to a private address (this network, loopback, link-local, the Tor bridge range) is refused instead of answered: that answer is how a web page rebinds itself to a device on your LAN and talks to it as if it were its own server. Nothing on this router ever resolves a public name to a private address on purpose; the ARP / DNS correlation card still records every one it sees. '+Rb.refused+' refused since the last start.</div>'+
-  '<div class="row"><input id="rbin" placeholder="*.example.com (a name allowed to do this)"><button onclick="rballow($(\'rbin\').value,false)">Allow</button></div>'+(al?'<div style="margin-top:6px">allowed: '+al+'</div>':'')}
+ const rl=Rb.allow||[];
+ det(el,'rbrender',{sev:Rb.enabled?'ok':'',label:Rb.enabled?'On':'Off',chips:chip(Rb.refused+' refused','','since the last start'),sw:sw(Rb.enabled,'rbset('+(!Rb.enabled)+')','Rebinding refusal'),
+  tip:'A public name that resolves to a private address (this network, loopback, link-local) is refused instead of answered: that answer is how a web page rebinds itself to a device on your LAN. Nothing on this router resolves a public name to a private address on purpose.',
+  foot:dsec('Allowed',rl.length,'<div class="row" style="margin-top:8px"><input id="rbin" aria-label="Name" placeholder="*.example.com" style="flex:1;min-width:0"><button class="on" onclick="rballow($(\'rbin\').value,false)">Allow</button></div>'+(rl.length?'<div class="chips" style="margin-top:8px">'+rl.map(p=>'<button class="chip" onclick="rballow(\''+esc(p)+'\',true)">'+esc(p)+' &times;</button>').join('')+'</div>':''))})}
 async function rbload(){try{Rb=await (await api('/api/rebind')).json();rbrender()}catch(e){}}
 async function rbdo(p,b){const r=await apost(p,b);$('rbmsg').textContent=r.j.error||'';rbload()}
 function rbset(on){rbdo('rebind/set',{enabled:on})}
