@@ -102,10 +102,18 @@ $('#jn').onclick=()=>{const c=$('#cd').value.trim().toUpperCase();if(c.length===
 $('#again').onclick=()=>{res.clear();measureAll()};
 $('#leave').onclick=()=>{if(room)room.leave()};
 $('#copy').onclick=async()=>{try{await navigator.clipboard.writeText($('#rep').textContent);$('#copy').textContent='Copied'}catch(e){$('#copy').textContent='Select the text'}setTimeout(()=>$('#copy').textContent='Copy report',1500)};
-const h=location.hash.slice(1);
-if(/^[A-Za-z]{4}$/.test(h)){ // a scanned or shared link: join at once, then drop the code from the address so a reload does not use a stale one
-  $('#cd').value=h.toUpperCase();history.replaceState(null,'',location.pathname);start(h.toUpperCase());
-}else if(Room.saved())start(Room.saved().code); // a reload comes back to the same place
+// A scanned or shared link (#CODE): join at once, then drop the code from the address so a reload does not use a stale one. A tab that is already on this page only gets a new fragment (no
+// reload), so this also runs on hashchange, and it switches rooms if the page is in another one.
+function fromHash(){
+  const h=location.hash.slice(1);
+  if(!/^[A-Za-z]{4}$/.test(h))return false;
+  const c=h.toUpperCase();history.replaceState(null,'',location.pathname);
+  if(room&&room.code===c)return true;
+  if(room)room.leave();
+  $('#cd').value=c;start(c);return true;
+}
+window.addEventListener('hashchange',fromHash);
+if(!fromHash()&&Room.saved())start(Room.saved().code); // a reload comes back to the same place
 </script>
 </body>
 </html>

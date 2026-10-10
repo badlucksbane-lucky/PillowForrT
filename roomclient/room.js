@@ -12,7 +12,7 @@
 //   room.send(id, data, {unreliable})   -> 'direct' | 'relay' | false     (unreliable: unordered, may be dropped; for game input)
 //   room.broadcast(data, opts)
 //   room.rtt(id, 'direct' | 'relay' | 'box', n)  -> Promise<{n, lost, min, med, p95}>
-//   room.joinUrl(path?)   -> the link to share or show as a QR code (see qr.js): this origin + the page + '#CODE'
+//   room.joinUrl(path?)   -> the link to share or show as a QR code (see qr.js): the box's LAN address + the page + '#CODE'
 //   room.leave()
 //   Room.saved() -> {code, id, token} | null    what this tab remembers, so a reload comes back to the same place
 //
@@ -53,7 +53,7 @@
     this.maxRelayBytes = 8 * 1024;
     this.connectTimeout = o.connectTimeout || 8000; // a socket that has not said hello by then is abandoned and tried again
     this.attempts = 0;
-    this.id = ''; this.token = ''; this.status = 'connecting';
+    this.id = ''; this.token = ''; this.lan = ''; this.status = 'connecting';
     this.peers = new Map();
     this._h = {}; this._ws = null; this._tries = 0; this._closed = false; this._fatal = false; this._seen = 0;
     this._wait = {}; this._k = 0; this._timers = {};
@@ -180,7 +180,7 @@
   };
   P._hello = function (m) {
     var self = this, seen = {};
-    this.id = m.id; this.token = m.token; this.code = m.room; this._tries = 0;
+    this.id = m.id; this.token = m.token; this.code = m.room; this.lan = m.lan || ''; this._tries = 0;
     if (this._ws) this._ws._ok = true;
     clearTimeout(this._ct);
     this._save(); this._startBeat();
@@ -326,8 +326,14 @@
     this.peers.forEach(function (p) { if (self.send(p.id, data, o)) n++; });
     return n;
   };
-  // The link to share (and to put in a QR code): this page's own address plus the room code, which the page reads from the fragment. A phone opening it must be signed in at this same address.
-  P.joinUrl = function (path) { return location.origin + (path || this.joinPath) + '#' + this.code; };
+  // The link to share (and to put in a QR code): the box's LAN address plus this page plus the room code, which the page reads from the fragment. The address, not the name this page was
+  // opened by, because every phone can use it (one whose proxy settings cannot tunnel to the box's name cannot use the name). A phone opening it must be signed in at that address.
+  P.joinUrl = function (path) { return Room.joinLink(location, this.lan, path || this.joinPath, this.code); };
+  Room.joinLink = function (loc, lan, path, code) {
+    var host = loc.host;
+    if (lan && !/^[\d.]+$/.test(loc.hostname) && loc.hostname !== 'localhost') host = lan + (loc.port ? ':' + loc.port : '');
+    return loc.protocol + '//' + host + path + '#' + code;
+  };
   P.buffered = function (id) { var p = this.peers.get(id); return p && p.chR ? p.chR.bufferedAmount : 0; };
 
   // Round trips: 'direct' over the data channel, 'relay' to that peer through the box and back, 'box' to the box and back to yourself.

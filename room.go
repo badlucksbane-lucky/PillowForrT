@@ -11,7 +11,9 @@ package main
 //	              {"t":"to","to":"p2","d":<any>}              send d to one peer (yourself too: that is the box round trip)
 //	              {"t":"ping"}                                answered with pong; keeps an idle socket open
 //	              {"t":"bye"}                                 leave now, no grace
-//	box -> page   {"t":"hello","id":"p1","token":"..","room":"ABCD","resumed":false,"grace":60,"peers":[{"id":"p2","name":"TV","away":false}]}
+//	box -> page   {"t":"hello","id":"p1","token":"..","room":"ABCD","resumed":false,"grace":60,"lan":"192.168.1.254","peers":[{"id":"p2","name":"TV","away":false}]}
+//	              "lan" is the box's own LAN address as this page reached it (absent when it is not a private IPv4 address): the address to put in a join link, because every phone can use it
+//	              even when one cannot use the box's name (a phone whose proxy settings cannot tunnel to it).
 //	              {"t":"join","id":"p3","name":"Phone"}  {"t":"away","id":"p3"}  {"t":"back","id":"p3"}  {"t":"leave","id":"p3"}
 //	              {"t":"from","from":"p2","d":<any>}          what a peer sent with "to"
 //	              {"t":"pong"}
@@ -94,6 +96,22 @@ func (rc *roomConn) writer() {
 			return
 		}
 	}
+}
+
+// roomLAN returns the private IPv4 address of this end of a connection, or "".
+func roomLAN(a net.Addr) string {
+	if a == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(a.String())
+	if err != nil {
+		return ""
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || ip.To4() == nil || !ip.IsPrivate() {
+		return ""
+	}
+	return ip.String()
 }
 
 // roomPeer is a place in a room. Its fields are guarded by roomMgr.mu.
@@ -349,7 +367,7 @@ func (m *roomMgr) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			m.mu.Lock()
-			hello := roomJSON(map[string]any{"t": "hello", "id": p.id, "token": p.token, "room": rm.code, "resumed": resumed, "grace": int(roomGrace / time.Second), "peers": rm.others(p)})
+			hello := roomJSON(map[string]any{"t": "hello", "id": p.id, "token": p.token, "room": rm.code, "resumed": resumed, "grace": int(roomGrace / time.Second), "lan": roomLAN(c.LocalAddr()), "peers": rm.others(p)})
 			m.mu.Unlock()
 			rc.send(hello)
 		case f.T == "to" && p != nil:

@@ -55,6 +55,14 @@ const a = await page(), b = await page();
 await a.ev(`document.querySelector('#nm').value='A';document.querySelector('#mk').click();1`);
 check('a room is created', await a.until(`window.room&&room.status==='online'&&/^[A-Z]{4}$/.test(room.code)`), null);
 const code = await a.ev(`room.code`), aId = await a.ev(`room.id`);
+const jl = await a.ev(`JSON.stringify([
+  Room.joinLink({protocol:'https:',host:'pillowforrt.lan',hostname:'pillowforrt.lan',port:''},'192.168.1.254','/room-test','ABCD'),
+  Room.joinLink({protocol:'https:',host:'pillowforrt.lan:3129',hostname:'pillowforrt.lan',port:'3129'},'192.168.1.254','/room-test','ABCD'),
+  Room.joinLink({protocol:'https:',host:'192.168.1.254',hostname:'192.168.1.254',port:''},'10.0.0.5','/room-test','ABCD'),
+  Room.joinLink({protocol:'https:',host:'pillowforrt.lan',hostname:'pillowforrt.lan',port:''},'','/room-test','ABCD'),
+  Room.joinLink({protocol:'http:',host:'localhost:8080',hostname:'localhost',port:'8080'},'192.168.1.254','/x','WXYZ')])`).then(JSON.parse);
+check('the join link uses the box LAN address when the page was opened by name (not when by IP, localhost, or with no address known)',
+  jl[0] === 'https://192.168.1.254/room-test#ABCD' && jl[1] === 'https://192.168.1.254:3129/room-test#ABCD' && jl[2] === 'https://192.168.1.254/room-test#ABCD' && jl[3] === 'https://pillowforrt.lan/room-test#ABCD' && jl[4] === 'http://localhost:8080/x#WXYZ', jl);
 check('the page shows a QR code, a copy button, and the room link', await a.until(`!!document.querySelector('#qr #tile svg')&&!!document.querySelector('#copylink')`, 3000) && (await a.ev(`room.joinUrl()`)).endsWith('/room-test#' + code), await a.ev(`room.joinUrl()`));
 if (jsQR) {
   const r = await a.ev(`(()=>{const b=document.querySelector('#tile svg').getBoundingClientRect();return {x:b.x+scrollX,y:b.y+scrollY,w:b.width,h:b.height}})()`);
@@ -74,6 +82,14 @@ const e = await connect(); await e.goto(info.url + '/room-test#' + code); // a s
 check('opening the join link joins the room at once', await e.until(`window.room&&room.status==='online'&&room.code===${J(code)}`, 8000), await e.ev(`window.room&&[room.status,room.code]`));
 check('and the code is dropped from the address', await e.ev(`location.hash===''`), await e.ev(`location.href`));
 await e.ev(`room.leave();1`); e.close();
+
+const f = await connect(); await f.goto(info.url + '/room-test'); await f.until(`!!document.querySelector('#mk')`); // a tab already on the page only gets a new fragment: no reload
+await f.ev(`document.querySelector('#mk').click();1`);
+await f.until(`window.room&&room.status==='online'`);
+const codeX = await f.ev(`room.code`);
+await f.ev(`location.hash='#'+${J(code)};1`);
+check('a link opened on a page that is already in another room switches rooms', codeX !== code && await f.until(`window.room&&room.code===${J(code)}&&room.status==='online'`, 8000), [codeX, await f.ev(`window.room&&window.room.code`)]);
+await f.ev(`room.leave();1`); f.close();
 
 // messages over the direct link
 await b.ev(`room.send(${J(aId)},'hello');room.send(${J(aId)},{x:[1,2,3]});room.send(${J(aId)},'fast',{unreliable:true});room.send(${J(aId)},new Uint8Array([9,8,7,6,5,4,3,2,1,0]).buffer)`);
