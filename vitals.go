@@ -37,10 +37,11 @@ func selfCPUTicks() uint64 {
 	return u + k
 }
 
-// vitalsLine formats one sample. cpuPct is this process's share of one core over the interval; gcs and gcPause are the garbage collections and total pause in the same interval.
-func vitalsLine(load, cpuPct float64, m *runtime.MemStats, goroutines int, availKB uint64, gcs uint32, gcPause time.Duration) string {
-	return fmt.Sprintf("vitals load=%.2f cpu=%.0f%% heap=%dKB inuse=%dKB sys=%dKB gcs=%d gcpause=%dms goroutines=%d avail=%dKB",
-		load, cpuPct, m.HeapAlloc>>10, m.HeapInuse>>10, m.Sys>>10, gcs, gcPause.Milliseconds(), goroutines, availKB)
+// vitalsLine formats one sample. cpuPct is this process's share of one core over the interval; gcs and gcPause are the garbage collections and total pause in the same interval;
+// busy (0 to 1) is the whole box's CPU share over the last ten seconds, the number the torrent bridge sheds load on (btload.go).
+func vitalsLine(load, cpuPct float64, m *runtime.MemStats, goroutines int, availKB uint64, gcs uint32, gcPause time.Duration, busy float64) string {
+	return fmt.Sprintf("vitals load=%.2f cpu=%.0f%% heap=%dKB inuse=%dKB sys=%dKB gcs=%d gcpause=%dms goroutines=%d avail=%dKB busy=%.0f%%",
+		load, cpuPct, m.HeapAlloc>>10, m.HeapInuse>>10, m.Sys>>10, gcs, gcPause.Milliseconds(), goroutines, availKB, busy*100)
 }
 
 func startVitals() {
@@ -56,7 +57,7 @@ func startVitals() {
 			if secs > 0 { // clock ticks are 100 per second on Linux
 				cpu = float64(ticks-lastTicks) / 100 / secs * 100
 			}
-			log.Print(vitalsLine(loadAvg1(), cpu, &m, runtime.NumGoroutine(), memAvailKB(), m.NumGC-lastGC, time.Duration(m.PauseTotalNs-lastPause)))
+			log.Print(vitalsLine(loadAvg1(), cpu, &m, runtime.NumGoroutine(), memAvailKB(), m.NumGC-lastGC, time.Duration(m.PauseTotalNs-lastPause), btBusyNow()))
 			lastTicks, lastGC, lastPause, last = ticks, m.NumGC, m.PauseTotalNs, now
 		}
 	}()

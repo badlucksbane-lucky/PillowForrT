@@ -52,8 +52,8 @@ const (
 var (
 	btRate      = 2.5e6 // bytes a second from all peers together to the pages; the peers' TCP windows fill and they slow down, so this costs a little speed and not the DNS
 	btBurst     = 128e3
-	btLoadLimit = 4.0 // no new peer connection (and no new lookup) while the one-minute load average is above this; connections already open carry on
-	btLoadNow   = loadAvg1
+	btLoadLimit = 0.9 // no new peer connection (and no new lookup) while the share of CPU time spent working over the last ten seconds is above this (btload.go); connections already open carry on
+	btLoadNow   = btBusyNow
 	btLimit     = &btLimiter{rate: &btRate, burst: &btBurst}
 	btLookups   = make(chan struct{}, 2) // peer lookups at once: each is up to 12 tracker sockets plus a DHT walk for 25 s
 )

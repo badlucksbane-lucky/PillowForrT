@@ -11,8 +11,8 @@ import (
 
 func TestVitalsLine(t *testing.T) {
 	m := &runtime.MemStats{HeapAlloc: 53 << 20, HeapInuse: 60 << 20, Sys: 70 << 20}
-	got := vitalsLine(2.5, 41.6, m, 97, 54000, 3, 12*time.Millisecond)
-	for _, want := range []string{"load=2.50", "cpu=42%", "heap=54272KB", "inuse=61440KB", "sys=71680KB", "gcs=3", "gcpause=12ms", "goroutines=97", "avail=54000KB"} {
+	got := vitalsLine(2.5, 41.6, m, 97, 54000, 3, 12*time.Millisecond, 0.376)
+	for _, want := range []string{"load=2.50", "cpu=42%", "heap=54272KB", "inuse=61440KB", "sys=71680KB", "gcs=3", "gcpause=12ms", "goroutines=97", "avail=54000KB", "busy=38%"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("vitals line %q lacks %q", got, want)
 		}
