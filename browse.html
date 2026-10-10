@@ -144,6 +144,12 @@ async function ezAll(imdb,onPage){const k='ez:'+imdb,c=sget(k,30*60e3);if(c)retu
  for(let p=1;p<=6;p++){const d=await mirror(EZ,'ez',host=>jf('https://'+host+'/api/get-torrents?limit=100&page='+p+'&imdb_id='+id));
   (d.torrents||[]).forEach(t=>out.push({s:+t.season,e:+t.episode,t:t.title||t.filename||'',h:t.hash,z:+t.size_bytes,n:+t.seeds}));onPage&&onPage(out.slice(),false);if(p*100>=(d.torrents_count||0))break}
  sset(k,out);onPage&&onPage(out.slice(),true);return out}
+// Torrentio (a Stremio addon that merges TPB, 1337x, TorrentGalaxy and others): path is movie/ttID or series/ttID:S:E. Seeds, size and the indexer are packed into the title text, so a stream whose line does not parse keeps its hash and shows 0 seeds.
+const TIO='https://torrentio.strem.fun',UNIT={KB:1024,MB:1048576,GB:1073741824,TB:1099511627776};
+async function tioFor(path){return cached('tio:'+path,30*60e3,async()=>{const d=await jf(TIO+'/stream/'+path+'.json');const seen=new Set();
+ return (d.streams||[]).map(s=>{const t=String(s.title||''),sd=/👤\s*(\d+)/.exec(t),sz=/💾\s*([\d.]+)\s*([KMGT]B)/.exec(t),src=/⚙️\s*([^\n]+)/.exec(t);
+  return {t:t.split('\n')[0].trim(),h:String(s.infoHash||'').toLowerCase(),n:sd?+sd[1]:0,z:sz?Math.round(+sz[1]*UNIT[sz[2]]):0,src:src?src[1].trim():'Torrentio'}})
+  .filter(x=>/^[0-9a-f]{40}$/.test(x.h)&&!seen.has(x.h)&&seen.add(x.h))})}
 const qrank=s=>{const m=/(\d{3,4})p/.exec(s||'');return m?+m[1]:0};
 // ---------- state and routing: #/tab?c=&g=&q=&id= ----------
 const TABS=['movies','series','anime','web'];
@@ -210,9 +216,14 @@ function bodyBase(m){return [h('div',{class:'gen'},(m.allGenres||m.genres||[]).m
 let seasonSwipe=null;
 async function openMovie(id,rid){const m=await cmMeta('movies',id);if(rid!==S.sid)return;const tl=h('div',{},h('div',{class:'note',text:'Looking for torrents…'}));
  panel.replaceChildren(grab(),heroFor(m,m.bg),h('div',{class:'body'},bodyBase(m),h('div',{class:'h3',text:'Torrents'}),tl));
- const load=()=>ytFor(id).then(ts=>{if(rid!==S.sid)return;ts.sort((a,b)=>qrank(b.q)-qrank(a.q)||b.n-a.n);tl.replaceChildren(...torRows(ts,t=>tor(t.q+' · '+t.ty,t.codec,t.h,m.name+' '+t.q,t.n,size(t.z)),'No torrents for this title'))}).catch(()=>{if(rid===S.sid)tl.replaceChildren(h('div',{class:'note'},'YTS did not answer',h('button',{text:'Retry',onclick:load})))});load()}
+ let yt,tio; // undefined while loading, null when the source did not answer
+ const draw=()=>{if(rid!==S.sid)return;const ys=(yt||[]).slice().sort((a,b)=>qrank(b.q)-qrank(a.q)||b.n-a.n),have=new Set(ys.map(t=>String(t.h).toLowerCase())),
+   ts=(tio||[]).filter(t=>!have.has(t.h)).sort((a,b)=>qrank(b.t)-qrank(a.t)||b.n-a.n),fin=yt!==undefined&&tio!==undefined,down=[yt===null&&'YTS',tio===null&&'Torrentio'].filter(Boolean);
+  tl.replaceChildren(...torRows([...ys.map(t=>[t.q+' · '+t.ty,t.codec,t.h,m.name+' '+t.q,t.n,size(t.z)]),...ts.map(t=>[t.t,t.src,t.h,t.t,t.n,size(t.z)])],a=>tor(...a),fin?'No torrents for this title':'Looking for torrents…'),
+   ...(down.length?[h('div',{class:'note'},down.join(' and ')+' did not answer',h('button',{text:'Retry',onclick:load}))]:[]))};
+ const load=()=>{yt=tio=undefined;draw();ytFor(id).then(r=>{yt=r},()=>{yt=null}).then(draw);tioFor('movie/'+id).then(r=>{tio=r},()=>{tio=null}).then(draw)};load()}
 async function openSeries(id,rid){const m=await cmMeta('series',id);if(rid!==S.sid)return;
- const seasons=[...new Set(m.vids.map(v=>v.s))].sort((a,b)=>(a===0)-(b===0)||a-b);let cur=seasons.find(s=>s>0)??seasons[0]??1,ez=[],ezDone=false,ezErr=false;
+ const seasons=[...new Set(m.vids.map(v=>v.s))].sort((a,b)=>(a===0)-(b===0)||a-b);let cur=seasons.find(s=>s>0)??seasons[0]??1,ez=[],ezDone=false,ezErr=false,tio=new Map();
  const chips=h('div',{class:'scrollx chips',role:'tablist','aria-label':'Seasons'}),eps=h('div',{class:'eps'}),note=h('div',{});
  const counts=(s,e)=>ez.filter(t=>t.s===s&&t.e===e);
  function draw(dir){chips.replaceChildren(...seasons.map(s=>h('button',{class:'chip'+(s===cur?' on':''),role:'tab','aria-selected':s===cur,text:s===0?'Specials':'Season '+s,onclick:()=>{const d=seasons.indexOf(s)>seasons.indexOf(cur)?'L':'R';cur=s;draw(d)}})));
@@ -220,7 +231,10 @@ async function openSeries(id,rid){const m=await cmMeta('series',id);if(rid!==S.s
   eps.className='eps';if(dir){void eps.offsetWidth;eps.className='eps in'+dir}const open=new Set([...eps.querySelectorAll('.ep.open')].map(x=>x.dataset.e));
   eps.replaceChildren(...m.vids.filter(v=>v.s===cur).sort((a,b)=>a.e-b.e).map(v=>{const fut=v.d&&new Date(v.d)>new Date(),ts=counts(v.s,v.e);
    const el=h('div',{class:'ep'+(fut?' fut':''),'data-e':v.e}),tl=h('div',{class:'tl'});
-   const fill=()=>{const t=counts(v.s,v.e).sort((a,b)=>qrank(b.t)-qrank(a.t)||b.n-a.n);tl.replaceChildren(...torRows(t,x=>tor(x.t,'',x.h,x.t,x.n,size(x.z)),fut?'Not aired yet':!ezDone&&!ezErr?'Looking for torrents…':'No torrents found'))};
+   const fill=()=>{const k=v.s+':'+v.e;let st=tio.get(k);if(!st&&!fut){st={done:false,err:false,list:[]};tio.set(k,st);tioFor('series/'+id+':'+k).then(l=>{st.list=l},()=>{st.err=true}).then(()=>{st.done=true;st.cb&&st.cb()})}
+    if(st)st.cb=()=>{if(rid===S.sid&&el.isConnected&&el.classList.contains('open'))fill()};
+    const have=new Set(counts(v.s,v.e).map(x=>String(x.h).toLowerCase())),t=[...counts(v.s,v.e),...(st?st.list:[]).filter(x=>!have.has(x.h))].sort((a,b)=>qrank(b.t)-qrank(a.t)||b.n-a.n);
+    tl.replaceChildren(...torRows(t,x=>tor(x.t,x.src||'',x.h,x.t,x.n,size(x.z)),fut?'Not aired yet':(!ezDone&&!ezErr)||(st&&!st.done)?'Looking for torrents…':'No torrents found'))};
    el.append(h('button',{class:'eh','aria-expanded':'false',onclick:()=>{el.classList.toggle('open');el.firstChild.setAttribute('aria-expanded',el.classList.contains('open'));fill()}},
      h('div',{class:'th'},v.th?img(v.th,'',''):null),h('div',{class:'em'},h('div',{class:'en',text:(v.e+'. ')+(v.n||'Episode '+v.e)}),h('div',{class:'ed',text:v.d?new Date(v.d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}):''})),h('span',{class:'badge'+(ts.length?' has':''),text:ts.length||(ezDone||fut?'–':'…')})),tl);
    if(open.has(String(v.e))){el.classList.add('open');fill()}return el}));
