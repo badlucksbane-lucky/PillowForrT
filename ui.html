@@ -71,6 +71,7 @@ button{min-height:36px}
 .pill{display:inline-flex;align-items:center;padding:6px 14px;border:1px solid currentColor;border-radius:16px;font-weight:600}
 .ladder{display:inline-flex;gap:6px;align-items:center}.ladder i{width:26px;height:8px;border-radius:4px;background:var(--ln)}.ladder i.on{background:var(--ac)}
 .spark{width:100%;height:46px;margin-top:12px;display:block}
+.minis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.mini{display:block;text-align:left;padding:8px 10px;min-height:0;border-radius:12px}.mini .mh{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.mini .mh span{font-size:12px;color:var(--mut)}.mini .mh b{font-size:16px}.mini svg{width:100%;height:32px;display:block;margin-top:4px}
 #gtog{display:flex;align-items:center;gap:6px;margin-top:10px;width:auto;padding:0 12px}#gtog svg.i{width:20px;height:20px}#gtog .cv{transition:transform .15s}
 main{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
 .lights{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:12px 0}
@@ -91,6 +92,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
  <div class="big" id="counts"></div>
  <div class="row" id="cbub" style="margin-top:12px"></div>
  <svg class="spark" id="spark" viewBox="0 0 300 46" preserveAspectRatio="none" style="display:none"></svg>
+ <div class="minis" id="minis" hidden></div>
  <button type="button" id="gtog" class="ib" aria-expanded="false" aria-label="Graphs"></button>
  <div id="gr" style="margin-top:8px" class="mut" hidden>collecting the first samples...</div></div>
 <div class="tools"><button type="button" onclick="ccAll(true)">Collapse all</button><button type="button" onclick="ccAll(false)">Expand all</button></div>
@@ -713,7 +715,9 @@ const GR_DEFS=[
  {id:'lat',title:'Uplink latency',axis:()=>({u:'ms',div:1}),fmt:v=>Math.round(v)+' ms',series:[{k:'lat',name:'Latency',c:'--s1',m:1}],area:true},
  {id:'dns',title:'DNS lookups per minute',unit:'',fmt:v=>Math.round(v)+'',series:[{k:'q',name:'Asked',c:'--s1',m:1},{k:'blk',name:'Blocked',c:'--s2',m:1}]},
  {id:'cl',title:'Devices on the Wi-Fi',unit:'',fmt:v=>Math.round(v)+'',series:[{k:'clients',name:'Devices',c:'--s1',m:1}],step:true,area:true,int:true},
- {id:'tmp',title:'Temperature',axis:()=>({u:'\u00b0C',div:1}),fmt:v=>Math.round(v)+'°C',series:[{k:'temp',name:'Hottest sensor',c:'--s1',m:1}],area:true,auto:true}];
+ {id:'tmp',title:'Temperature',axis:()=>({u:'\u00b0C',div:1}),fmt:v=>Math.round(v)+'°C',series:[{k:'temp',name:'Hottest sensor',c:'--s1',m:1}],area:true,auto:true},
+ {id:'cpu',title:'Processor',axis:()=>({u:'%',div:1}),fmt:v=>Math.round(v)+'%',series:[{k:'cpu',name:'Whole box',c:'--s1',m:1},{k:'cpu_self',name:'PillowForrT',c:'--s2',m:1}],max:100},
+ {id:'mem',title:'Memory',axis:()=>({u:'MB',div:1}),fmt:v=>Math.round(v)+' MB',series:[{k:'mem',name:'In use',c:'--s1',m:1},{k:'mem_self',name:'PillowForrT',c:'--s2',m:1}]}];
 function sparkSvg(arr){const d=(arr||[]).map(v=>v==null?0:v);if(d.length<2)return '';const mx=Math.max(1e-9,...d),w=300,h=46,pts=d.map((v,i)=>[(i*w/(d.length-1)).toFixed(1),(h-2-v/mx*(h-6)).toFixed(1)].join(','));
  return '<svg class="spark" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><path d="M0,'+h+' L'+pts.join(' L')+' L'+w+','+h+'Z" fill="var(--ax)" opacity=".35"/><polyline points="'+pts.join(' ')+'" fill="none" stroke="var(--ac)" stroke-width="2"/></svg>'}
 function fmtBits(bps){bps=bps*8;return bps>=1e6?(bps/1e6).toFixed(bps>=1e7?0:1)+' Mbit/s':bps>=1e3?Math.round(bps/1e3)+' kbit/s':Math.round(bps)+' bit/s'}
@@ -730,6 +734,7 @@ function gchart(def,G){
  let au=def.axis?def.axis(hi):null;
  if(au&&all.length&&!def.auto){hi=niceMax(Math.max(...all)*1.05/au.div)*au.div;au=def.axis(hi)} // round in the units the axis shows, not in bytes
  if(all.length&&def.auto){lo=Math.floor((Math.min(...all)-2)/2)*2;hi=Math.ceil((Math.max(...all)+2)/2)*2;if(hi-lo<8)hi=lo+8;while((hi-lo)%4)hi+=2}
+ if(def.max)hi=def.max;
  if(def.int&&hi<4)hi=4;
  const head=document.createElement('div');head.className='gtitle';const tt=document.createElement('b');tt.textContent=def.title+(au&&all.length?' ('+au.u+')':'');head.appendChild(tt);
  if(def.series.length>1)def.series.forEach((sr,i)=>{const k=document.createElement('span');k.className='gkey';const li=document.createElement('i');li.style.background='var('+sr.c+')';k.appendChild(li);k.appendChild(document.createTextNode(sr.name));head.appendChild(k)});
@@ -769,7 +774,19 @@ function gchart(def,G){
 function gspark(){const sp=$('spark');if(!sp||!Gr||!Gr.t||!Gr.t.length||!Gr.q){if(sp)sp.style.display='none';return}
  const d=Gr.q.map(v=>v==null?0:v),mx=Math.max(1,...d),w=300,h=46,pts=d.map((v,i)=>[(i*w/Math.max(1,d.length-1)).toFixed(1),(h-2-v/mx*(h-6)).toFixed(1)]).map(p=>p.join(','));
  sp.innerHTML='<path d="M0,'+h+' L'+pts.join(' L')+' L'+w+','+h+'Z" fill="var(--ax)" opacity=".35"/><polyline points="'+pts.join(' ')+'" fill="none" stroke="var(--ac)" stroke-width="2"/>';sp.style.display='block'}
-function grender(){const el=$('gr');if(!Gr)return;gspark();
+// CPU and memory on the card itself: a value and a small line each (the box in blue, this program in orange); tapping either opens the graphs
+function gmini(){const el=$('minis');if(!el)return;
+ if(!Gr||!Gr.t||!Gr.t.length||!Gr.cpu){el.hidden=true;return}
+ const last=a=>{for(let i=a.length-1;i>=0;i--)if(a[i]!=null)return a[i]};
+ const tile=(name,keys,fmt,fixed)=>{const ser=keys.map(k=>Gr[k]||[]),v=last(ser[0]),all=[].concat(...ser).filter(x=>x!=null),mx=fixed||Math.max(1e-9,...all)*1.05,W=300,H=32,n=Math.max(1,Gr.t.length-1);
+  const svg=se('svg',{viewBox:'0 0 '+W+' '+H,preserveAspectRatio:'none','aria-hidden':'true'});
+  ser.forEach((a,si)=>{let d='',gap=true;a.forEach((x,i)=>{if(x==null){gap=true;return}d+=(gap?'M':' L')+(i*W/n).toFixed(1)+' '+(H-2-Math.min(x,mx)/mx*(H-4)).toFixed(1);gap=false});
+   if(d)svg.appendChild(se('path',{d:d,fill:'none',stroke:'var(--s'+(si+1)+')','stroke-width':si?1.5:2,'stroke-linejoin':'round','vector-effect':'non-scaling-stroke'}))});
+  const b=document.createElement('button');b.type='button';b.className='mini';b.setAttribute('aria-label',name+' '+(v==null?'unknown':fmt(v))+'. Show graphs');
+  const h=document.createElement('div');h.className='mh';const l=document.createElement('span');l.textContent=name;const val=document.createElement('b');val.textContent=v==null?'\u2013':fmt(v);h.append(l,val);
+  b.append(h,svg);b.onclick=()=>document.getElementById('gtog').click();return b};
+ el.replaceChildren(tile('CPU',['cpu','cpu_self'],x=>Math.round(x)+'%',100),tile('Memory',['mem','mem_self'],x=>Math.round(x)+' MB',0));el.hidden=false}
+function grender(){const el=$('gr');if(!Gr)return;gspark();gmini();
  el.replaceChildren();
  const bar=document.createElement('div');bar.className='row range';
  [['1h','Last hour'],['24h','Last 24 hours']].forEach(([k,t])=>{const b=document.createElement('button');b.type='button';b.className=GrRange===k?'sel':'';b.textContent=(GrRange===k?'✓ ':'')+t;b.onclick=()=>{GrRange=k;grefetch()};bar.appendChild(b)});

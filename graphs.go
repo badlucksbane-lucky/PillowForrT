@@ -1,11 +1,13 @@
 package main
 
 // Live graphs: a small ring of samples kept in RAM (lost at restart, never written to flash). Every 10 seconds the sampler records the uplink's download and upload rate (from the
-// interface counters), the uplink latency (the probe's last answer), DNS queries and blocked queries, Wi-Fi clients and the hottest sensor. 360 of those make the 1-hour view;
+// interface counters), the uplink latency (the probe's last answer), DNS queries and blocked queries, Wi-Fi clients, the hottest sensor, and how busy the CPU is and how much RAM is in
+// use (the whole box, and this program). 360 of those make the 1-hour view;
 // every minute they are folded into a coarse ring of 1,440 samples for the 24-hour view. Missing values are null, never zero: a gap is a gap.
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +27,10 @@ type gsample struct {
 	Q, Blk  float64 // DNS queries and blocked ones per minute
 	Clients float64 // Wi-Fi devices; <0 = unknown
 	Temp    float64 // hottest sensor, C; <0 = unknown
+	CPU     float64 // percent of the one core spent working, whole box (iowait counts as idle); <0 = unknown
+	CPUSelf float64 // the same for this program
+	Mem     float64 // MB of RAM in use on the box (not counting free, buffers and cache); <0 = unknown
+	MemSelf float64 // MB resident for this program; <0 = unknown
 	Rate    bool    // RX/TX/Q/Blk are real rates (false for the very first sample)
 }
 
@@ -54,11 +60,12 @@ func (g *graphStore) Add(s gsample) {
 	}
 }
 
-// foldSamples turns a minute of fine samples into one: rates averaged, latency averaged over the answers, counts and temperature as the last/maximum.
+// foldSamples turns a minute of fine samples into one: rates averaged, latency and CPU averaged over the readings that exist, counts, temperature and memory as the last/maximum
+// (a peak in memory is what matters, as with temperature).
 func foldSamples(in []gsample) gsample {
-	out := gsample{T: in[len(in)-1].T, Lat: -1, Clients: -1, Temp: -1}
-	var nr, nl int
-	var lat float64
+	out := gsample{T: in[len(in)-1].T, Lat: -1, Clients: -1, Temp: -1, CPU: -1, CPUSelf: -1, Mem: -1, MemSelf: -1}
+	var nr, nl, nc int
+	var lat, cpu, cpuSelf float64
 	for _, s := range in {
 		if s.Rate {
 			out.RX += s.RX
@@ -77,6 +84,20 @@ func foldSamples(in []gsample) gsample {
 		if s.Temp > out.Temp {
 			out.Temp = s.Temp
 		}
+		if s.CPU >= 0 && s.CPUSelf >= 0 {
+			cpu += s.CPU
+			cpuSelf += s.CPUSelf
+			nc++
+		}
+		if s.Mem > out.Mem {
+			out.Mem = s.Mem
+		}
+		if s.MemSelf > out.MemSelf {
+			out.MemSelf = s.MemSelf
+		}
+	}
+	if nc > 0 {
+		out.CPU, out.CPUSelf = cpu/float64(nc), cpuSelf/float64(nc)
 	}
 	if nr > 0 {
 		out.RX, out.TX = out.RX/float64(nr), out.TX/float64(nr)
@@ -99,6 +120,10 @@ type graphView struct {
 	Blk       []*float64 `json:"blk"`
 	Clients   []*float64 `json:"clients"`
 	Temp      []*float64 `json:"temp"`
+	CPU       []*float64 `json:"cpu"`      // percent of the core, whole box
+	CPUSelf   []*float64 `json:"cpu_self"` // this program
+	Mem       []*float64 `json:"mem"`      // MB in use on the box
+	MemSelf   []*float64 `json:"mem_self"` // MB resident for this program
 }
 
 func pf(v float64, ok bool) *float64 {
@@ -119,7 +144,8 @@ func (g *graphStore) View(day bool) graphView {
 	}
 	src = append([]gsample(nil), src...)
 	g.mu.Unlock()
-	v := graphView{IntervalS: step, T: []int64{}, RX: []*float64{}, TX: []*float64{}, Lat: []*float64{}, Q: []*float64{}, Blk: []*float64{}, Clients: []*float64{}, Temp: []*float64{}}
+	v := graphView{IntervalS: step, T: []int64{}, RX: []*float64{}, TX: []*float64{}, Lat: []*float64{}, Q: []*float64{}, Blk: []*float64{}, Clients: []*float64{}, Temp: []*float64{},
+		CPU: []*float64{}, CPUSelf: []*float64{}, Mem: []*float64{}, MemSelf: []*float64{}}
 	for _, s := range src {
 		v.T = append(v.T, s.T)
 		v.RX = append(v.RX, pf(s.RX, s.Rate))
@@ -129,6 +155,10 @@ func (g *graphStore) View(day bool) graphView {
 		v.Blk = append(v.Blk, pf(s.Blk, s.Rate))
 		v.Clients = append(v.Clients, pf(s.Clients, s.Clients >= 0))
 		v.Temp = append(v.Temp, pf(s.Temp, s.Temp >= 0))
+		v.CPU = append(v.CPU, pf(s.CPU, s.CPU >= 0))
+		v.CPUSelf = append(v.CPUSelf, pf(s.CPUSelf, s.CPUSelf >= 0))
+		v.Mem = append(v.Mem, pf(s.Mem, s.Mem >= 0))
+		v.MemSelf = append(v.MemSelf, pf(s.MemSelf, s.MemSelf >= 0))
 	}
 	return v
 }
@@ -168,6 +198,40 @@ func maxTemp() float64 {
 	return best
 }
 
+// memUsedMB is the RAM in use on the box: total less free, buffers and cache (the same "available" memAvailKB gives), in MB; -1 if /proc/meminfo cannot be read.
+func memUsedMB() float64 {
+	b, err := os.ReadFile(filepath.Join(*procDir, "meminfo"))
+	if err != nil {
+		return -1
+	}
+	for _, l := range strings.Split(string(b), "\n") {
+		if f := strings.Fields(l); len(f) >= 2 && f[0] == "MemTotal:" {
+			total, err := strconv.ParseUint(f[1], 10, 64)
+			if avail := memAvailKB(); err == nil && total >= avail {
+				return float64(total-avail) / 1024
+			}
+		}
+	}
+	return -1
+}
+
+// selfRSSMB is this program's resident memory in MB (the second number of /proc/self/statm is pages); -1 if unreadable.
+func selfRSSMB() float64 {
+	b, err := os.ReadFile(filepath.Join(*procDir, "self/statm"))
+	if err != nil {
+		return -1
+	}
+	f := strings.Fields(string(b))
+	if len(f) < 2 {
+		return -1
+	}
+	pages, err := strconv.ParseUint(f[1], 10, 64)
+	if err != nil {
+		return -1
+	}
+	return float64(pages) * float64(os.Getpagesize()) / (1 << 20)
+}
+
 func wifiClientCount() float64 {
 	if wifi == nil {
 		return -1
@@ -182,9 +246,24 @@ func graphLoop() {
 	lastLat := -1.0
 	clients := -1.0
 	var clientsAt time.Time
+	prevCPU, cpuOK := readCPUTimes()
+	prevTicks, prevCPUAt := selfCPUTicks(), time.Now()
 	for {
 		now := time.Now()
-		s := gsample{T: now.Unix(), Lat: -1, Clients: -1, Temp: maxTemp()}
+		s := gsample{T: now.Unix(), Lat: -1, Clients: -1, Temp: maxTemp(), CPU: -1, CPUSelf: -1, Mem: memUsedMB(), MemSelf: selfRSSMB()}
+		ticks := selfCPUTicks()
+		if cur, ok := readCPUTimes(); ok {
+			if f, good := busyShare(prevCPU, cur); good && cpuOK {
+				s.CPU = min(f*100, 100)
+				if secs := now.Sub(prevCPUAt).Seconds(); secs > 0 && ticks >= prevTicks { // 100 clock ticks a second is the whole core, so ticks per second is a percent
+					s.CPUSelf = min(float64(ticks-prevTicks)/secs, 100)
+				}
+			}
+			prevCPU, cpuOK = cur, true
+		} else {
+			cpuOK = false
+		}
+		prevTicks, prevCPUAt = ticks, now
 		nd, _ := os.ReadFile("/proc/net/dev")
 		rb, _, _, _, tb, _, _, _, ok := parseNetDev(string(nd), "rmnet_data0")
 		var q, b uint64
