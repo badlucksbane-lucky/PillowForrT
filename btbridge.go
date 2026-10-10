@@ -1,7 +1,8 @@
 package main
 
-// The torrent bridge: the half of the browser torrent client that lives on the box. The page's torrent engine (btclient/) opens one WebSocket per peer to /api/bt/conn; this dials that
-// peer by TCP through the Mullvad tunnel and copies bytes both ways. It is not a general proxy:
+// The torrent bridge: the half of the browser torrent client that lives on the box. The page's torrent engine (btclient/) opens ONE WebSocket to /api/bt/mux (btmux.go) and carries every
+// peer over it; /api/bt/conn below is the older form, one WebSocket per peer, kept for the dev scripts. Either dials the peer by TCP through the Mullvad tunnel and copies bytes both ways.
+// It is not a general proxy:
 //   - it needs the page's login, and a WebSocket handshake whose Origin is this box's own page (cookies ride along, so another site must not be able to open one);
 //   - it dials only ip:port pairs this box handed out itself for a recent lookup (/api/bt/peers), so a page cannot ask for an arbitrary address or port;
 //   - it dials through the tunnel only (the socket is bound to mullvad0), so with the tunnel down nothing is dialled and nothing leaks;
@@ -173,8 +174,9 @@ type btMgr struct {
 	mu      sync.Mutex
 	path    string
 	enabled bool
-	upload  string // what the page's torrent client may upload while a stream plays: off (the default), low or normal
-	conns   atomic.Int32
+	upload  string       // what the page's torrent client may upload while a stream plays: off (the default), low or normal
+	conns   atomic.Int32 // peers open now, over either kind of socket
+	muxes   atomic.Int32 // multiplexed sockets open now (btmux.go)
 	state   func() ownState
 }
 
@@ -580,6 +582,8 @@ func handleBTAPIWith(m *btMgr, w http.ResponseWriter, r *http.Request, path stri
 		m.peers(w, r)
 	case path == "bt/conn" && r.Method == http.MethodGet:
 		m.conn(w, r)
+	case path == "bt/mux" && r.Method == http.MethodGet:
+		m.mux(w, r)
 	default:
 		http.Error(w, "not found", 404)
 	}
