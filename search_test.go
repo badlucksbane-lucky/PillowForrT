@@ -233,7 +233,7 @@ func TestBrowsePolicy(t *testing.T) {
 	w := httptest.NewRecorder()
 	writeBrowse(w)
 	csp := w.Header().Get("Content-Security-Policy")
-	for _, want := range []string{"default-src 'self'", "connect-src 'self' https://v3-cinemeta.strem.io", "https://graphql.anilist.co", "https://torrentio.strem.fun", "frame-ancestors 'none'"} {
+	for _, want := range []string{"default-src 'self'", "connect-src 'self' https://v3-cinemeta.strem.io", "https://graphql.anilist.co", "https://torrentio.strem.fun", "https://kitsu.io", "frame-ancestors 'none'"} {
 		if !strings.Contains(csp, want) {
 			t.Errorf("policy lacks %q", want)
 		}

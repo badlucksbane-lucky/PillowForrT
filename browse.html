@@ -148,7 +148,7 @@ async function ezAll(imdb,onPage){const k='ez:'+imdb,c=sget(k,30*60e3);if(c)retu
 const TIO='https://torrentio.strem.fun',UNIT={KB:1024,MB:1048576,GB:1073741824,TB:1099511627776};
 async function tioFor(path){return cached('tio:'+path,30*60e3,async()=>{const d=await jf(TIO+'/stream/'+path+'.json');const seen=new Set();
  return (d.streams||[]).map(s=>{const t=String(s.title||''),sd=/👤\s*(\d+)/.exec(t),sz=/💾\s*([\d.]+)\s*([KMGT]B)/.exec(t),src=/⚙️\s*([^\n]+)/.exec(t);
-  return {t:t.split('\n')[0].trim(),h:String(s.infoHash||'').toLowerCase(),n:sd?+sd[1]:0,z:sz?Math.round(+sz[1]*UNIT[sz[2]]):0,src:src?src[1].trim():'Torrentio'}})
+  return {t:t.split('\n')[0].trim(),h:String(s.infoHash||'').toLowerCase(),f:String((s.behaviorHints||{}).filename||''),n:sd?+sd[1]:0,z:sz?Math.round(+sz[1]*UNIT[sz[2]]):0,src:src?src[1].trim():'Torrentio'}})
   .filter(x=>/^[0-9a-f]{40}$/.test(x.h)&&!seen.has(x.h)&&seen.add(x.h))})}
 const qrank=s=>{const m=/(\d{3,4})p/.exec(s||'');return m?+m[1]:0};
 // ---------- state and routing: #/tab?c=&g=&q=&id= ----------
@@ -202,11 +202,12 @@ const audioPlays=(a,v)=>!a||a.can===undefined||(a.can!==null&&v.canPlayType('aud
 // ---------- the detail sheet ----------
 const sheet=$('#sheet'),panel=$('#panel');
 const maybeNot=n=>/hevc|x265|h\.?265|10[- ]?bit|hi10|\bav1\b|dts|truehd|atmos|e-?ac-?3|\bac-?3\b|ddp|\bdd\+?[257]\.[01]\b|dolby|\.avi|\.wmv/i.test(n||'');
-function tor(label,sub,hash,name,seeds,sz){const mg=magnet(hash,name);if(!mg)return null;const n=+seeds||0,bt=BT.status&&BT.status.enabled,warn=bt&&maybeNot(label+' '+name);
+function tor(label,sub,hash,name,seeds,sz,file){const mg=magnet(hash,name);if(!mg)return null;const n=+seeds||0,bt=BT.status&&BT.status.enabled,warn=bt&&maybeNot(label+' '+name);
+ const pb=bt?h('button',{class:n?'btn':'btn ghost',text:'Play','aria-label':'Play '+name,onclick:()=>{if(!n&&!pb.dataset.ok){pb.dataset.ok='1';pb.textContent='Play anyway';return}play(hash,name,mg,file)}}):null;
  return h('div',{class:'tor'},h('div',{class:'m'},h('div',{class:'t',text:label}),h('div',{class:'s'},h('span',{class:'dot '+(n>=10?'g':n>0?'a':'')}),h('span',{text:n+' seeds'}),sz?h('span',{text:sz}):null,sub?h('span',{text:sub}):null,warn?h('span',{text:'may not play',title:'HEVC, 10-bit, or an AC-3, E-AC-3, DTS or TrueHD audio track (Dolby Digital and similar): phones often play the picture with no sound. Prefer an AAC release, or use Magnet with a desktop player.',style:'color:var(--warn)'}):null)),
   h('div',{class:'tb'},
    h('button',{class:'btn ghost',title:'Copy magnet link','aria-label':'Copy magnet link',text:'Copy',onclick:ev=>{const b=ev.currentTarget;(navigator.clipboard?navigator.clipboard.writeText(mg):Promise.reject()).then(()=>{b.textContent='Copied'},()=>{b.textContent='Select';prompt('Magnet link',mg)});setTimeout(()=>b.textContent='Copy',1500)}}),
-   bt?h('button',{class:'btn',text:'Play','aria-label':'Play '+name,onclick:()=>play(hash,name,mg)}):null,
+   pb,
    h('a',{class:(bt?'btn ghost':'btn'),href:mg,text:'Magnet'})))}
 const torRows=(arr,fn,empty)=>{const r=arr.map(fn).filter(Boolean);return r.length?r:[h('div',{class:'note',text:empty})]};
 function heroFor(m,bd){return h('div',{class:'hero'},bd&&okUrl(bd)?img(bd,'bd',''):null,h('div',{class:'hi'},poster(m),h('div',{},h('h1',{text:m.name}),factsFor(m))))}
@@ -219,7 +220,7 @@ async function openMovie(id,rid){const m=await cmMeta('movies',id);if(rid!==S.si
  let yt,tio; // undefined while loading, null when the source did not answer
  const draw=()=>{if(rid!==S.sid)return;const ys=(yt||[]).slice().sort((a,b)=>qrank(b.q)-qrank(a.q)||b.n-a.n),have=new Set(ys.map(t=>String(t.h).toLowerCase())),
    ts=(tio||[]).filter(t=>!have.has(t.h)).sort((a,b)=>qrank(b.t)-qrank(a.t)||b.n-a.n),fin=yt!==undefined&&tio!==undefined,down=[yt===null&&'YTS',tio===null&&'Torrentio'].filter(Boolean);
-  tl.replaceChildren(...torRows([...ys.map(t=>[t.q+' · '+t.ty,t.codec,t.h,m.name+' '+t.q,t.n,size(t.z)]),...ts.map(t=>[t.t,t.src,t.h,t.t,t.n,size(t.z)])],a=>tor(...a),fin?'No torrents for this title':'Looking for torrents…'),
+  tl.replaceChildren(...torRows([...ys.map(t=>[t.q+' · '+t.ty,t.codec,t.h,m.name+' '+t.q,t.n,size(t.z)]),...ts.map(t=>[t.t,t.src,t.h,t.t,t.n,size(t.z),t.f])],a=>tor(...a),fin?'No torrents for this title':'Looking for torrents…'),
    ...(down.length?[h('div',{class:'note'},down.join(' and ')+' did not answer',h('button',{text:'Retry',onclick:load}))]:[]))};
  const load=()=>{yt=tio=undefined;draw();ytFor(id).then(r=>{yt=r},()=>{yt=null}).then(draw);tioFor('movie/'+id).then(r=>{tio=r},()=>{tio=null}).then(draw)};load()}
 async function openSeries(id,rid){const m=await cmMeta('series',id);if(rid!==S.sid)return;
@@ -234,7 +235,7 @@ async function openSeries(id,rid){const m=await cmMeta('series',id);if(rid!==S.s
    const fill=()=>{const k=v.s+':'+v.e;let st=tio.get(k);if(!st&&!fut){st={done:false,err:false,list:[]};tio.set(k,st);tioFor('series/'+id+':'+k).then(l=>{st.list=l},()=>{st.err=true}).then(()=>{st.done=true;st.cb&&st.cb()})}
     if(st)st.cb=()=>{if(rid===S.sid&&el.isConnected&&el.classList.contains('open'))fill()};
     const have=new Set(counts(v.s,v.e).map(x=>String(x.h).toLowerCase())),t=[...counts(v.s,v.e),...(st?st.list:[]).filter(x=>!have.has(x.h))].sort((a,b)=>qrank(b.t)-qrank(a.t)||b.n-a.n);
-    tl.replaceChildren(...torRows(t,x=>tor(x.t,x.src||'',x.h,x.t,x.n,size(x.z)),fut?'Not aired yet':(!ezDone&&!ezErr)||(st&&!st.done)?'Looking for torrents…':'No torrents found'))};
+    tl.replaceChildren(...torRows(t,x=>tor(x.t,x.src||'',x.h,x.t,x.n,size(x.z),x.f),fut?'Not aired yet':(!ezDone&&!ezErr)||(st&&!st.done)?'Looking for torrents…':'No torrents found'))};
    el.append(h('button',{class:'eh','aria-expanded':'false',onclick:()=>{el.classList.toggle('open');el.firstChild.setAttribute('aria-expanded',el.classList.contains('open'));fill()}},
      h('div',{class:'th'},v.th?img(v.th,'',''):null),h('div',{class:'em'},h('div',{class:'en',text:(v.e+'. ')+(v.n||'Episode '+v.e)}),h('div',{class:'ed',text:v.d?new Date(v.d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}):''})),h('span',{class:'badge'+(ts.length?' has':''),text:ts.length||(ezDone||fut?'–':'…')})),tl);
    if(open.has(String(v.e))){el.classList.add('open');fill()}return el}));
@@ -244,12 +245,23 @@ async function openSeries(id,rid){const m=await cmMeta('series',id);if(rid!==S.s
  draw();loadEz();
  seasonSwipe=dir=>{const i=seasons.indexOf(cur)+dir;if(i>=0&&i<seasons.length){cur=seasons[i];draw(dir>0?'L':'R')}};
  hswipe(eps,dx=>seasonSwipe&&seasonSwipe(dx<0?1:-1))}
-async function openAnime(id,rid){const m=await alOne(id);if(rid!==S.sid)return;const tl=h('div',{}),inp=h('input',{value:m.romaji||m.name,'aria-label':'Torrent search',maxlength:'100',autocomplete:'off'});let filt='',items=[];
+const KS='https://kitsu.io/api/edge';
+// AniList id to Kitsu id (Torrentio names anime by Kitsu id)
+async function kitsuFor(al){return cached('ku:'+al,7*DAY,async()=>{const d=await jf(KS+'/mappings?filter[externalSite]=anilist/anime&filter[externalId]='+encodeURIComponent(al)+'&include=item');
+ const it=(((d.data||[])[0]||{}).relationships||{}).item;const k=it&&it.data&&it.data.id;if(!/^\d+$/.test(k||''))throw new Error('no Kitsu entry');return k})}
+async function openAnime(id,rid){const m=await alOne(id);if(rid!==S.sid)return;const movie=m.format==='MOVIE',max=m.eps||9999,tl=h('div',{}),inp=h('input',{value:m.romaji||m.name,'aria-label':'Search Nyaa',maxlength:'100',autocomplete:'off'});let filt='',items=[],ep=1,seq=0;
  const fc=h('div',{class:'scrollx chips'},[['','All'],['1080','1080p'],['720','720p'],['batch','Batch']].map(([k,l])=>h('button',{class:'chip'+(k===''?' on':''),text:l,onclick:ev=>{filt=k;fc.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));ev.currentTarget.classList.add('on');draw()}})));
- const draw=()=>{const f=items.filter(t=>!filt||(filt==='batch'?/batch|complete|\d+\s*[-~]\s*\d+/i.test(t.title):t.title.toLowerCase().includes(filt)));tl.replaceChildren(...torRows(f,t=>tor(t.title,'',t.hash,t.title,t.seeds,t.size),'No torrents'))};
- const load=()=>{tl.replaceChildren(h('div',{class:'note',text:'Searching Nyaa…'}));jf('/api/search/nyaa?q='+encodeURIComponent(inp.value.trim()),{credentials:'same-origin',ms:50000}).then(d=>{if(rid!==S.sid)return;if(d.error){tl.replaceChildren(h('div',{class:'note'},d.error,h('button',{text:'Retry',onclick:load})));return}items=(d.items||[]).sort((a,b)=>b.seeds-a.seeds);draw()}).catch(()=>{if(rid===S.sid)tl.replaceChildren(h('div',{class:'note'},'The box did not answer',h('button',{text:'Retry',onclick:load})))})};
- panel.replaceChildren(grab(),heroFor(m,m.banner||m.poster),h('div',{class:'body'},bodyBase(m),h('div',{class:'h3',text:'Torrents (Nyaa)'}),h('form',{class:'refine',onsubmit:ev=>{ev.preventDefault();load()}},inp,h('button',{class:'btn',type:'submit',text:'Search'})),fc,tl));
- if(m.color&&/^#[0-9a-f]{6}$/i.test(m.color))panel.style.borderTop='3px solid '+m.color;load()}
+ const draw=()=>{const f=items.filter(t=>!filt||(filt==='batch'?/batch|complete|\d+\s*[-~]\s*\d+/i.test(t.title):t.title.toLowerCase().includes(filt)));tl.replaceChildren(...torRows(f.slice(0,80),t=>tor(t.title,t.src||'',t.hash,t.title,t.seeds,t.size,t.file),'No torrents'))};
+ // the default lookup runs in this page (Kitsu id, then Torrentio); the Nyaa box below is the only thing that asks the box
+ const loadTio=()=>{const my=++seq;tl.replaceChildren(h('div',{class:'note',text:'Looking for torrents…'}));
+  kitsuFor(id).then(k=>tioFor(movie?'movie/kitsu:'+k:'series/kitsu:'+k+':'+ep)).then(l=>{if(rid!==S.sid||my!==seq)return;items=l.map(x=>({title:x.t,hash:x.h,seeds:x.n,size:size(x.z),src:x.src,file:x.f})).sort((a,b)=>b.seeds-a.seeds);draw()})
+   .catch(()=>{if(rid===S.sid&&my===seq)tl.replaceChildren(h('div',{class:'note'},'Torrentio did not answer',h('button',{text:'Retry',onclick:loadTio})))})};
+ const loadNyaa=()=>{const my=++seq;tl.replaceChildren(h('div',{class:'note',text:'Searching Nyaa…'}));jf('/api/search/nyaa?q='+encodeURIComponent(inp.value.trim()),{credentials:'same-origin',ms:50000}).then(d=>{if(rid!==S.sid||my!==seq)return;if(d.error){tl.replaceChildren(h('div',{class:'note'},d.error,h('button',{text:'Retry',onclick:loadNyaa})));return}items=(d.items||[]).sort((a,b)=>b.seeds-a.seeds);draw()}).catch(()=>{if(rid===S.sid&&my===seq)tl.replaceChildren(h('div',{class:'note'},'The box did not answer',h('button',{text:'Retry',onclick:loadNyaa})))})};
+ const epIn=h('input',{type:'number',min:'1',max:String(max),value:'1',inputmode:'numeric','aria-label':'Episode'}),setEp=n=>{ep=Math.min(max,Math.max(1,Math.round(+n)||1));epIn.value=ep;loadTio()};
+ epIn.addEventListener('change',()=>setEp(epIn.value));
+ const stepper=movie?null:h('div',{class:'refine'},h('button',{class:'btn ghost',type:'button',text:'‹','aria-label':'Previous episode',onclick:()=>setEp(ep-1)}),epIn,h('button',{class:'btn ghost',type:'button',text:'›','aria-label':'Next episode',onclick:()=>setEp(ep+1)}));
+ panel.replaceChildren(grab(),heroFor(m,m.banner||m.poster),h('div',{class:'body'},bodyBase(m),h('div',{class:'h3',text:'Torrents'}),stepper,fc,tl,h('form',{class:'refine',onsubmit:ev=>{ev.preventDefault();loadNyaa()}},inp,h('button',{class:'btn ghost',type:'submit',text:'Nyaa'}))));
+ if(m.color&&/^#[0-9a-f]{6}$/i.test(m.color))panel.style.borderTop='3px solid '+m.color;loadTio()}
 const closeBtn=()=>h('button',{class:'x','aria-label':'Close',text:'×',onclick:closeSheet});
 const grab=()=>h('div',{class:'grab'},closeBtn());
 function closeSheet(){if(S.fromApp){S.fromApp=false;history.back()}else go({id:''},true)}
@@ -267,7 +279,7 @@ async function engine(){if(BT.client)return BT.client;
  const reg=await navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{throw new Error('The player needs this browser to trust the box certificate')});
  await navigator.serviceWorker.ready;
  if(!navigator.serviceWorker.controller)await new Promise(r=>{navigator.serviceWorker.addEventListener('controllerchange',r,{once:true});setTimeout(r,3000)});
- const c=new WebTorrent({tracker:false,lsd:false,secure:0,maxConns:60,uploadLimit:1024});c.on('error',()=>{});c.createServer({controller:reg});BT.client=c;return c}
+ const c=new WebTorrent({tracker:false,lsd:false,secure:0,maxConns:25,uploadLimit:1024});c.on('error',()=>{});c.createServer({controller:reg});BT.client=c;return c}
 // AC-3 and E-AC-3 sound the browser cannot decode: /bt/audio.js (Mediabunny + the FFmpeg decoder in WASM) decodes it in the page and plays it through Web Audio, clocked to the video
 async function softAudio(v,a,aud){aud.textContent='Decoding '+a.name+' in the page…';aud.hidden=false;await loadScript('/bt/audio.js');
  const h=await PFAudio.attach(v,m=>{aud.textContent=m;aud.hidden=false});if(!v.isConnected){h.dispose();return}BT.audio=h;aud.hidden=true}
@@ -279,7 +291,7 @@ function stopPlayer(){BT.timers.forEach(clearInterval);BT.timers=[];if(BT.audio)
 function closePlayer(fromPop){if(!playerEl.classList.contains('open'))return;stopPlayer();pv.replaceChildren();ppick.hidden=true;playerEl.classList.remove('open');playerEl.inert=true;document.body.classList.toggle('lock',sheet.classList.contains('open'));if(!fromPop&&history.state&&history.state.player)history.back()}
 window.addEventListener('popstate',()=>{if(playerEl.classList.contains('open'))closePlayer(true)});
 $('#pclose').addEventListener('click',()=>closePlayer());
-async function play(hash,name,mg){
+async function play(hash,name,mg,want){
  stopPlayer();pv.replaceChildren();ppick.hidden=true;$('#ptitle').textContent=name;
  if(!playerEl.classList.contains('open')){history.pushState({player:1},'');playerEl.classList.add('open');playerEl.inert=false;document.body.classList.add('lock')}
  const say=(msg,bad)=>pstat.replaceChildren(h('div',{class:'row2'},h('span',{class:bad?'err':'',text:msg}),h('span',{class:'pbtn'},/certificate/i.test(msg)?h('a',{class:'btn',href:'/api/cert/pillowforrt.crt',text:'Trust certificate'}):null,h('a',{class:'btn ghost',href:mg,text:'Open magnet'}))));
@@ -297,16 +309,18 @@ async function play(hash,name,mg){
  BT.timers.push(setInterval(draw,1000));
  t.on('wire',()=>{wires++});t.on('error',e=>{note=String(e.message||e)});
  // peers: the box asks the trackers and the DHT over Mullvad and streams back what it finds; ask again now and then
- const feed=async()=>{if(BT.cur!==t||t.destroyed)return;BT.ac=new AbortController();
+ let busy=false;
+ const feed=async()=>{if(BT.cur!==t||t.destroyed||busy)return;busy=true;BT.ac=new AbortController();
   try{const r=await fetch('/api/bt/peers?h='+hash,{credentials:'same-origin',signal:BT.ac.signal,referrerPolicy:'no-referrer'});if(!r.ok){let m='';try{m=(await r.json()).error}catch(e){}note=m||'bridge refused';return}
    const rd=r.body.getReader(),dec=new TextDecoder();let buf='';for(;;){const {value,done}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});let i;while((i=buf.indexOf('\n'))>=0){const ln=buf.slice(0,i);buf=buf.slice(i+1);try{const m=JSON.parse(ln);(m.peers||[]).forEach(p=>{try{t.addPeer(p)}catch(e){}})}catch(e){}}}}
-  catch(e){}};
- t.on('infoHash',()=>{feed();let last=Date.now();BT.timers.push(setInterval(()=>{if(t.numPeers<10&&Date.now()-last>30000||Date.now()-last>240000){last=Date.now();feed()}},5000))});
+  catch(e){}finally{busy=false}};
+ t.on('infoHash',()=>{feed();let last=Date.now(),tries=0;BT.timers.push(setInterval(()=>{const idle=Date.now()-last,low=t.numPeers<10;if(!low)tries=0;if(low&&idle>90000&&tries<5||!low&&idle>300000){if(low)tries++;last=Date.now();feed()}},5000))});
  t.on('ready',()=>{
   const vids=t.files.filter(f=>/\.(mp4|m4v|mkv|webm|mov|avi|ts)$/i.test(f.name)).sort((a,b)=>b.length-a.length);
   if(!vids.length){say('This torrent has no video file',true);return}
   const start=f=>{file=f;ppick.hidden=true;t.files.forEach(x=>{if(x!==f)x.deselect()});
    const v=h('video',{controls:true,playsinline:true,autoplay:true});v.addEventListener('error',()=>{note='the browser cannot play this file (codec or container)';v.remove()});v.addEventListener('loadedmetadata',()=>{fetch(v.currentSrc,{headers:{Range:'bytes=0-131071'},referrerPolicy:'no-referrer'}).then(r=>r.arrayBuffer()).then(b=>{const a=firstAudio(new Uint8Array(b));if(!audioPlays(a,v)){const nosound=why=>{aud.textContent='No sound on this device: the audio track is '+a.name+', which this browser cannot play'+(why?' ('+why+')':'')+'. The picture will play. Pick a release with AAC audio.';aud.hidden=false};if(a.can==='ac-3'||a.can==='ec-3')softAudio(v,a,aud).catch(e=>nosound(e&&e.message));else nosound()}}).catch(()=>{})},{once:true});pv.replaceChildren(v);f.streamTo(v);v.play().catch(()=>{});draw()};
+  const hit=want&&vids.find(f=>f.name.toLowerCase()===want.toLowerCase());if(hit){start(hit);return}
   const big=vids.filter(f=>f.length>=vids[0].length*.3);
   if(big.length>1){ppick.hidden=false;ppick.replaceChildren(...big.map(f=>h('button',{text:f.name+'  ·  '+size(f.length),onclick:()=>start(f)})))}else start(vids[0])});
  draw()}
