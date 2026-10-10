@@ -12,6 +12,7 @@
 //   room.send(id, data, {unreliable})   -> 'direct' | 'relay' | false     (unreliable: unordered, may be dropped; for game input)
 //   room.broadcast(data, opts)
 //   room.rtt(id, 'direct' | 'relay' | 'box', n)  -> Promise<{n, lost, min, med, p95}>
+//   room.joinUrl(path?)   -> the link to share or show as a QR code (see qr.js): this origin + the page + '#CODE'
 //   room.leave()
 //   Room.saved() -> {code, id, token} | null    what this tab remembers, so a reload comes back to the same place
 //
@@ -48,6 +49,7 @@
     this.rtc = o.rtc !== false && typeof RTCPeerConnection !== 'undefined';
     this.persist = o.persist !== false;
     this.url = o.url || ((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/api/room');
+    this.joinPath = o.joinPath || '/room-test'; // the page a scanned link opens
     this.maxRelayBytes = 8 * 1024;
     this.connectTimeout = o.connectTimeout || 8000; // a socket that has not said hello by then is abandoned and tried again
     this.attempts = 0;
@@ -324,6 +326,8 @@
     this.peers.forEach(function (p) { if (self.send(p.id, data, o)) n++; });
     return n;
   };
+  // The link to share (and to put in a QR code): this page's own address plus the room code, which the page reads from the fragment. A phone opening it must be signed in at this same address.
+  P.joinUrl = function (path) { return location.origin + (path || this.joinPath) + '#' + this.code; };
   P.buffered = function (id) { var p = this.peers.get(id); return p && p.chR ? p.chR.bufferedAmount : 0; };
 
   // Round trips: 'direct' over the data channel, 'relay' to that peer through the box and back, 'box' to the box and back to yourself.

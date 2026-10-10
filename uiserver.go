@@ -144,6 +144,7 @@ func (u *webUI) handler() http.Handler {
 	mux.HandleFunc("/browse", u.browsePage)
 	mux.HandleFunc("/room-test", u.roomTestPage)
 	mux.HandleFunc("/room/room.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, roomClientJS) })
+	mux.HandleFunc("/room/qr.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, roomQRJS) })
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, btSWJS) })
 	mux.HandleFunc("/bt/btclient.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, btClientJS) })
 	mux.HandleFunc("/bt/audio.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, btAudioJS) })

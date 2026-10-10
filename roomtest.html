@@ -21,6 +21,8 @@ button.g{background:var(--card);color:var(--fg);border:1px solid var(--line)}
 .ok{color:var(--ok)}.bad{color:var(--bad)}.mut{color:var(--mut);font-size:14px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
 .grid div{padding:8px;border:1px solid var(--line);border-radius:10px}
+.tile{background:#fff;border-radius:12px;max-width:240px;margin:0 auto;line-height:0;overflow:hidden}
+.tile svg{width:100%;height:auto}
 pre{white-space:pre-wrap;word-break:break-all;font-size:12px;margin:0}
 </style>
 </head>
@@ -32,11 +34,13 @@ pre{white-space:pre-wrap;word-break:break-all;font-size:12px;margin:0}
 </div>
 <div id="room" hidden>
   <div id="code" aria-label="Room code"></div>
+  <div class="card" id="qr" style="text-align:center"></div>
   <div class="mut" id="me" style="text-align:center"></div>
   <div id="peers"></div>
   <div class="row"><button id="again">Run again</button><button class="g" id="copy">Copy report</button><button class="g" id="leave">Leave</button></div>
   <pre id="rep" class="mut"></pre>
 </div>
+<script src="/room/qr.js"></script>
 <script src="/room/room.js"></script>
 <script>
 'use strict';
@@ -50,9 +54,19 @@ function start(code){
   try{localStorage.setItem('rs:name',nm.value)}catch(e){}
   const s=Room.saved();
   room=new Room({name:nm.value.trim()||'device',code:code||(s&&s.code)||''});window.room=room; // window.room is for the tests and for poking at from the console
-  room.on('ready',r=>{$('#join').hidden=true;$('#room').hidden=false;$('#code').textContent=r.code;draw();measureAll()});
+  room.on('ready',r=>{$('#join').hidden=true;$('#room').hidden=false;$('#code').textContent=r.code;drawQR();draw();measureAll()});
   room.on('peer',draw).on('peerleft',draw).on('link',p=>{draw();if(p.state==='direct'||p.state==='relay')measure(p.id)}).on('status',draw);
   room.on('closed',c=>{$('#join').hidden=false;$('#room').hidden=true;room=null;if(c.reason!=='left')alert(c.reason)});
+}
+function drawQR(){
+  const url=room.joinUrl(),box=$('#qr'),tile=document.createElement('div');tile.className='tile';tile.id='tile';
+  tile.innerHTML=QR.svg(url,{scale:5}); // our own markup: the origin of this page and a 4-letter code
+  const row=document.createElement('div');row.className='row';row.style.cssText='margin:12px 0 0;justify-content:center';
+  const cp=document.createElement('button');cp.className='g';cp.id='copylink';cp.textContent='Copy link';
+  cp.onclick=async()=>{try{await navigator.clipboard.writeText(url);cp.textContent='Copied'}catch(e){cp.textContent=url}setTimeout(()=>cp.textContent='Copy link',1500)};
+  row.append(cp);
+  if(navigator.share){const sh=document.createElement('button');sh.className='g';sh.id='sharelink';sh.textContent='Share';sh.onclick=()=>navigator.share({title:'Join my room',url}).catch(()=>{});row.append(sh)}
+  box.replaceChildren(tile,row);
 }
 async function measure(id){
   const rm=room;
@@ -71,7 +85,7 @@ function draw(){
   if(!room)return;
   $('#me').textContent='You are '+room.name+' ('+room.id+') · '+room.status;
   const box=$('#peers');box.replaceChildren();
-  if(!room.peers.size){const d=document.createElement('div');d.className='mut';d.style.textAlign='center';d.textContent='Waiting for another device. Open this page there and join '+room.code;box.append(d)}
+  if(!room.peers.size){const d=document.createElement('div');d.className='mut';d.style.textAlign='center';d.textContent='Waiting for another device';box.append(d)}
   room.peers.forEach(p=>{
     const r=res.get(p.id)||{},c=document.createElement('div');c.className='card';
     const h=document.createElement('div');h.className='big '+(p.state==='direct'?'ok':p.state==='relay'||p.state==='away'?'bad':'');
@@ -88,8 +102,10 @@ $('#jn').onclick=()=>{const c=$('#cd').value.trim().toUpperCase();if(c.length===
 $('#again').onclick=()=>{res.clear();measureAll()};
 $('#leave').onclick=()=>{if(room)room.leave()};
 $('#copy').onclick=async()=>{try{await navigator.clipboard.writeText($('#rep').textContent);$('#copy').textContent='Copied'}catch(e){$('#copy').textContent='Select the text'}setTimeout(()=>$('#copy').textContent='Copy report',1500)};
-const h=location.hash.slice(1);if(/^[A-Za-z]{4}$/.test(h))$('#cd').value=h.toUpperCase();
-if(Room.saved())start(Room.saved().code); // a reload comes back to the same place
+const h=location.hash.slice(1);
+if(/^[A-Za-z]{4}$/.test(h)){ // a scanned or shared link: join at once, then drop the code from the address so a reload does not use a stale one
+  $('#cd').value=h.toUpperCase();history.replaceState(null,'',location.pathname);start(h.toUpperCase());
+}else if(Room.saved())start(Room.saved().code); // a reload comes back to the same place
 </script>
 </body>
 </html>

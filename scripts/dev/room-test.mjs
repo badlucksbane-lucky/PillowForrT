@@ -6,6 +6,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import { createRequire } from 'node:module';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +21,9 @@ const info = await new Promise((resolve, reject) => {
   go.stdout.on('data', d => { buf += d; const line = buf.split('\n').find(l => l.startsWith('{')); if (line) resolve(JSON.parse(line)); });
   go.on('exit', c => reject(new Error('go test ended early, code ' + c + '\n' + buf)));
 });
+// optional: with jsqr and pngjs available (JSQR_DIR, see qr-test.mjs) the QR code on the page is photographed and decoded
+let jsQR = null, PNG = null;
+try { const req = createRequire(path.join(process.env.JSQR_DIR || here, 'x.js')); jsQR = req('jsqr'); PNG = req('pngjs').PNG; } catch (e) { /* the scan check is skipped */ }
 const fails = [];
 const check = (name, ok, got) => { console.log((ok ? 'ok   ' : 'FAIL ') + name + (ok ? '' : '  got: ' + JSON.stringify(got))); if (!ok) fails.push(name); };
 
@@ -51,6 +55,13 @@ const a = await page(), b = await page();
 await a.ev(`document.querySelector('#nm').value='A';document.querySelector('#mk').click();1`);
 check('a room is created', await a.until(`window.room&&room.status==='online'&&/^[A-Z]{4}$/.test(room.code)`), null);
 const code = await a.ev(`room.code`), aId = await a.ev(`room.id`);
+check('the page shows a QR code, a copy button, and the room link', await a.until(`!!document.querySelector('#qr #tile svg')&&!!document.querySelector('#copylink')`, 3000) && (await a.ev(`room.joinUrl()`)).endsWith('/room-test#' + code), await a.ev(`room.joinUrl()`));
+if (jsQR) {
+  const r = await a.ev(`(()=>{const b=document.querySelector('#tile svg').getBoundingClientRect();return {x:b.x+scrollX,y:b.y+scrollY,w:b.width,h:b.height}})()`);
+  const shot = await a.send('Page.captureScreenshot', { format: 'png', clip: { x: r.x, y: r.y, width: r.w, height: r.h, scale: 3 } });
+  const png = PNG.sync.read(Buffer.from(shot.data, 'base64')), res = jsQR(new Uint8ClampedArray(png.data), png.width, png.height);
+  check('the QR code on the page decodes to the join link', !!res && res.data === await a.ev(`room.joinUrl()`), res && res.data);
+} else console.log('skip  QR scan check (jsqr not found; set JSQR_DIR)');
 await a.ev(HOOK('window.room'));
 await b.ev(`document.querySelector('#nm').value='B';document.querySelector('#cd').value=${J(code)};document.querySelector('#jn').click();1`);
 check('the second page joins', await b.until(`window.room&&room.status==='online'&&room.code===${J(code)}`), null);
@@ -58,6 +69,11 @@ await b.ev(HOOK('window.room'));
 const bId = await b.ev(`room.id`);
 check('each lists the other', await a.until(`room.peers.has(${J(bId)})`) && await b.until(`room.peers.has(${J(aId)})`), null);
 check('the link becomes direct on both sides', await waitState(a, bId, 'direct') && await waitState(b, aId, 'direct'), [await peerState(a, bId), await peerState(b, aId)]);
+
+const e = await connect(); await e.goto(info.url + '/room-test#' + code); // a scanned link: joins at once, no tapping
+check('opening the join link joins the room at once', await e.until(`window.room&&room.status==='online'&&room.code===${J(code)}`, 8000), await e.ev(`window.room&&[room.status,room.code]`));
+check('and the code is dropped from the address', await e.ev(`location.hash===''`), await e.ev(`location.href`));
+await e.ev(`room.leave();1`); e.close();
 
 // messages over the direct link
 await b.ev(`room.send(${J(aId)},'hello');room.send(${J(aId)},{x:[1,2,3]});room.send(${J(aId)},'fast',{unreliable:true});room.send(${J(aId)},new Uint8Array([9,8,7,6,5,4,3,2,1,0]).buffer)`);

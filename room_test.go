@@ -149,6 +149,7 @@ func TestRoomServeForJS(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/room", m.serve)
 	mux.HandleFunc("/room/room.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, roomClientJS) })
+	mux.HandleFunc("/room/qr.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, roomQRJS) })
 	mux.HandleFunc("/room-test", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		io.WriteString(w, roomTestHTML)

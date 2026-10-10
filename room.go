@@ -370,6 +370,9 @@ var roomTestHTML string
 //go:embed roomclient/room.js
 var roomClientJS []byte
 
+//go:embed roomclient/qr.js
+var roomQRJS []byte
+
 // The spike page (/room-test): two devices join a room and measure whether WebRTC reaches directly across this box's Wi-Fi, and how fast the box relay is by comparison. It is built on
 // the room client (/room/room.js), so it doubles as a check of the library on a real phone.
 func (u *webUI) roomTestPage(w http.ResponseWriter, r *http.Request) {
