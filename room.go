@@ -12,7 +12,7 @@ package main
 //	              {"t":"ping"}                                answered with pong; keeps an idle socket open
 //	              {"t":"bye"}                                 leave now, no grace
 //	box -> page   {"t":"hello","id":"p1","token":"..","room":"ABCD","resumed":false,"grace":60,"lan":"192.168.1.254","peers":[{"id":"p2","name":"TV","away":false}]}
-//	              "lan" is the box's own LAN address as this page reached it (absent when it is not a private IPv4 address): the address to put in a join link, because every phone can use it
+//	              "lan" is the box's own LAN address (its services address, 192.168.1.254, for either of its two; absent when not a private IPv4 address): the address to put in a join link, because every phone can use it
 //	              even when one cannot use the box's name (a phone whose proxy settings cannot tunnel to it).
 //	              {"t":"join","id":"p3","name":"Phone"}  {"t":"away","id":"p3"}  {"t":"back","id":"p3"}  {"t":"leave","id":"p3"}
 //	              {"t":"from","from":"p2","d":<any>}          what a peer sent with "to"
@@ -98,7 +98,9 @@ func (rc *roomConn) writer() {
 	}
 }
 
-// roomLAN returns the private IPv4 address of this end of a connection, or "".
+// roomLAN returns the address to put in a join link: this end of the connection when it is a private IPv4 address, or "". The box has two LAN addresses, the router address and the services
+// address (defaultDNSLocal: the one its name points to, and the one the phones are signed in at); a connection to the services address is redirected to the router address, so the socket
+// reports that one, and either maps to the services address.
 func roomLAN(a net.Addr) string {
 	if a == nil {
 		return ""
@@ -110,6 +112,11 @@ func roomLAN(a net.Addr) string {
 	ip := net.ParseIP(host)
 	if ip == nil || ip.To4() == nil || !ip.IsPrivate() {
 		return ""
+	}
+	for _, own := range defaultDNSLocal {
+		if ip.String() == own {
+			return defaultDNSLocal[0]
+		}
 	}
 	return ip.String()
 }

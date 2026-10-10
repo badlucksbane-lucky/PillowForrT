@@ -263,7 +263,7 @@ func TestRoomGraceEndsAndByeIsImmediate(t *testing.T) {
 }
 
 func TestRoomLANAddress(t *testing.T) {
-	cases := map[string]string{"192.168.1.254:443": "192.168.1.254", "10.0.0.7:3129": "10.0.0.7", "172.20.1.1:80": "172.20.1.1", "127.0.0.1:443": "", "8.8.8.8:443": "", "[fe80::1]:443": "", "[::1]:443": "", "garbage": ""}
+	cases := map[string]string{"192.168.1.254:443": "192.168.1.254", "192.168.1.1:3129": "192.168.1.254", "10.0.0.7:3129": "10.0.0.7", "172.20.1.1:80": "172.20.1.1", "127.0.0.1:443": "", "8.8.8.8:443": "", "[fe80::1]:443": "", "[::1]:443": "", "garbage": ""}
 	for in, want := range cases {
 		a, _ := net.ResolveTCPAddr("tcp", in)
 		var addr net.Addr
