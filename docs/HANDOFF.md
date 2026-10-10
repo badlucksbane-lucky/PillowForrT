@@ -6,12 +6,12 @@
 
 1. **Read "The reboot cluster" first**, then ask Ben what he was doing between 07:45 and 08:06 on the box's clock (EDT) on 2026-10-09: playing from the Pixel, moving the unit, unplugging or replugging power. Ask what powers the box (its battery or a charger) and what powers the Pi, since the Pi rebooted too.
 2. Check the watcher (`pgrep -x watch.sh`; restart command under "Freeze investigation: progress") and read `~/freeze-watch/watch.log` for `up` dropping since 2026-10-09 06:58 (Pi clock).
-3. Ask Ben to play a stream from the Pixel with you watching the vitals line (`ssh pillowforrt 'grep "vitals load" /data/proxy/tinyfwd.log | tail'`), to see CPU, heap and `gcs=` under real load now that the idle problem is fixed. Nobody has done that with the audit's fixes in place and the box staying up.
+3. Ask Ben to play a stream from the Pixel with you watching the vitals line (`ssh pillowforrt 'grep "vitals load" /data/proxy/tinyfwd.log | tail'`), to see CPU, heap and `gcs=` under real load now that the idle problem is fixed. Nobody has done that with the audit's fixes in place and the box staying up. **The same run is the first test of the torrent-load cuts** (25 peers, slower re-announce; see "Torrent sources and box load"): compare with the earlier 40-minute test (daemon 65 to 70 % CPU, 115 to 150 goroutines).
 4. Open audit items are listed under "Still open from the audit". Ask before deploying anything; a freeze needs a power cycle.
 
 ## Audit and fixes (2026-10-09)
 
-Ten code commits (`2b94e26` to `4aa829b`), all deployed to the box and pushed. The binary on the box is the build of `4aa829b`, sha256 `f640ea3182fa7cbd0f3acbe5637a65670938ec641c2fd13757860e74326e6d8c` (`./build.sh` prints it; the build is reproducible).
+Ten code commits (`2b94e26` to `4aa829b`), all deployed to the box and pushed. The binary on the box at the end of the audit was the build of `4aa829b`, sha256 `f640ea3182fa7cbd0f3acbe5637a65670938ec641c2fd13757860e74326e6d8c` (`./build.sh` prints it; the build is reproducible). It has been replaced since; see the Head row below.
 
 | Commit | What | Measured effect |
 |---|---|---|
@@ -78,16 +78,52 @@ All times below are the **box's clock (EDT)**; the Pi's clock (CDT, `~/freeze-wa
 | | |
 |---|---|
 | Repo | `github.com/badlucksbane-lucky/PillowForrT` (`origin`, public, full history). The old repo is the `stone-of-heimdall` remote, untouched. |
-| Head | The last code commit is `4aa829b`; the docs commits after it only touch this file. The binary on the box is the build of `4aa829b`, sha256 starting `f640ea3182fa7cbd0f3`. Everything is pushed. |
+| Head | The last code commit is `f7ec8d2` (torrent sources and box load); the docs commits after it only touch this file. The binary on the box is the build of `f7ec8d2`, sha256 `67d095bea9e60926bd504c3ca5aab4fe9a768a71a6ac70405f20d098b92d0be6`; the previous binary is on the box as `/data/proxy/tinyfwd.prev` (the build of `7df330a`). Pushed through `f7ec8d2`. |
 | Web page | `https://pillowforrt.lan/` (also `pillowforrt`). SSH alias `pillowforrt`. Local config in `~/.pillowforrt` (`tls.pem` pinned certificate, `ui.token`). |
 | Certificate | Self-signed, marked as a CA limited by critical name constraints to this box's own names and two addresses (Android's installer only installs a CA). SHA-256 begins `4C:A4:AD:90`. Valid 800 days from 2026-10-09. |
 | Deploy | `./build.sh` then `scripts/deploy-tinyfwd.sh` (rolls back by itself if the daemon doesn't answer). Always ask Ben before committing or deploying: he says "commit, build and deploy" each time. |
 
+## Torrent sources and box load (2026-10-09, evening)
+
+Commits `7df330a` (Torrentio) and `f7ec8d2` (load cuts, anime), both deployed and pushed. Not yet tried on the Pixel.
+
+**Where each lookup runs now** (all in the page unless noted; each source is cached 30 min, hits deduped by infohash):
+
+| Tab | Sources |
+|---|---|
+| Movies | YTS (3 mirrors) and Torrentio `/stream/movie/ttID.json`, loaded independently; one failing shows a note and Retry, not an empty list |
+| Series | EZTV (3 mirrors, paged) and Torrentio `/stream/series/ttID:S:E.json`, fetched only when an episode is opened |
+| Anime | AniList id to Kitsu id (`kitsu.io/api/edge/mappings?...&include=item`, cached 7 days) to Torrentio `kitsu:ID:EP`, with an episode stepper. The **Nyaa box** under the list is the only call to the box (`/api/search/nyaa`) |
+
+- Torrentio is one hostname (`torrentio.strem.fun`, Cloudflare) with no mirror list, and it is a third-party addon that can change. Seeds, size and indexer are packed in the stream `title` (`👤 n 💾 size ⚙️ source`) and parsed by a regex in `tioFor()`; a line that does not parse keeps the hash and shows 0 seeds. `behaviorHints.filename` is kept, and `play(hash,name,mg,want)` opens that file inside a pack and deselects the rest (this also stops the whole pack downloading).
+- `browse.go` `browseCSP` `connect-src` gained `torrentio.strem.fun` and `kitsu.io`; `search_test.go` checks both. **Any new source host needs the CSP edited and the daemon rebuilt** (`browse.html` is `go:embed`ded).
+- Torrentio's Kitsu results are mostly Nyaa (it lists `NyaaSi`) but mostly **batches and complete collections**; single episodes of older shows may be thin. For a long show (`kitsu:12:1`) it returned 500 streams, hence the 80-row cap.
+
+**Rejected: apibay (TPB).** `apibay.org/q.php?q=ttID` is a real IMDb lookup (an `imdb` field on every row, season packs, 100 rows max, and 3 unrelated rows for an unknown id, so filter on `imdb`), but it sends no CORS header, so only a box relay could use it. Ben does not want that on the Orbic.
+
+**Probe findings worth keeping**
+- Busybox `wget` on the box gets "connection reset" for **every Cloudflare-fronted HTTPS host** (`example.com`, `yts.gg`, `apibay.org`, `torrentio.strem.fun`) and works for non-Cloudflare ones (Cinemeta, plain HTTP). Cause not determined (busybox TLS or the direct route). The daemon's Go client does reach `nyaa.si` (DDoS-Guard, not Cloudflare), through the search path, currently `proxy=mullvad`, `dns=mullvad`. Whether Go reaches Cloudflare through Mullvad is **untested**; nothing needs it now.
+- CORS: Torrentio, YTS, EZTV, Kitsu and Wikipedia (`origin=*`) allow the page; `nyaa.si`, Wiby, apibay do not; DuckDuckGo returned 403. `nyaa.land` returns 403 and `nyaa.iss.ink` redirects, so there is no CORS-friendly Nyaa.
+
+**What the box does for torrents, and what could move.** The BitTorrent protocol, piece hashing, serving and audio decoding already run in the page. The box carries only: (1) the **bytes**, sealed twice in pure Go on the A7 (WireGuard from the peer, TLS to the phone), the dominant cost and impossible to move (browsers have no raw TCP or UDP, and peers must see the Mullvad address; the page needs HTTPS, so `ws://` is blocked); (2) **one WebSocket and TLS handshake per peer**; (3) **peer discovery** (UDP and HTTP trackers plus a DHT walk through the tunnel). Not moved: the data path and discovery.
+
+**Load cuts made in the page** (`browse.html`, no box code changed): `maxConns` 60 to 25; one `/api/bt/peers` lookup at a time; with fewer than 10 peers the page asks again after 90 s, at most 5 times, then stops; with 10 or more peers every 5 min (was every 30 s with few, 4 min otherwise); a result with 0 seeds needs a second tap ("Play anyway") before it starts a lookup.
+
+**Not verified**
+- The effect on box CPU. Nobody has played with these changes; compare against the 40-minute test in "Freeze investigation: progress".
+- The re-announce timing and the "open the named file" path (they need a real WebTorrent session; read, not run). The `want` match is an exact, case-insensitive file name.
+- Kitsu's reliability (a new dependency, tested for three titles) and Torrentio's rate limits or Cloudflare challenges from a phone.
+- Everything else was tested in headless Chromium with the sources mocked from real saved responses (movie 53 rows, series episode 50 after dedupe, anime episode stepper, Torrentio down, the zero-seed tap, the Nyaa box). That script was a throwaway in the session scratchpad, not in the repo; it drove `scripts/dev/cdp.mjs`. Gotchas: `chromium --dump-dom` hangs on this page, `cdp.mjs` reads `CDP_PORT` when imported (set it in the environment), and a mock server that answers `/bt/btclient.js` with HTML logs a harmless `Unexpected token '<'`.
+
+**Ideas, not done**
+- Multiplex all peers over **one** WebSocket (bridge plus `btclient/net-shim.js`): removes the per-peer TLS handshake, still the biggest cheap saver and the audit's own proposal.
+- A native client on the phone (for example Termux with node) over its own VPN would remove the data path from the box entirely, but it is no longer a browser page.
+
 ## What works (all verified on the real box)
 
 - **Web search** (Wikipedia, DuckDuckGo, Wiby) with a selectable proxy and DNS path (Direct, Mullvad, Tor, Tor over Mullvad). Off by default.
-- **Browse page** `/browse`: Movies and Series from Cinemeta, Anime from AniList, torrents from YTS, EZTV and a Nyaa relay (`/api/search/nyaa`), all drawn in the browser. Web search is its fourth tab.
-- **Play**: WebTorrent in the page, one WebSocket per peer to the box (`/api/bt/conn`), which dials the peer through the Mullvad tunnel only. Peers come from `/api/bt/peers` (UDP and HTTP trackers plus a DHT lookup, all through Mullvad). A service worker (`btclient/sw-src.js`) serves the file to a plain `<video src>`. Upload is **off** by default (Search card: Off, 128 KB/s, 512 KB/s).
+- **Browse page** `/browse`: Movies and Series from Cinemeta, Anime from AniList. Torrents: YTS and Torrentio (movies), EZTV and Torrentio (series), Torrentio by Kitsu id (anime) with the Nyaa relay (`/api/search/nyaa`) only when its box is submitted; see "Torrent sources and box load". Everything but the Nyaa box is fetched by the page itself. Web search is its fourth tab (unchanged, still on the box).
+- **Play**: WebTorrent in the page, one WebSocket per peer (at most 25) to the box (`/api/bt/conn`), which dials the peer through the Mullvad tunnel only. Peers come from `/api/bt/peers` (UDP and HTTP trackers plus a DHT lookup, all through Mullvad). A service worker (`btclient/sw-src.js`) serves the file to a plain `<video src>`. Upload is **off** by default (Search card: Off, 128 KB/s, 512 KB/s).
 - **Measured**: a legal Sintel swarm played in about 20 s with 11 peers by 30 s; 80 of 80 bridge sockets opened and 19 returned real BitTorrent handshakes; the box released its bridge connections after the client left.
 - **.onion** is SSH-only and off: no setting in the page or API; change it with `tinyfwd -onion ...` (docs/INSTALL.md).
 - **Rebrand** done (see the memory note `project-pillowforrt-rebrand`).
@@ -139,7 +175,7 @@ Tor has been **off** (`tor.json`: enabled false, installed true) for all playbac
 
 ## Pitfalls I hit
 
-`pkill -f` can match and kill your own shell (use `pkill -x`); an unquoted `*` inside a curl option string expands to the files in the current directory; the box's busybox has no `ls --full-time`; the deploy script's rollback does not cover DNS or certificate changes.
+From an agent sandbox, `curl` to `pillowforrt.lan` needs `--noproxy '*'` (a sandbox proxy answered 502 to the CONNECT); this repo has no `user.name` or `user.email` set, so commits fail until you pass `-c user.name=... -c user.email=...` (the history uses `Claude <noreply@anthropic.com>`); busybox `timeout` takes `-t`; `pkill -f` can match and kill your own shell (use `pkill -x`); an unquoted `*` inside a curl option string expands to the files in the current directory; the box's busybox has no `ls --full-time`; the deploy script's rollback does not cover DNS or certificate changes.
 
 ## Freeze investigation: progress (later on 2026-10-09)
 
