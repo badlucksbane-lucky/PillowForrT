@@ -49,6 +49,8 @@
     this.persist = o.persist !== false;
     this.url = o.url || ((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/api/room');
     this.maxRelayBytes = 8 * 1024;
+    this.connectTimeout = o.connectTimeout || 8000; // a socket that has not said hello by then is abandoned and tried again
+    this.attempts = 0;
     this.id = ''; this.token = ''; this.status = 'connecting';
     this.peers = new Map();
     this._h = {}; this._ws = null; this._tries = 0; this._closed = false; this._fatal = false; this._seen = 0;
@@ -87,7 +89,9 @@
     var self = this, ws;
     this._setStatus(this.id ? 'reconnecting' : 'connecting');
     try { ws = new WebSocket(this.url); } catch (e) { return this._retry(); }
-    this._ws = ws; this._seen = Date.now();
+    this._ws = ws; this._seen = Date.now(); this._cat = Date.now(); this.attempts++;
+    clearTimeout(this._ct);
+    this._ct = setTimeout(function () { if (self._ws === ws && !ws._ok) self._abandon(ws); }, this.connectTimeout);
     ws.onopen = function () {
       var j = { t: 'join', room: self.code, name: self.name };
       if (self.id && self.token && self.code) { j.id = self.id; j.token = self.token; }
@@ -107,6 +111,16 @@
     };
     ws.onerror = function () { /* onclose follows */ };
   };
+  // A WebSocket attempt can hang for minutes when the phone's Wi-Fi was asleep when it started: drop it and try again, ignoring anything it might still do.
+  P._abandon = function (ws) {
+    ws.onopen = ws.onmessage = ws.onclose = ws.onerror = null;
+    try { ws.close(); } catch (e) { /* already closed */ }
+    if (this._ws !== ws) return;
+    this._ws = null; clearInterval(this._hb);
+    if (this._closed || this._fatal) return;
+    this._setStatus('reconnecting');
+    this._retry(true);
+  };
   P._retry = function (now) {
     var self = this;
     clearTimeout(this._rt);
@@ -119,7 +133,7 @@
     if (this._closed || this._fatal) return;
     if (!this._ws) { this._tries = 0; this._retry(true); return; }
     var ws = this._ws;
-    if (ws.readyState !== 1) return;
+    if (ws.readyState !== 1 || !ws._ok) { if (Date.now() - this._cat > 2000) this._abandon(ws); return; } // still connecting after the page came back: the network may have changed
     var t0 = Date.now();
     ws.send('{"t":"ping"}'); // a socket that died while the page slept answers nothing: replace it
     setTimeout(function () { if (ws === self._ws && self._seen < t0) ws.close(); }, 4000);
@@ -165,6 +179,8 @@
   P._hello = function (m) {
     var self = this, seen = {};
     this.id = m.id; this.token = m.token; this.code = m.room; this._tries = 0;
+    if (this._ws) this._ws._ok = true;
+    clearTimeout(this._ct);
     this._save(); this._startBeat();
     (m.peers || []).forEach(function (i) {
       var isNew = !self.peers.has(i.id), p = self._peer(i.id, i.name);
@@ -334,7 +350,7 @@
     if (this._closed) return;
     this._closed = true;
     var self = this;
-    clearInterval(this._hb); clearTimeout(this._rt);
+    clearInterval(this._hb); clearTimeout(this._rt); clearTimeout(this._ct);
     this.peers.forEach(function (p) { self._drop(p); clearTimeout(p.rt); });
     if (typeof window !== 'undefined') { window.removeEventListener('online', this._wake); window.removeEventListener('pageshow', this._wake); }
     var ws = this._ws; this._ws = null;

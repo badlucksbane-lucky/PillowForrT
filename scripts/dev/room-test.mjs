@@ -6,6 +6,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -116,6 +117,17 @@ await b.ev(HOOK('window.room'));
 check('and the link is direct again', await waitState(b, a2, 'direct', 20000) && await waitState(a, bId, 'direct', 20000), [await peerState(b, a2), await peerState(a, bId)]);
 await b.ev(`document.querySelector('#leave').click();1`);
 check('leaving is seen at once by the other page', await a.until(`!room.peers.has(${J(bId)})`, 3000), null);
+
+// a socket that hangs (a phone's Wi-Fi was asleep when it connected): abandoned after connectTimeout, then recovered once a real address works
+const black = net.createServer(() => {}); // accepts and never answers the upgrade
+await new Promise(r => black.listen(0, '127.0.0.1', r));
+const d = await page();
+await d.ev(`window.r3=new Room({name:'D',code:'',persist:false,connectTimeout:1200,url:'ws://127.0.0.1:${black.address().port}/api/room'});1`);
+await d.until(`r3.attempts>=3`, 9000);
+check('a hung connection is abandoned and tried again', await d.ev(`r3.attempts>=3&&r3.status!=='online'`), await d.ev(`[r3.attempts,r3.status]`));
+await d.ev(`r3.url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/api/room';1`);
+check('and it connects once the address works', await d.until(`r3.status==='online'&&/^[A-Z]{4}$/.test(r3.code)`, 8000), await d.ev(`[r3.attempts,r3.status]`));
+await d.ev(`r3.leave();1`); black.close();
 
 for (const [n, p] of [['a', a], ['b', b]]) { const l = p.logs.filter(x => !/favicon/.test(x)); if (l.length) console.log('     ' + n + ' console:', l.slice(0, 5)); }
 console.log(fails.length ? '\n' + fails.length + ' FAILED' : '\nall passed');
