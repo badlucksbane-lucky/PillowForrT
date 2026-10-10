@@ -402,7 +402,7 @@ var roomQRJS []byte
 // the room client (/room/room.js), so it doubles as a check of the library on a real phone.
 func (u *webUI) roomTestPage(w http.ResponseWriter, r *http.Request) {
 	if u.auth.Session(r) == nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		roomBounce(w, r, "/room-test")
 		return
 	}
 	secureHeaders(w)
@@ -410,4 +410,23 @@ func (u *webUI) roomTestPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	io.WriteString(w, roomTestHTML)
+}
+
+// roomBounce answers a request with no session for a page that people reach from a shared link or a QR code. The session cookie is SameSite=Strict, so the browser leaves it off a navigation
+// that came from outside the site (a camera app, a message, another site) even when the person is signed in, and they would be sent to the login page. The first answer is therefore a tiny page
+// that moves itself on to the same address with ?b=1: that second navigation comes from this site, so the cookie goes with it. If there is still no session (?b=1 present) the person really is
+// signed out and goes to the login page. The page holds nothing but its own path, and a cross-site request still cannot change anything: this only lets a GET of one viewer page carry the cookie.
+func roomBounce(w http.ResponseWriter, r *http.Request, path string) {
+	if r.URL.Query().Get("b") != "" {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	secureHeaders(w)
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	io.WriteString(w, `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Opening…</title>`+
+		`<script>location.replace(`+strconv.Quote(path)+`+"?b=1"+location.hash)</script>`+
+		`<noscript><meta http-equiv="refresh" content="0;url=`+path+`?b=1"></noscript>`)
 }

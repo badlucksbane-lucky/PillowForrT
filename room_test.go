@@ -155,6 +155,31 @@ func TestRoomServeForJS(t *testing.T) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		io.WriteString(w, roomTestHTML)
 	})
+	// a stand-in for the box's sign-in: a SameSite=Strict cookie like the real one, to see what a link from another site does to it
+	hasSess := func(r *http.Request) bool { c, err := r.Cookie("sess"); return err == nil && c.Value == "1" }
+	mux.HandleFunc("/fake-login", func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{Name: "sess", Value: "1", Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
+		io.WriteString(w, "signed in")
+	})
+	mux.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "login page") })
+	page := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		io.WriteString(w, roomTestHTML)
+	}
+	mux.HandleFunc("/guarded", func(w http.ResponseWriter, r *http.Request) { // as /room-test is: the bounce for a request without the cookie
+		if !hasSess(r) {
+			roomBounce(w, r, "/guarded")
+			return
+		}
+		page(w, r)
+	})
+	mux.HandleFunc("/nobounce", func(w http.ResponseWriter, r *http.Request) { // the control: what the box did before the bounce
+		if !hasSess(r) {
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+		page(w, r)
+	})
 	quit := make(chan struct{})
 	mux.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) { close(quit) })
 	srv := httptest.NewServer(mux)
@@ -276,5 +301,19 @@ func TestRoomLANAddress(t *testing.T) {
 	}
 	if roomLAN(nil) != "" {
 		t.Error("nil address")
+	}
+}
+
+func TestRoomBounce(t *testing.T) {
+	rec := httptest.NewRecorder()
+	roomBounce(rec, httptest.NewRequest("GET", "/room-test", nil), "/room-test")
+	body := rec.Body.String()
+	if rec.Code != 200 || !strings.Contains(body, `location.replace("/room-test"+"?b=1"+location.hash)`) || !strings.Contains(rec.Header().Get("Content-Security-Policy"), "default-src 'none'") || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("the first answer must be the bounce page: %d %q %v", rec.Code, body, rec.Header())
+	}
+	rec = httptest.NewRecorder()
+	roomBounce(rec, httptest.NewRequest("GET", "/room-test?b=1", nil), "/room-test")
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
+		t.Fatalf("still signed out after the bounce means go to the login page: %d %v", rec.Code, rec.Header())
 	}
 }

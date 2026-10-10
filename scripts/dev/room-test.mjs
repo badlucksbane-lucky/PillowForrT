@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import { createRequire } from 'node:module';
+import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -160,6 +161,21 @@ check('a hung connection is abandoned and tried again', await d.ev(`r3.attempts>
 await d.ev(`r3.url=(location.protocol==='https:'?'wss://':'ws://')+location.host+'/api/room';1`);
 check('and it connects once the address works', await d.until(`r3.status==='online'&&/^[A-Z]{4}$/.test(r3.code)`, 8000), await d.ev(`[r3.attempts,r3.status]`));
 await d.ev(`r3.leave();1`); black.close();
+
+// a link from another site (a camera app, a message): the session cookie is SameSite=Strict, so it is left off that navigation. localhost and 127.0.0.1 are different sites.
+const other = http.createServer((q, r) => { r.writeHead(200, { 'content-type': 'text/html' }); r.end(`<a id=g href="${info.url}/guarded#${code}">g</a> <a id=n href="${info.url}/nobounce#${code}">n</a>`); });
+await new Promise(r => other.listen(0, r));
+const otherUrl = `http://localhost:${other.address().port}/`;
+const g = await connect();
+await g.goto(info.url + '/fake-login'); await g.until(`document.body.innerText.includes('signed in')`, 5000);
+await g.goto(otherUrl); await g.until(`!!document.getElementById('n')`, 5000);
+await g.ev(`document.getElementById('n').click();1`); await sleep(1500);
+check('control: a link from another site arrives WITHOUT the cookie (so without the bounce it lands on the login page)', await g.ev(`location.pathname`) === '/login', await g.ev(`location.href`));
+await g.goto(otherUrl); await g.until(`!!document.getElementById('g')`, 5000);
+await g.ev(`document.getElementById('g').click();1`);
+check('with the bounce the same kind of link gets the page and joins the room', await g.until(`window.room&&window.room.status==='online'&&window.room.code===${J(code)}`, 10000), await g.ev(`location.href`));
+check('and ends on the page itself with the code and the bounce marker dropped from the address', await g.ev(`location.pathname`) === '/guarded' && await g.ev(`location.search===''&&location.hash===''`), await g.ev(`location.href`));
+await g.ev(`window.room&&window.room.leave&&window.room.leave();1`); g.close(); other.close();
 
 for (const [n, p] of [['a', a], ['b', b]]) { const l = p.logs.filter(x => !/favicon/.test(x)); if (l.length) console.log('     ' + n + ' console:', l.slice(0, 5)); }
 console.log(fails.length ? '\n' + fails.length + ' FAILED' : '\nall passed');
