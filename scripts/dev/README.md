@@ -9,6 +9,7 @@ Config comes from `~/.pillowforrt/`: `tls.pem` (the box's certificate, to pin) a
 | `live-proxy.mjs` | Serves the real browse page locally and forwards `/api/*` and the bridge WebSocket to the box with the token added. |
 | `live-play.mjs` | Plays a torrent in desktop Chromium through the proxy and prints peers and playhead over time. Default: Sintel. |
 | `audio-test.mjs` | Plays a local E-AC-3/AC-3 file through `btclient/audio.js` in desktop Chromium (same CSP as the page) and checks sound before and after a seek and silence on pause. |
+| `browse-test.mjs` | Loads the real `browse.html` in headless Chromium with every source mocked (Cinemeta, AniList, Kitsu, YTS, EZTV, Torrentio, the Nyaa relay, `/api/bt`) and checks the torrent lists: sources merged and deduped, Torrentio text parsed, one source down, the anime episode stepper, the Nyaa box, the second tap on a row with no seeds. Needs neither the box nor the internet; exits 1 on any failure. `PAGE=other.html` tries a different copy. |
 | `bridge-test.mjs` | Dials peers through the box's bridge over TLS and sends a real BitTorrent handshake to each. |
 
 ```sh
