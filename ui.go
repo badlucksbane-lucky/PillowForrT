@@ -1151,6 +1151,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleDebug(w, r, path)
 		return
 	}
+	if path == "room" {
+		roomMgrG.serve(w, r)
+		return
+	}
 	if path == "bt" || strings.HasPrefix(path, "bt/") {
 		handleBTAPI(w, r, path)
 		return
