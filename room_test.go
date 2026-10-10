@@ -15,6 +15,9 @@ import (
 
 func roomServer(t *testing.T) (*roomMgr, *httptest.Server, string) {
 	t.Helper()
+	old := roomGrace
+	roomGrace = 300 * time.Millisecond
+	t.Cleanup(func() { roomGrace = old })
 	m := &roomMgr{rooms: map[string]*room{}}
 	srv := httptest.NewServer(http.HandlerFunc(m.serve))
 	t.Cleanup(srv.Close)
@@ -81,9 +84,15 @@ func TestRoomIntroducesRelaysAndForgets(t *testing.T) {
 	}
 	b.send(roomJSON(map[string]any{"t": "to", "to": "p9", "d": 1})) // nobody there: dropped, socket stays up
 	b.send([]byte(`{"t":"ping"}`))
+	if p := b.recvJSON(t); p["t"] != "pong" {
+		t.Fatalf("ping must be answered: %v", p)
+	}
 	b.c.Close()
+	if l := a.recvJSON(t); l["t"] != "away" || l["id"] != "p2" {
+		t.Fatalf("a dropped socket is away first: %v", l)
+	}
 	if l := a.recvJSON(t); l["t"] != "leave" || l["id"] != "p2" {
-		t.Fatalf("leave: %v", l)
+		t.Fatalf("leave after the grace period: %v", l)
 	}
 	a.c.Close()
 	for i := 0; i < 40; i++ {
@@ -133,9 +142,13 @@ func TestRoomServeForJS(t *testing.T) {
 	old := wsOriginScheme
 	wsOriginScheme = "http"
 	defer func() { wsOriginScheme = old }()
+	oldGrace := roomGrace
+	roomGrace = 4 * time.Second // short, so the script can watch a place expire
+	defer func() { roomGrace = oldGrace }()
 	m := &roomMgr{rooms: map[string]*room{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/room", m.serve)
+	mux.HandleFunc("/room/room.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, roomClientJS) })
 	mux.HandleFunc("/room-test", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		io.WriteString(w, roomTestHTML)
@@ -148,5 +161,101 @@ func TestRoomServeForJS(t *testing.T) {
 	select {
 	case <-quit:
 	case <-time.After(2 * time.Minute):
+	}
+}
+
+func roomResume(t *testing.T, srv *httptest.Server, origin, code, id, token string) (*wsTestClient, map[string]any) {
+	t.Helper()
+	ws, st := wsDial(t, srv, "/api/room", origin)
+	if !strings.Contains(st, "101") {
+		t.Fatalf("handshake: %q", st)
+	}
+	ws.send(roomJSON(map[string]string{"t": "join", "room": code, "name": "again", "id": id, "token": token}))
+	return ws, ws.recvJSON(t)
+}
+
+func TestRoomResumeKeepsThePlace(t *testing.T) {
+	m, srv, origin := roomServer(t)
+	roomGrace = 5 * time.Second
+	a, ha := roomJoin(t, srv, origin, "", "TV")
+	code := ha["room"].(string)
+	b, hb := roomJoin(t, srv, origin, code, "Pixel")
+	a.recvJSON(t) // join
+	if hb["token"] == "" || hb["grace"].(float64) != 5 {
+		t.Fatalf("hello must carry a token and the grace period: %v", hb)
+	}
+	b.c.Close()
+	if l := a.recvJSON(t); l["t"] != "away" || l["id"] != "p2" {
+		t.Fatalf("away: %v", l)
+	}
+	b2, h2 := roomResume(t, srv, origin, code, "p2", hb["token"].(string))
+	if h2["t"] != "hello" || h2["id"] != "p2" || h2["resumed"] != true || len(h2["peers"].([]any)) != 1 {
+		t.Fatalf("resume: %v", h2)
+	}
+	if l := a.recvJSON(t); l["t"] != "back" || l["id"] != "p2" {
+		t.Fatalf("back: %v", l)
+	}
+	b2.send(roomJSON(map[string]any{"t": "to", "to": "p1", "d": "hi"}))
+	if f := a.recvJSON(t); f["from"] != "p2" || f["d"] != "hi" {
+		t.Fatalf("a resumed page must be able to send: %v", f)
+	}
+	// the old grace timer must not take the place away after a resume
+	roomGrace = 300 * time.Millisecond
+	time.Sleep(400 * time.Millisecond)
+	m.mu.Lock()
+	n := len(m.rooms[code].peers)
+	m.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("both places must remain, have %d", n)
+	}
+	if _, bad := roomResume(t, srv, origin, code, "p2", "wrong"); bad["m"] != "expired" {
+		t.Fatalf("a wrong token must be refused: %v", bad)
+	}
+}
+
+func TestRoomResumeReplacesADeadSocketQuietly(t *testing.T) {
+	_, srv, origin := roomServer(t)
+	roomGrace = 5 * time.Second
+	a, ha := roomJoin(t, srv, origin, "", "TV")
+	code := ha["room"].(string)
+	_, hb := roomJoin(t, srv, origin, code, "Pixel") // its socket stays open: the box has not noticed anything wrong
+	a.recvJSON(t)
+	b2, h2 := roomResume(t, srv, origin, code, "p2", hb["token"].(string))
+	if h2["resumed"] != true {
+		t.Fatalf("resume over a live socket: %v", h2)
+	}
+	b2.send(roomJSON(map[string]any{"t": "to", "to": "p1", "d": 1}))
+	if f := a.recvJSON(t); f["t"] != "from" { // not away, not back: nobody saw a gap
+		t.Fatalf("others must not be told of a swap: %v", f)
+	}
+}
+
+func TestRoomGraceEndsAndByeIsImmediate(t *testing.T) {
+	m, srv, origin := roomServer(t)
+	a, ha := roomJoin(t, srv, origin, "", "TV")
+	code := ha["room"].(string)
+	b, hb := roomJoin(t, srv, origin, code, "Pixel")
+	a.recvJSON(t)
+	b.c.Close()
+	a.recvJSON(t) // away
+	if l := a.recvJSON(t); l["t"] != "leave" {
+		t.Fatalf("expiry: %v", l)
+	}
+	if _, g := roomResume(t, srv, origin, code, "p2", hb["token"].(string)); g["m"] != "expired" {
+		t.Fatalf("a place given up cannot be resumed: %v", g)
+	}
+	c, _ := roomJoin(t, srv, origin, code, "Moto")
+	a.recvJSON(t) // join
+	c.send([]byte(`{"t":"bye"}`))
+	if l := a.recvJSON(t); l["t"] != "leave" || l["id"] != "p3" { // no away first
+		t.Fatalf("bye leaves at once: %v", l)
+	}
+	a.c.Close() // the last page: its place is kept, then the room goes
+	time.Sleep(600 * time.Millisecond)
+	m.mu.Lock()
+	n := len(m.rooms)
+	m.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("a room with nobody left must be forgotten, have %d", n)
 	}
 }

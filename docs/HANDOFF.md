@@ -131,6 +131,17 @@ Commits `7df330a` (Torrentio), `f7ec8d2` (load cuts, anime), `8f59a42` (multiple
 **Ideas, not done**
 - A native client on the phone (for example Termux with node) over its own VPN would remove the data path from the box entirely, but it is no longer a browser page.
 
+## Room channel (2026-10-10)
+
+Devices on the LAN meet by a 4-letter code and talk directly (WebRTC data channels) or, failing that, through the box. Foundation for Fort Drop, watch party and the game system (beads epic `pf-ajt`; `bd show pf-ajt`).
+
+- **Box** (`room.go`, `/api/room`, LAN only, excluded from the onion door): a WebSocket carrying small JSON frames; the wire format is in the file header. It only introduces pages and relays `to`/`from`; nothing is stored or logged. 8 rooms, 8 places per room, 16 KB per message, 100 messages a second, shed when `btLoadNow()` is high. A page that loses its socket **keeps its place for `roomGrace` (60 s)**: the box gives each page an id and a token, others see `away`, `back`, and only after the grace period (or an explicit `bye`) `leave`. A resume with the id and token replaces the old socket even if the box never noticed it die. Pages ping every 25 s; a socket silent for 90 s counts as gone.
+- **Client** (`roomclient/room.js`, served at `/room/room.js`, no dependencies): `new Room({name, code})`, then `on('ready'|'peer'|'peerleft'|'link'|'message'|'status'|'closed')`, `send(id, data, {unreliable})`, `broadcast`, `rtt(id, 'direct'|'relay'|'box')`, `leave()`, `Room.saved()`. API summary is in the file header. Direct when the channel is open, else the box (JSON-able data, binary up to `maxRelayBytes` = 8 KB). The newer page (higher id) makes the WebRTC offer, so two pages never both do; offers carry a generation so stale answers are ignored. It reconnects by itself (backoff, and at once on `online`, `pageshow` and the tab becoming visible), and direct channels that stayed up carry on through a socket drop. A reload returns to the same place (sessionStorage), and a place that expired is re-joined afresh with a new id.
+- **`/room-test`** is the measuring page, built on the library. **Phone-to-phone result (Pixel 6a and moto g 2025 on the Orbic AP, no STUN)**: direct host/host UDP, connect 109 to 342 ms, direct round trip median 42 ms (p95 50, nothing lost). About 40 ms is Wi-Fi hop latency: fine for party games and controllers, marginal for twitch games.
+- **Found on the phones**: Android Chrome freezes a background tab, and the page's socket was found closed (readyState 3) after sitting idle; that is why the grace period and automatic reconnect exist. A box restart (deploy) forgets every room ("no such room"); pages are told and the `closed` event fires.
+- **Tests**: `go test -run TestRoom .` and `node scripts/dev/room-test.mjs` (two headless Chromium pages plus a third with WebRTC off, a real `room.go`; about 40 s). The script was checked against a client broken on purpose (no token on reconnect): six checks fail. **Not yet run on the phones with the library** (only the earlier spike page was), and not with the screen off for a minute or two (the real reason for the grace period).
+- **Not built yet** (`bd ready`): QR code and share link (`pf-ajt.4`), the handoff/test extras (`pf-ajt.5`).
+
 ## What works (all verified on the real box)
 
 - **Web search** (Wikipedia, DuckDuckGo, Wiby) with a selectable proxy and DNS path (Direct, Mullvad, Tor, Tor over Mullvad). Off by default.
