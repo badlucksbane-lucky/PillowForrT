@@ -2,28 +2,50 @@ package main
 
 // The keyless engines for the search page (search.go). Each one fetches a single page and reads it with a real HTML parser, never regular expressions on markup. A parser returns what it
 // found in the engine's own order; the merge ranks across engines. Engines that turn this box away (a CAPTCHA, a block) are reported as such on the page and the others carry on.
-// Checked against live pages on 2026-10-08. Mojeek and Marginalia were tried and refused that client, so they are not here; adding one is a searchEngine entry and a parser.
+// Checked against live pages on 2026-10-11. Mojeek, Marginalia and Startpage were tried and refused that client (Startpage redirects straight to a CAPTCHA page), so they are not here;
+// adding one is a searchEngine entry and a parser. Wolfram|Alpha has no keyless official API; fetchWolfram instead calls the same undocumented endpoint the wolframalpha.com site itself
+// uses (SearXNG's wolframalpha_noapi approach) — it can stop working without notice, and on this network the token endpoint has timed out rather than answered.
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"html"
+	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	nethtml "golang.org/x/net/html"
 )
 
+// Category is "" (meaning catWeb) for a text-result engine, or one of the other searchCategories for images/video/maps; engineCategory reads it with the "" default applied.
 type searchEngine struct {
-	ID, Name string
-	fetch    func(ctx context.Context, c *http.Client, q string) ([]searchResult, error)
+	ID, Name, Category string
+	fetch              func(ctx context.Context, c *http.Client, q string) ([]searchResult, error)
 }
 
 var searchEngines = []searchEngine{
-	{"wikipedia", "Wikipedia", fetchWikipedia},
-	{"duckduckgo", "DuckDuckGo", fetchDDG},
-	{"wiby", "Wiby", fetchWiby},
+	{ID: "wikipedia", Name: "Wikipedia", fetch: wikiFetch("en.wikipedia.org")},
+	{ID: "duckduckgo", Name: "DuckDuckGo", fetch: fetchDDG},
+	{ID: "wiby", Name: "Wiby", fetch: fetchWiby},
+	{ID: "brave", Name: "Brave", fetch: fetchBrave},
+	{ID: "hackernews", Name: "Hacker News", fetch: fetchHN},
+	{ID: "stackexchange", Name: "Stack Overflow", fetch: fetchStackExchange},
+	{ID: "github", Name: "GitHub", fetch: fetchGitHub},
+	{ID: "wikidata", Name: "Wikidata", fetch: wikiFetch("www.wikidata.org")},
+	{ID: "wiktionary", Name: "Wiktionary", fetch: wikiFetch("en.wiktionary.org")},
+	{ID: "wikiquote", Name: "Wikiquote", fetch: wikiFetch("en.wikiquote.org")},
+	{ID: "wikibooks", Name: "Wikibooks", fetch: wikiFetch("en.wikibooks.org")},
+	{ID: "wikisource", Name: "Wikisource", fetch: wikiFetch("en.wikisource.org")},
+	{ID: "wolfram", Name: "Wolfram|Alpha", fetch: fetchWolfram},
+	{ID: "openverse", Name: "Openverse", Category: catImages, fetch: fetchOpenverse},
+	{ID: "iavideo", Name: "Internet Archive video", Category: catVideo, fetch: fetchIAVideo},
+	{ID: "osm", Name: "OpenStreetMap", Category: catMaps, fetch: fetchNominatim},
 }
 
 const (
@@ -106,18 +128,20 @@ func firstDesc(n *nethtml.Node, match func(*nethtml.Node) bool) *nethtml.Node {
 	return found
 }
 
-// ---- Wikipedia (JSON API) ----
+// ---- The Wikimedia family (every wiki.org project shares this search API; wikidata's "titles" are Q-ids, which happen to round-trip through the same /wiki/<title> URL shape) ----
 
-func fetchWikipedia(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
-	u := "https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=8&srprop=snippet&srsearch=" + url.QueryEscape(q)
-	b, err := searchGet(ctx, c, u, wikiUA, "application/json")
-	if err != nil {
-		return nil, err
+func wikiFetch(host string) func(context.Context, *http.Client, string) ([]searchResult, error) {
+	return func(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+		u := "https://" + host + "/w/api.php?action=query&list=search&format=json&srlimit=8&srprop=snippet&srsearch=" + url.QueryEscape(q)
+		b, err := searchGet(ctx, c, u, wikiUA, "application/json")
+		if err != nil {
+			return nil, err
+		}
+		return parseWikiSearch(b, host)
 	}
-	return parseWikipedia(b)
 }
 
-func parseWikipedia(b []byte) ([]searchResult, error) {
+func parseWikiSearch(b []byte, host string) ([]searchResult, error) {
 	var d struct {
 		Query struct {
 			Search []struct {
@@ -136,10 +160,13 @@ func parseWikipedia(b []byte) ([]searchResult, error) {
 		if err == nil {
 			snip = textOf(doc)
 		}
-		out = append(out, searchResult{Title: r.Title, URL: "https://en.wikipedia.org/wiki/" + url.PathEscape(strings.ReplaceAll(r.Title, " ", "_")), Snippet: snip})
+		out = append(out, searchResult{Title: r.Title, URL: "https://" + host + "/wiki/" + url.PathEscape(strings.ReplaceAll(r.Title, " ", "_")), Snippet: snip})
 	}
 	return out, nil
 }
+
+// parseWikipedia is kept as a named entry point for the Wikipedia fixture test; every other wiki shares parseWikiSearch directly.
+func parseWikipedia(b []byte) ([]searchResult, error) { return parseWikiSearch(b, "en.wikipedia.org") }
 
 // ---- DuckDuckGo (the HTML page) ----
 
@@ -237,5 +264,407 @@ func parseWiby(b []byte) ([]searchResult, error) {
 		out = append(out, r)
 		return false
 	})
+	return out, nil
+}
+
+// ---- Brave Search (the server-rendered results page; it is a Svelte app, but the first response already carries the results) ----
+
+func fetchBrave(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+	b, err := searchGet(ctx, c, "https://search.brave.com/search?q="+url.QueryEscape(q), browserUA, "text/html")
+	if err != nil {
+		return nil, err
+	}
+	return parseBrave(b)
+}
+
+func parseBrave(b []byte) ([]searchResult, error) {
+	s := string(b)
+	if !strings.Contains(s, `id="mixed-main"`) {
+		return nil, errors.New("blocked (no results container)")
+	}
+	doc, err := nethtml.Parse(strings.NewReader(s))
+	if err != nil {
+		return nil, err
+	}
+	var out []searchResult
+	walkNodes(doc, func(n *nethtml.Node) bool {
+		if n.Type != nethtml.ElementNode || n.Data != "div" || !hasClass(n, "snippet") {
+			return true
+		}
+		if len(out) >= maxPerEng {
+			return false
+		}
+		a := firstDesc(n, func(x *nethtml.Node) bool {
+			href := attrOf(x, "href")
+			return x.Data == "a" && strings.HasPrefix(href, "http") && !strings.Contains(href, "search.brave.com")
+		})
+		if a == nil {
+			return false
+		}
+		titleNode := firstDesc(a, func(x *nethtml.Node) bool { return hasClass(x, "title") })
+		if titleNode == nil {
+			titleNode = a
+		}
+		r := searchResult{Title: textOf(titleNode), URL: attrOf(a, "href")}
+		if d := firstDesc(n, func(x *nethtml.Node) bool {
+			return x.Data == "div" && (hasClass(x, "description") || hasClass(x, "content"))
+		}); d != nil {
+			r.Snippet = textOf(d)
+		}
+		out = append(out, r)
+		return false
+	})
+	return out, nil
+}
+
+// ---- Hacker News (Algolia's search API over HN) ----
+
+func fetchHN(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+	b, err := searchGet(ctx, c, "https://hn.algolia.com/api/v1/search?query="+url.QueryEscape(q), wikiUA, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return parseHN(b)
+}
+
+func parseHN(b []byte) ([]searchResult, error) {
+	var d struct {
+		Hits []struct {
+			Title       string `json:"title"`
+			URL         string `json:"url"`
+			StoryText   string `json:"story_text"`
+			CommentText string `json:"comment_text"`
+			ObjectID    string `json:"objectID"`
+		} `json:"hits"`
+	}
+	if err := json.Unmarshal(b, &d); err != nil {
+		return nil, errors.New("unexpected answer")
+	}
+	var out []searchResult
+	for _, h := range d.Hits {
+		if len(out) >= maxPerEng {
+			break
+		}
+		if h.Title == "" {
+			continue
+		}
+		link := h.URL
+		if link == "" {
+			link = "https://news.ycombinator.com/item?id=" + h.ObjectID
+		}
+		snip := h.StoryText
+		if snip == "" {
+			snip = h.CommentText
+		}
+		if doc, err := nethtml.Parse(strings.NewReader(snip)); err == nil {
+			snip = textOf(doc)
+		}
+		out = append(out, searchResult{Title: h.Title, URL: link, Snippet: snip})
+	}
+	return out, nil
+}
+
+// ---- Stack Exchange (the public API; the free, keyless quota is shared by IP across all of Stack Exchange's anonymous callers) ----
+
+func fetchStackExchange(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+	u := "https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&site=stackoverflow&q=" + url.QueryEscape(q)
+	b, err := searchGet(ctx, c, u, wikiUA, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return parseStackExchange(b)
+}
+
+func parseStackExchange(b []byte) ([]searchResult, error) {
+	var d struct {
+		Items []struct {
+			Title       string `json:"title"`
+			Link        string `json:"link"`
+			IsAnswered  bool   `json:"is_answered"`
+			AnswerCount int    `json:"answer_count"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(b, &d); err != nil {
+		return nil, errors.New("unexpected answer")
+	}
+	var out []searchResult
+	for i, it := range d.Items {
+		if i >= maxPerEng {
+			break
+		}
+		snip := strconv.Itoa(it.AnswerCount) + " answers"
+		if it.IsAnswered {
+			snip += " (answered)"
+		}
+		out = append(out, searchResult{Title: html.UnescapeString(it.Title), URL: it.Link, Snippet: snip})
+	}
+	return out, nil
+}
+
+// ---- GitHub (unauthenticated repository search; a low, shared-IP rate limit, so this one errors out the most often) ----
+
+func fetchGitHub(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+	b, err := searchGet(ctx, c, "https://api.github.com/search/repositories?q="+url.QueryEscape(q), wikiUA, "application/vnd.github+json")
+	if err != nil {
+		return nil, err
+	}
+	return parseGitHub(b)
+}
+
+func parseGitHub(b []byte) ([]searchResult, error) {
+	var d struct {
+		Items []struct {
+			FullName    string `json:"full_name"`
+			HTMLURL     string `json:"html_url"`
+			Description string `json:"description"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(b, &d); err != nil {
+		return nil, errors.New("unexpected answer")
+	}
+	var out []searchResult
+	for i, it := range d.Items {
+		if i >= maxPerEng {
+			break
+		}
+		out = append(out, searchResult{Title: it.FullName, URL: it.HTMLURL, Snippet: it.Description})
+	}
+	return out, nil
+}
+
+// ---- Wolfram|Alpha (the site's own json.jsp endpoint, reverse-engineered the way SearXNG's wolframalpha_noapi does it: no official app id, but a short-lived "proxycode" token read
+// off the site itself first). This is the most fragile engine here — the token endpoint can simply stop answering, which shows up as a timeout on the page like any other dead engine. ----
+
+var (
+	wolframTokMu sync.Mutex
+	wolframTok   string
+	wolframTokAt time.Time
+)
+
+func wolframToken(ctx context.Context, c *http.Client) (string, error) {
+	wolframTokMu.Lock()
+	defer wolframTokMu.Unlock()
+	if wolframTok != "" && time.Since(wolframTokAt) < time.Hour {
+		return wolframTok, nil
+	}
+	b, err := searchGet(ctx, c, "https://www.wolframalpha.com/input/api/v1/code?ts="+strconv.FormatInt(time.Now().UnixNano(), 10), browserUA, "application/json")
+	if err != nil {
+		return "", err
+	}
+	var d struct {
+		Code string `json:"code"`
+	}
+	if json.Unmarshal(b, &d) != nil || d.Code == "" {
+		return "", errors.New("no token")
+	}
+	wolframTok, wolframTokAt = d.Code, time.Now()
+	return wolframTok, nil
+}
+
+func fetchWolfram(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+	tok, err := wolframToken(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	v := url.Values{
+		"async": {"false"}, "banners": {"raw"}, "debuggingdata": {"false"},
+		"format": {"plaintext"}, "formattimeout": {"8"}, "parsetimeout": {"5"}, "scantimeout": {"3"},
+		"input": {q}, "output": {"JSON"}, "proxycode": {tok},
+		"sponsorcategories": {"true"}, "statemethod": {"deploybutton"},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.wolframalpha.com/input/json.jsp?"+v.Encode(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", browserUA)
+	req.Header.Set("Referer", "https://www.wolframalpha.com/input/?i="+url.QueryEscape(q))
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+	res, err := parseWolfram(b)
+	if err != nil || len(res) == 0 {
+		return res, err
+	}
+	res[0].URL = "https://www.wolframalpha.com/input/?i=" + url.QueryEscape(q)
+	return res, nil
+}
+
+func parseWolfram(b []byte) ([]searchResult, error) {
+	var d struct {
+		QueryResult struct {
+			Success bool `json:"success"`
+			Pods    []struct {
+				ID      string `json:"id"`
+				Primary bool   `json:"primary"`
+				Subpods []struct {
+					Plaintext string `json:"plaintext"`
+				} `json:"subpods"`
+			} `json:"pods"`
+		} `json:"queryresult"`
+	}
+	if err := json.Unmarshal(b, &d); err != nil {
+		return nil, errors.New("unexpected answer")
+	}
+	if !d.QueryResult.Success {
+		return nil, nil // not an error: Wolfram understood the query fine, it just has no answer
+	}
+	var title, summary string
+	for _, p := range d.QueryResult.Pods {
+		if len(p.Subpods) == 0 {
+			continue
+		}
+		text := strings.TrimSpace(p.Subpods[0].Plaintext)
+		if text == "" {
+			continue
+		}
+		if p.ID == "Input" {
+			title = text
+			continue
+		}
+		if title == "" {
+			title = text
+		}
+		if summary == "" || p.Primary {
+			summary = text
+		}
+	}
+	if summary == "" {
+		return nil, nil
+	}
+	if title == "" {
+		title = summary
+	}
+	return []searchResult{{Title: "Wolfram|Alpha: " + clip(title, 80), Snippet: clip(summary, maxSnip)}}, nil
+}
+
+// ---- Openverse (openly-licensed images only — nothing copyrighted and unlicensed makes it into this index) ----
+
+func fetchOpenverse(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+	u := "https://api.openverse.org/v1/images/?format=json&page_size=" + strconv.Itoa(maxPerEng) + "&q=" + url.QueryEscape(q)
+	b, err := searchGet(ctx, c, u, wikiUA, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return parseOpenverse(b)
+}
+
+func parseOpenverse(b []byte) ([]searchResult, error) {
+	var d struct {
+		Results []struct {
+			Title             string `json:"title"`
+			ForeignLandingURL string `json:"foreign_landing_url"`
+			Thumbnail         string `json:"thumbnail"`
+			Creator           string `json:"creator"`
+			License           string `json:"license"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(b, &d); err != nil {
+		return nil, errors.New("unexpected answer")
+	}
+	var out []searchResult
+	for _, r := range d.Results {
+		if r.ForeignLandingURL == "" {
+			continue
+		}
+		title := r.Title
+		if title == "" {
+			title = "Image"
+		}
+		snip := strings.ToUpper(r.License)
+		if r.Creator != "" {
+			snip = "by " + r.Creator + " · " + snip
+		}
+		out = append(out, searchResult{Title: title, URL: r.ForeignLandingURL, Thumb: r.Thumbnail, Snippet: snip})
+	}
+	return out, nil
+}
+
+// ---- Internet Archive's "movies" collection (the closest thing to a keyless video index; result quality trails a real video search since it is matching full-text, not metadata alone) ----
+
+func fetchIAVideo(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+	u := "https://archive.org/advancedsearch.php?output=json&rows=" + strconv.Itoa(maxPerEng) +
+		"&fl[]=identifier&fl[]=title&fl[]=description&q=" + url.QueryEscape(q+" AND mediatype:movies")
+	b, err := searchGet(ctx, c, u, wikiUA, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return parseIAVideo(b)
+}
+
+func parseIAVideo(b []byte) ([]searchResult, error) {
+	var d struct {
+		Response struct {
+			Docs []struct {
+				Identifier  string `json:"identifier"`
+				Title       string `json:"title"`
+				Description string `json:"description"`
+			} `json:"docs"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal(b, &d); err != nil {
+		return nil, errors.New("unexpected answer")
+	}
+	var out []searchResult
+	for _, r := range d.Response.Docs {
+		if r.Identifier == "" || r.Title == "" {
+			continue
+		}
+		snip := r.Description
+		if doc, err := nethtml.Parse(strings.NewReader(snip)); err == nil {
+			snip = textOf(doc)
+		}
+		id := url.PathEscape(r.Identifier)
+		out = append(out, searchResult{Title: r.Title, URL: "https://archive.org/details/" + id, Thumb: "https://archive.org/services/img/" + id, Snippet: snip})
+	}
+	return out, nil
+}
+
+// ---- OpenStreetMap's Nominatim (geocoding search; a shared public instance, so this one is the most rate-limited of all of them) ----
+
+func fetchNominatim(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+	u := "https://nominatim.openstreetmap.org/search?format=json&limit=" + strconv.Itoa(maxPerEng) + "&q=" + url.QueryEscape(q)
+	b, err := searchGet(ctx, c, u, wikiUA, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	return parseNominatim(b)
+}
+
+func parseNominatim(b []byte) ([]searchResult, error) {
+	var d []struct {
+		DisplayName string `json:"display_name"`
+		Name        string `json:"name"`
+		Lat         string `json:"lat"`
+		Lon         string `json:"lon"`
+		OSMType     string `json:"osm_type"`
+		OSMID       int64  `json:"osm_id"`
+	}
+	if err := json.Unmarshal(b, &d); err != nil {
+		return nil, errors.New("unexpected answer")
+	}
+	var out []searchResult
+	for _, r := range d {
+		if r.DisplayName == "" {
+			continue
+		}
+		title := r.Name
+		if title == "" {
+			title = r.DisplayName
+		}
+		link := "https://www.openstreetmap.org/" + r.OSMType + "/" + strconv.FormatInt(r.OSMID, 10)
+		if r.Lat != "" && r.Lon != "" {
+			link = "https://www.openstreetmap.org/?mlat=" + r.Lat + "&mlon=" + r.Lon + "#map=16/" + r.Lat + "/" + r.Lon
+		}
+		out = append(out, searchResult{Title: title, URL: link, Snippet: r.DisplayName})
+	}
 	return out, nil
 }

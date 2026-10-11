@@ -7,6 +7,7 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -28,6 +29,10 @@ button{font:inherit;min-height:44px;padding:0 18px;border:0;border-radius:22px;b
 .r a.t{color:var(--ac);font-size:17px;text-decoration:none;word-break:break-word}.r a.t:visited{color:var(--mut)}.r a.t:hover{text-decoration:underline}
 .u{color:var(--mut);font-size:12px;word-break:break-all}.s{margin-top:2px}.e{color:var(--mut);font-size:11px;margin-top:2px}
 .err{color:var(--bad);margin:16px 0}a.home{color:var(--mut);text-decoration:none}
+.tabs{display:flex;gap:4px;margin:4px 0 10px}.tabs a{padding:4px 12px;border-radius:14px;font-size:13px;text-decoration:none;color:var(--mut);border:1px solid var(--ln)}.tabs a.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}.grid .c{display:block;text-decoration:none;color:var(--fg)}
+.grid img{width:100%;height:110px;object-fit:cover;border-radius:8px;background:var(--card)}.grid .ct{font-size:12px;margin-top:4px;color:var(--mut);word-break:break-word}
+.r img.th{width:96px;height:72px;object-fit:cover;border-radius:6px;float:left;margin-right:10px;background:var(--card)}.r::after{content:"";display:block;clear:both}
 </style>`
 
 // renderSearch writes the page. Every string that came from the URL or from an engine goes through html.EscapeString, and a result link has already passed normalizeResultURL
@@ -53,7 +58,15 @@ func renderSearch(v searchView) string {
 			b.WriteString(`<span class="b">` + e(g.Name) + ` ` + strconv.Itoa(g.N) + `</span>`)
 		}
 	}
-	b.WriteString(`<a class="b" href="/browse">Browse</a></div>`)
+	b.WriteString(`<a class="b" href="/browse">Browse</a></div><div class="tabs">`)
+	for _, c := range searchCategories {
+		cls := ""
+		if c == v.Cat {
+			cls = ` class="on"`
+		}
+		b.WriteString(`<a href="/search?q=` + url.QueryEscape(v.Q) + `&cat=` + c + `"` + cls + `>` + catLabels[c] + `</a>`)
+	}
+	b.WriteString(`</div>`)
 	if v.Err != "" {
 		b.WriteString(`<div class="err">` + e(v.Err))
 		if v.Off {
@@ -63,12 +76,28 @@ func renderSearch(v searchView) string {
 	} else if v.Q != "" && len(v.Results) == 0 {
 		b.WriteString(`<div class="err">No results</div>`)
 	}
-	for _, r := range v.Results {
-		b.WriteString(`<div class="r"><a class="t" href="` + e(r.URL) + `" rel="noreferrer noopener">` + e(r.Title) + `</a><div class="u">` + e(r.URL) + `</div>`)
-		if r.Snippet != "" {
-			b.WriteString(`<div class="s">` + e(r.Snippet) + `</div>`)
+	if v.Cat == catImages {
+		b.WriteString(`<div class="grid">`)
+		for _, r := range v.Results {
+			b.WriteString(`<a class="c" href="` + e(r.URL) + `" rel="noreferrer noopener">`)
+			if r.Thumb != "" {
+				b.WriteString(`<img src="` + e(r.Thumb) + `" loading="lazy" alt="">`)
+			}
+			b.WriteString(`<div class="ct">` + e(r.Title) + `</div></a>`)
 		}
-		b.WriteString(`<div class="e">` + e(strings.Join(r.Engines, " · ")) + `</div></div>`)
+		b.WriteString(`</div>`)
+	} else {
+		for _, r := range v.Results {
+			b.WriteString(`<div class="r">`)
+			if r.Thumb != "" {
+				b.WriteString(`<img class="th" src="` + e(r.Thumb) + `" loading="lazy" alt="">`)
+			}
+			b.WriteString(`<a class="t" href="` + e(r.URL) + `" rel="noreferrer noopener">` + e(r.Title) + `</a><div class="u">` + e(r.URL) + `</div>`)
+			if r.Snippet != "" {
+				b.WriteString(`<div class="s">` + e(r.Snippet) + `</div>`)
+			}
+			b.WriteString(`<div class="e">` + e(strings.Join(r.Engines, " · ")) + `</div></div>`)
+		}
 	}
 	b.WriteString(`</main></body></html>`)
 	return b.String()
@@ -76,6 +105,7 @@ func renderSearch(v searchView) string {
 
 type searchView struct {
 	Q                    string
+	Cat                  string
 	Err                  string
 	Off                  bool
 	Results              []searchResult
@@ -83,6 +113,8 @@ type searchView struct {
 	ProxyLabel, DNSLabel string
 	ProxyDot, DNSDot     string
 }
+
+var catLabels = map[string]string{catWeb: "Web", catImages: "Images", catVideo: "Video", catMaps: "Maps"}
 
 // pathDot colours a mode's dot: amber when a private path is used for the connection but the name is looked up directly (the name leaks), red when the path is down.
 func (v *searchView) dots(cfg searchCfg, ready map[string]string) {
@@ -111,13 +143,17 @@ func (u *webUI) searchPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := cleanQuery(r.URL.Query().Get("q"))
+	cat := r.URL.Query().Get("cat")
+	if !validSearchCategory(cat) {
+		cat = catWeb
+	}
 	cfg := m.Config()
-	v := searchView{Q: q}
+	v := searchView{Q: q, Cat: cat}
 	v.dots(cfg, m.Ready())
 	if !cfg.Enabled {
 		v.Err, v.Off = "Search is off", true
 	} else if q != "" {
-		o := m.Search(r.Context(), q)
+		o := m.Search(r.Context(), q, cat)
 		v.Err, v.Results, v.Engines = o.Err, o.Results, o.Engines
 		if o.Busy {
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -186,18 +222,23 @@ func handleSearchAPI(w http.ResponseWriter, r *http.Request, path string) {
 		}
 		writeJSON(w, 200, searchAPIView(m))
 	case path == "search/web" && r.Method == http.MethodGet:
-		o := m.Search(r.Context(), cleanQuery(r.URL.Query().Get("q")))
+		cat := r.URL.Query().Get("cat")
+		if !validSearchCategory(cat) {
+			cat = catWeb
+		}
+		o := m.Search(r.Context(), cleanQuery(r.URL.Query().Get("q")), cat)
 		type res struct {
 			Title   string   `json:"title"`
 			URL     string   `json:"url"`
 			Snippet string   `json:"snippet"`
+			Thumb   string   `json:"thumb,omitempty"`
 			Engines []string `json:"engines"`
 		}
 		rs := []res{}
 		for _, x := range o.Results {
-			rs = append(rs, res{x.Title, x.URL, x.Snippet, x.Engines})
+			rs = append(rs, res{x.Title, x.URL, x.Snippet, x.Thumb, x.Engines})
 		}
-		writeJSON(w, 200, map[string]any{"results": rs, "engines": o.Engines, "error": o.Err})
+		writeJSON(w, 200, map[string]any{"results": rs, "engines": o.Engines, "error": o.Err, "cat": cat})
 	case path == "search/nyaa" && r.Method == http.MethodGet:
 		items, err := m.Nyaa(r.Context(), cleanQuery(r.URL.Query().Get("q")))
 		if err != nil {

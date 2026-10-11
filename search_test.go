@@ -60,6 +60,149 @@ func TestParseWikipedia(t *testing.T) {
 	}
 }
 
+func TestParseWikiFamily(t *testing.T) {
+	cases := []struct {
+		file, host, title, urlSuffix string
+	}{
+		{"search_wikidata.json", "www.wikidata.org", "Q28975568", "/wiki/Q28975568"},
+		{"search_wiktionary.json", "en.wiktionary.org", "Cat", "/wiki/Cat"},
+		{"search_wikiquote.json", "en.wikiquote.org", "Freedom", "/wiki/Freedom"},
+		{"search_wikibooks.json", "en.wikibooks.org", "Python Programming", "/wiki/Python_Programming"},
+		{"search_wikisource.json", "en.wikisource.org", "Liberty", "/wiki/Liberty"},
+	}
+	for _, c := range cases {
+		r, err := parseWikiSearch(fixture(t, c.file), c.host)
+		if err != nil || len(r) < 1 {
+			t.Fatalf("%s: got %d results, err %v", c.file, len(r), err)
+		}
+		if r[0].Title != c.title || !strings.HasSuffix(r[0].URL, c.urlSuffix) || strings.Contains(r[0].Snippet, "<span") {
+			t.Fatalf("%s: first result wrong: %+v", c.file, r[0])
+		}
+	}
+	if _, err := parseWikiSearch([]byte("<html>"), "en.wikipedia.org"); err == nil {
+		t.Fatal("garbage should be an error")
+	}
+}
+
+func TestParseHN(t *testing.T) {
+	r, err := parseHN(fixture(t, "search_hn.json"))
+	if err != nil || len(r) < 5 {
+		t.Fatalf("got %d results, err %v", len(r), err)
+	}
+	if r[0].Title != "WireGuard is now in Linus' tree" || r[0].URL != "https://lists.zx2c4.com/pipermail/wireguard/2020-January/004906.html" {
+		t.Fatalf("first result wrong: %+v", r[0])
+	}
+	if len(r) > maxPerEng {
+		t.Fatalf("not capped at maxPerEng: got %d", len(r))
+	}
+	if _, err := parseHN([]byte("not json")); err == nil {
+		t.Fatal("garbage should be an error")
+	}
+}
+
+func TestParseStackExchange(t *testing.T) {
+	r, err := parseStackExchange(fixture(t, "search_stackexchange.json"))
+	if err != nil || len(r) < 5 {
+		t.Fatalf("got %d results, err %v", len(r), err)
+	}
+	if r[0].Title != "wireguard Invalid manifest" || r[0].URL != "https://stackoverflow.com/questions/76078227/wireguard-invalid-manifest" || r[0].Snippet == "" {
+		t.Fatalf("first result wrong: %+v", r[0])
+	}
+	if _, err := parseStackExchange([]byte("not json")); err == nil {
+		t.Fatal("garbage should be an error")
+	}
+}
+
+func TestParseGitHub(t *testing.T) {
+	r, err := parseGitHub(fixture(t, "search_github.json"))
+	if err != nil || len(r) < 5 {
+		t.Fatalf("got %d results, err %v", len(r), err)
+	}
+	if r[0].Title != "angristan/wireguard-install" || r[0].URL != "https://github.com/angristan/wireguard-install" {
+		t.Fatalf("first result wrong: %+v", r[0])
+	}
+	if len(r) > maxPerEng {
+		t.Fatalf("not capped at maxPerEng: got %d", len(r))
+	}
+	if _, err := parseGitHub([]byte("not json")); err == nil {
+		t.Fatal("garbage should be an error")
+	}
+}
+
+func TestParseBrave(t *testing.T) {
+	r, err := parseBrave(fixture(t, "search_brave.html"))
+	if err != nil || len(r) < 5 {
+		t.Fatalf("got %d results, err %v", len(r), err)
+	}
+	if r[0].URL != "https://www.wireguard.com/" || !strings.Contains(r[0].Title, "WireGuard") || r[0].Snippet == "" {
+		t.Fatalf("first result wrong: %+v", r[0])
+	}
+	for _, x := range r {
+		if strings.Contains(x.URL, "search.brave.com") || strings.Contains(x.Snippet, "<strong>") {
+			t.Fatalf("internal link or markup left in %+v", x)
+		}
+	}
+	if _, err := parseBrave([]byte("<html><body>no results container</body></html>")); err == nil {
+		t.Fatal("a page with no results container should be an error")
+	}
+}
+
+func TestParseWolfram(t *testing.T) {
+	r, err := parseWolfram(fixture(t, "search_wolfram.json"))
+	if err != nil || len(r) != 1 {
+		t.Fatalf("got %d results, err %v", len(r), err)
+	}
+	if !strings.Contains(r[0].Title, "2 + 2") || r[0].Snippet != "4" {
+		t.Fatalf("result wrong: %+v", r[0])
+	}
+	r, err = parseWolfram([]byte(`{"queryresult":{"success":false}}`))
+	if err != nil || len(r) != 0 {
+		t.Fatalf("an unsuccessful query should be zero results with no error, got %d, %v", len(r), err)
+	}
+	if _, err := parseWolfram([]byte("not json")); err == nil {
+		t.Fatal("garbage should be an error")
+	}
+}
+
+func TestParseOpenverse(t *testing.T) {
+	r, err := parseOpenverse(fixture(t, "search_openverse.json"))
+	if err != nil || len(r) < 3 {
+		t.Fatalf("got %d results, err %v", len(r), err)
+	}
+	if r[0].Title == "" || r[0].URL == "" || r[0].Thumb == "" {
+		t.Fatalf("first result missing a field: %+v", r[0])
+	}
+	if _, err := parseOpenverse([]byte("not json")); err == nil {
+		t.Fatal("garbage should be an error")
+	}
+}
+
+func TestParseIAVideo(t *testing.T) {
+	r, err := parseIAVideo(fixture(t, "search_iavideo.json"))
+	if err != nil || len(r) < 3 {
+		t.Fatalf("got %d results, err %v", len(r), err)
+	}
+	if r[0].Title != "Doom Engine Part 1 2 3" || r[0].URL != "https://archive.org/details/doom-engine-part-1-2-3" || r[0].Thumb != "https://archive.org/services/img/doom-engine-part-1-2-3" {
+		t.Fatalf("first result wrong: %+v", r[0])
+	}
+	if _, err := parseIAVideo([]byte("not json")); err == nil {
+		t.Fatal("garbage should be an error")
+	}
+}
+
+func TestParseNominatim(t *testing.T) {
+	r, err := parseNominatim(fixture(t, "search_nominatim.json"))
+	if err != nil || len(r) < 1 {
+		t.Fatalf("got %d results, err %v", len(r), err)
+	}
+	if r[0].Title != "Tour Eiffel" || !strings.HasPrefix(r[0].URL, "https://www.openstreetmap.org/?mlat=48.8582599&mlon=2.2945006") {
+		t.Fatalf("first result wrong: %+v", r[0])
+	}
+	if _, err := parseNominatim([]byte("not json")); err == nil {
+		t.Fatal("garbage should be an error")
+	}
+}
+
 func TestSearchPathReady(t *testing.T) {
 	down := ownState{}
 	up := ownState{MullvadWanted: true, TunnelUp: true, TorEnabled: true, TorReady: true, TorOverVPN: true}
@@ -93,17 +236,40 @@ func TestSearchFailsClosed(t *testing.T) {
 	m.state = func() ownState { return ownState{} }
 	m.cfg.Enabled = true
 	m.cfg.Proxy, m.cfg.DNS = spTor, spDirect
-	o := m.Search(context.Background(), "x")
+	o := m.Search(context.Background(), "x", catWeb)
 	if !strings.Contains(o.Err, "Proxy Tor") || len(o.Results) != 0 {
 		t.Fatalf("proxy down: %+v", o)
 	}
 	m.cfg.Proxy, m.cfg.DNS = spDirect, spMullvad
-	if o = m.Search(context.Background(), "x"); !strings.Contains(o.Err, "DNS Mullvad") {
+	if o = m.Search(context.Background(), "x", catWeb); !strings.Contains(o.Err, "DNS Mullvad") {
 		t.Fatalf("dns down: %+v", o)
 	}
 	m.cfg.Enabled = false
-	if o = m.Search(context.Background(), "x"); o.Err != "Search is off" {
+	if o = m.Search(context.Background(), "x", catWeb); o.Err != "Search is off" {
 		t.Fatalf("off: %+v", o)
+	}
+}
+
+func TestSearchCategoryFilter(t *testing.T) {
+	m := newSearchMgr("")
+	m.state = func() ownState { return ownState{} }
+	m.cfg.Enabled = true
+	m.cfg.Proxy, m.cfg.DNS = spDirect, spDirect
+	m.cfg.Engines = []string{"wikipedia"} // no image/video/map engine switched on
+	if o := m.Search(context.Background(), "x", catImages); o.Err != "No engine is switched on for this category" {
+		t.Fatalf("expected a per-category error, got %+v", o)
+	}
+	if !validSearchCategory(catWeb) || !validSearchCategory(catImages) || !validSearchCategory(catVideo) || !validSearchCategory(catMaps) {
+		t.Fatal("all four categories should validate")
+	}
+	if validSearchCategory("bogus") {
+		t.Fatal("an unknown category should not validate")
+	}
+	if engineCategory(searchEngine{}) != catWeb {
+		t.Fatal("an engine with no Category set should default to catWeb")
+	}
+	if engineCategory(searchEngine{Category: catImages}) != catImages {
+		t.Fatal("an explicit Category should be kept as-is")
 	}
 }
 

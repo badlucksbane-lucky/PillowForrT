@@ -41,6 +41,32 @@ const (
 
 var searchModes = []string{spDirect, spMullvad, spTor, spTorMullvad}
 
+const (
+	catWeb    = "web"
+	catImages = "images"
+	catVideo  = "video"
+	catMaps   = "maps"
+)
+
+var searchCategories = []string{catWeb, catImages, catVideo, catMaps}
+
+func validSearchCategory(c string) bool {
+	for _, x := range searchCategories {
+		if x == c {
+			return true
+		}
+	}
+	return false
+}
+
+// engineCategory applies the catWeb default to a searchEngine's zero-value Category.
+func engineCategory(e searchEngine) string {
+	if e.Category == "" {
+		return catWeb
+	}
+	return e.Category
+}
+
 func validSearchMode(m string) bool {
 	for _, x := range searchModes {
 		if x == m {
@@ -388,6 +414,7 @@ type searchResult struct {
 	Title   string
 	URL     string
 	Snippet string
+	Thumb   string // an image/video thumbnail URL; empty for a plain text result
 	Engines []string
 	score   float64
 }
@@ -402,6 +429,7 @@ type engineStatus struct {
 
 type searchOutcome struct {
 	Query   string
+	Cat     string
 	Results []searchResult
 	Engines []engineStatus
 	Err     string
@@ -425,10 +453,13 @@ func cleanQuery(q string) string {
 	return q
 }
 
-// Search runs one query. A path that is down is an error in the outcome, with no attempt made.
-func (m *searchMgr) Search(ctx context.Context, q string) searchOutcome {
+// Search runs one query against one category's engines. A path that is down is an error in the outcome, with no attempt made.
+func (m *searchMgr) Search(ctx context.Context, q, cat string) searchOutcome {
+	if !validSearchCategory(cat) {
+		cat = catWeb
+	}
 	cfg := m.Config()
-	out := searchOutcome{Query: q, Cfg: cfg}
+	out := searchOutcome{Query: q, Cat: cat, Cfg: cfg}
 	switch {
 	case !cfg.Enabled:
 		out.Err = "Search is off"
@@ -437,6 +468,21 @@ func (m *searchMgr) Search(ctx context.Context, q string) searchOutcome {
 		return out
 	case len(cfg.Engines) == 0:
 		out.Err = "No engine is switched on"
+		return out
+	}
+	var on []searchEngine
+	for _, e := range searchEngines {
+		if engineCategory(e) != cat {
+			continue
+		}
+		for _, id := range cfg.Engines {
+			if id == e.ID {
+				on = append(on, e)
+			}
+		}
+	}
+	if len(on) == 0 {
+		out.Err = "No engine is switched on for this category"
 		return out
 	}
 	st := m.state()
@@ -469,14 +515,6 @@ func (m *searchMgr) Search(ctx context.Context, q string) searchOutcome {
 		i   int
 		res []searchResult
 		st  engineStatus
-	}
-	var on []searchEngine
-	for _, e := range searchEngines {
-		for _, id := range cfg.Engines {
-			if id == e.ID {
-				on = append(on, e)
-			}
-		}
 	}
 	ch := make(chan got, len(on))
 	for i, e := range on {
