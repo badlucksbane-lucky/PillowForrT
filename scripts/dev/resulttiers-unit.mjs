@@ -95,6 +95,6 @@ const labelled = api.torTiers([mk(10, 'A 1080p BluRay')], 'x', {})[0];
 check('the label is the first thing in the row\'s detail line', labelled.querySelector('.s').children[0]._t === '1080p · BR', labelled.querySelector('.s').children.map(c => c._t));
 
 // ---- wiring ----
-check('all three lists (movies, episodes, anime) use the tiers, and nothing uses the old flat rows', (html.match(/torTiers\(/g) || []).length >= 4 && !/torRows/.test(html), (html.match(/torTiers\(/g) || []).length);
-check('the episode and anime lists say they are episode lists (a pack must earn its place)', /\{host:tl,episode:true\}/.test(html) && /\{host:tl,episode:!movie\}/.test(html), null);
+check('movies and anime keep the best-per-tier lists (the series episode list uses the sorted list instead, see resultsort-unit.mjs), and nothing uses the old flat rows', (html.match(/torTiers\(\[|torTiers\(f\.slice/g) || []).length === 2 && !/torRows/.test(html), (html.match(/torTiers\(/g) || []).length);
+check('the anime list says it is an episode list (a pack must earn its place)', /\{host:tl,episode:!movie\}/.test(html), null);
 console.log(fails.length ? '\n' + fails.length + ' failed' : '\nall ok'); process.exit(fails.length ? 1 : 0);

@@ -32,6 +32,7 @@ main{max-width:1100px;margin:0 auto;padding:10px 12px calc(40px + env(safe-area-
 .chip{flex:none;min-height:36px;padding:0 14px;border-radius:18px;border:1px solid var(--ln);background:var(--card);white-space:nowrap}
 .chip.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 .sec{display:flex;align-items:baseline;justify-content:space-between;margin:14px 2px 4px}.sec h2{font-size:18px;margin:0}.sec a{color:var(--mut);font-size:13px;text-decoration:none}
+.sortbar{margin:2px 0 6px}.sortbar button{min-height:30px;padding:0 12px;font-size:13px}
 .seg{display:inline-flex;margin:8px 0 4px}.seg button{min-height:34px;padding:0 14px;border:1px solid var(--ln);background:var(--card);margin-left:-1px}.seg button:first-child{border-radius:17px 0 0 17px;margin:0}.seg button:last-child{border-radius:0 17px 17px 0}.seg button.on{background:var(--ac);color:var(--onac);border-color:var(--ac);position:relative}
 .card{display:block;flex:none;width:132px;scroll-snap-align:start;text-decoration:none;position:relative}
 .grid .card{width:auto}
@@ -221,6 +222,23 @@ function torTiers(items,empty,o={}){
  if(!best.length||all.length<=best.length)return best.length?best:all.map(r=>r.row);
  const d=h('details',{class:'allres'},h('summary',{text:'All results ('+all.length+')'}),...all.map(r=>r.row));if(opened)d.open=true;
  return [...best,d]}
+// The episode list: sort bar, every single-episode release (labelled with tier and source), and the season packs folded underneath ("Season packs (N)", open when there is nothing else to show).
+const TSORT={k:'q',d:-1};
+try{const v=JSON.parse(localStorage.getItem('b:tsort'));if(v&&SORTS[v.k]&&(v.d===1||v.d===-1)){TSORT.k=v.k;TSORT.d=v.d}}catch(e){}
+function torSorted(items,empty,o={}){
+ const opened=!!(o.host&&o.host.querySelector&&o.host.querySelector('details.allres[open]'));
+ const all=items.map(x=>({x,row:x.make()})).filter(r=>r.row);
+ if(!all.length)return [h('div',{class:'note',text:empty})];
+ const rowOf=new Map(all.map(r=>[r.x,r.row]));
+ const mark=x=>{const row=rowOf.get(x),src=sourceOf(x.t),s=row.querySelector('.s');if(s)s.prepend(h('span',{class:'tier',text:tierLabel(tierKey(x.t,src),src)}));return row};
+ const order=list=>sortItems(list,TSORT.k,TSORT.d).map(mark);
+ const singles=all.filter(r=>!packTitle(r.x.t)).map(r=>r.x),packs=all.filter(r=>packTitle(r.x.t)).map(r=>r.x);
+ const out=[];
+ if(singles.length>1)out.push(h('div',{class:'seg sortbar',role:'group','aria-label':'Sort'},[['q','Quality'],['s','Size'],['n','Seeds']].map(([k,l])=>h('button',{type:'button',class:TSORT.k===k?'on':'',text:l+(TSORT.k===k?(TSORT.d<0?' ↓':' ↑'):''),
+  onclick:()=>{if(TSORT.k===k)TSORT.d=-TSORT.d;else{TSORT.k=k;TSORT.d=-1}try{localStorage.setItem('b:tsort',JSON.stringify(TSORT))}catch(e){}if(o.redraw)o.redraw()}}))));
+ out.push(...order(singles));
+ if(packs.length){const d=h('details',{class:'allres'},h('summary',{text:'Season packs ('+packs.length+')'}),...order(packs));if(opened||!singles.length)d.open=true;out.push(d)}
+ return out}
 function heroFor(m,bd){return h('div',{class:'hero'},bd&&okUrl(bd)?img(bd,'bd',''):null,h('div',{class:'hi'},poster(m),h('div',{},h('h1',{text:m.name}),factsFor(m))))}
 function factsFor(m){const f=[];if(m.rating)f.push(h('b',{text:'★ '+m.rating}));if(m.year)f.push(m.year);if(m.runtime)f.push(m.runtime);if(m.type==='anime'){if(m.format)f.push(m.format.replace('_',' '));if(m.eps)f.push(m.eps+' eps');if(m.status)f.push(m.status.replace('_',' ').toLowerCase())}else if(m.status)f.push(m.status);return h('div',{class:'facts'},f.map(x=>x.nodeType?x:h('span',{text:x})))}
 function descBlock(t){const d=h('div',{class:'desc'+(t.length>260?' clamp':''),text:t});if(t.length<=260)return d;const b=h('button',{class:'more-b',text:'More',onclick:()=>{const c=d.classList.toggle('clamp');b.textContent=c?'More':'Less'}});return h('div',{},d,b)}
@@ -246,7 +264,7 @@ async function openSeries(id,rid){const m=await cmMeta('series',id);if(rid!==S.s
    const fill=()=>{const k=v.s+':'+v.e;let st=tio.get(k);if(!st&&!fut){st={done:false,err:false,list:[]};tio.set(k,st);tioFor('series/'+id+':'+k).then(l=>{st.list=l},()=>{st.err=true}).then(()=>{st.done=true;st.cb&&st.cb()})}
     if(st)st.cb=()=>{if(rid===S.sid&&el.isConnected&&el.classList.contains('open'))fill()};
     const have=new Set(counts(v.s,v.e).map(x=>String(x.h).toLowerCase())),t=[...counts(v.s,v.e),...(st?st.list:[]).filter(x=>!have.has(x.h))].sort((a,b)=>qrank(b.t)-qrank(a.t)||b.n-a.n);
-    tl.replaceChildren(...torTiers(t.map(x=>({t:x.t,n:x.n,make:()=>tor(x.t,x.src||'',x.h,x.t,x.n,size(x.z),x.f,{s:v.s,e:v.e})})),fut?'Not aired yet':(!ezDone&&!ezErr)||(st&&!st.done)?'Looking for torrents…':'No torrents found',{host:tl,episode:true}))};
+    tl.replaceChildren(...torSorted(t.map(x=>({t:x.t,n:x.n,z:+x.z||0,make:()=>tor(x.t,x.src||'',x.h,x.t,x.n,size(x.z),x.f,{s:v.s,e:v.e})})),fut?'Not aired yet':(!ezDone&&!ezErr)||(st&&!st.done)?'Looking for torrents…':'No torrents found',{host:tl,redraw:fill}))};
    el.append(h('button',{class:'eh','aria-expanded':'false',onclick:()=>{el.classList.toggle('open');el.firstChild.setAttribute('aria-expanded',el.classList.contains('open'));fill()}},
      h('div',{class:'th'},v.th?img(v.th,'',''):null),h('div',{class:'em'},h('div',{class:'en',text:(v.e+'. ')+(v.n||'Episode '+v.e)}),h('div',{class:'ed',text:v.d?new Date(v.d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}):''})),h('span',{class:'badge'+(ts.length?' has':''),text:ts.length||(ezDone||fut?'–':'…')})),tl);
    if(open.has(String(v.e))){el.classList.add('open');fill()}return el}));
@@ -378,6 +396,21 @@ function pickBest(items,o={}){
  for(const r of (real.length?real:rows))if(!kept.some(k=>k.tier===r.tier))kept.push(r);
  return kept.sort((a,b)=>TIER_ORDER.indexOf(a.tier)-TIER_ORDER.indexOf(b.tier))}
 // </result-tiers>
+// <result-sort>
+// Episode lists: every single-episode release is listed (a season pack goes in its own fold below), in the order the person picks: quality (resolution, then source, then seeds), size or seeds. Tapping the
+// active key flips the direction. Pure: scripts/dev/resultsort-unit.mjs runs it on realistic release names.
+const qualityScore=t=>(tierOf(t)||0)+SRC_WEIGHT[sourceOf(t)]; // resolution first, where it comes from only breaks a tie
+const SORTS={
+ q:(a,b)=>qualityScore(a.t)-qualityScore(b.t)||(a.n||0)-(b.n||0)||(a.z||0)-(b.z||0),
+ s:(a,b)=>(a.z||0)-(b.z||0),
+ n:(a,b)=>(a.n||0)-(b.n||0)||qualityScore(a.t)-qualityScore(b.t)};
+// dir -1: best / biggest / most seeds first; 1: the other way. A release whose size is unknown is always last when sorting by size.
+function sortItems(items,key,dir){
+ const cmp=SORTS[key]||SORTS.q;
+ return items.slice().sort((a,b)=>{
+  if(key==='s'&&!(a.z>0&&b.z>0)){if(!(a.z>0)&&!(b.z>0))return (b.n||0)-(a.n||0);return a.z>0?-1:1}
+  return dir*cmp(a,b)||(b.n||0)-(a.n||0)})}
+// </result-sort>
 // <season-packs>
 // Season packs: one torrent holding many episodes. The episode that was asked for is found by reading season and episode out of the file names; the rest are listed in order, and while playing the top bar has
 // Previous / Next (an episode that ends moves on by itself). A pure block: scripts/dev/seasonpack-unit.mjs runs it against made-up file lists.
