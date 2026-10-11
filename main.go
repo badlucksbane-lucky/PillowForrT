@@ -69,6 +69,8 @@ var (
 	knownFile       = flag.String("known-devices", "/data/proxy/knowndevices.json", "MACs seen before, so only a really new device raises an event")
 	canaryIP        = flag.String("canary", "192.168.1.253", "the canary (decoy) address on the LAN; empty switches the canary off entirely")
 	arpWatchOn      = flag.Bool("arp-watch", true, "watch the bridge for ARP spoofing (gateway impersonation, address conflicts)")
+	tmdbKeyFile     = flag.String("tmdb-key-file", "/data/proxy/tmdb.key", "TMDB API key (a v3 key or a v4 read token) for the age ratings Kids mode uses; empty or missing = no ratings, and Kids mode hides every movie and series")
+	ratingsFile     = flag.String("ratings-file", "/data/proxy/ratings.json", "cache of the age ratings looked up for Kids mode")
 	kidsFile        = flag.String("kids-file", "/data/proxy/kids.json", "Kids mode: the switch, the parent PIN (a hash), the kids' devices and the PIN lockout (not part of the backups)")
 	torFile         = flag.String("tor-file", "/data/proxy/tor.json", "Tor settings (daemon on/off, Tor over Mullvad, the devices sent through Tor)")
 	torBin          = flag.String("tor-bin", "/data/proxy/tor", "the Tor client binary (the Tor recipe)")
@@ -515,6 +517,8 @@ func main() {
 		rogueMgr.Start()
 	}
 	kidsMgrG = newKidsMgr(*kidsFile)
+	ratingMgrG = newRatingMgr(*ratingsFile, *tmdbKeyFile)
+	go ratingMgrG.Run()
 	torMgrG = newTorMgr()
 	if dnsProxy != nil {
 		dnsProxy.Tor = torMgrG
@@ -580,6 +584,7 @@ func main() {
 	go func() {
 		<-sig
 		saveState()
+		ratingMgrG.Save(true)
 		if events != nil {
 			events.Flush() // the writer may still have the last events to put in the file
 		}

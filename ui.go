@@ -1159,6 +1159,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleBTAPI(w, r, path)
 		return
 	}
+	if path == "rating" {
+		handleRatingAPI(w, r, path)
+		return
+	}
 	if path == "kids" || strings.HasPrefix(path, "kids/") {
 		handleKidsAPI(w, r, path)
 		return
