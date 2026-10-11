@@ -171,28 +171,33 @@ func (a *btAllowList) ok(peer string) bool {
 // ---- settings and state ----
 
 type btMgr struct {
-	mu      sync.Mutex
-	path    string
-	enabled bool
-	upload  string       // what the page's torrent client may upload while a stream plays: off (the default), low or normal
-	conns   atomic.Int32 // peers open now, over either kind of socket
-	muxes   atomic.Int32 // multiplexed sockets open now (btmux.go)
-	state   func() ownState
+	mu       sync.Mutex
+	path     string
+	enabled  bool
+	upload   string       // what the page's torrent client may upload while a stream plays: off (the default), low or normal
+	download int          // KB/s the page's torrent client may fetch at (btDownloadChoices); 0 is no limit
+	conns    atomic.Int32 // peers open now, over either kind of socket
+	muxes    atomic.Int32 // multiplexed sockets open now (btmux.go)
+	state    func() ownState
 }
 
 var btMgrG *btMgr
 
 func newBTMgr(path string) *btMgr {
-	m := &btMgr{path: path, state: liveOwnState, upload: "off"}
+	m := &btMgr{path: path, state: liveOwnState, upload: "off", download: 256}
 	if b, err := os.ReadFile(path); err == nil {
 		var c struct {
-			Enabled bool   `json:"enabled"`
-			Upload  string `json:"upload"`
+			Enabled  bool   `json:"enabled"`
+			Upload   string `json:"upload"`
+			Download *int   `json:"download"` // absent in a file from before this setting: keep the default
 		}
 		if json.Unmarshal(b, &c) == nil {
 			m.enabled = c.Enabled
 			if validUpload(c.Upload) {
 				m.upload = c.Upload
+			}
+			if c.Download != nil && validDownload(*c.Download) {
+				m.download = *c.Download
 			}
 		}
 	}
@@ -205,9 +210,34 @@ func validUpload(u string) bool { return u == "off" || u == "low" || u == "norma
 
 func (m *btMgr) Upload() string { m.mu.Lock(); defer m.mu.Unlock(); return m.upload }
 
+// btDownloadChoices are the download rates the admin page offers, in KB/s; 0 is no limit. The default is 256: the box's link is shared with everything else behind it.
+var btDownloadChoices = []int{64, 128, 256, 512, 1024, 2048, 4096, 0}
+
+func validDownload(kb int) bool {
+	for _, c := range btDownloadChoices {
+		if c == kb {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *btMgr) Download() int { m.mu.Lock(); defer m.mu.Unlock(); return m.download }
+
+func (m *btMgr) SetDownload(kb int) error {
+	if !validDownload(kb) {
+		return errors.New("download is 64, 128, 256, 512, 1024, 2048, 4096 KB/s or 0 for no limit")
+	}
+	m.mu.Lock()
+	m.download = kb
+	m.saveLocked()
+	m.mu.Unlock()
+	return nil
+}
+
 func (m *btMgr) saveLocked() {
 	if m.path != "" {
-		b, _ := json.Marshal(map[string]any{"enabled": m.enabled, "upload": m.upload})
+		b, _ := json.Marshal(map[string]any{"enabled": m.enabled, "upload": m.upload, "download": m.download})
 		writeFileAtomic(m.path, b, 0o600)
 	}
 }
@@ -231,7 +261,7 @@ func (m *btMgr) SetUpload(u string) error {
 }
 
 func (m *btMgr) view() map[string]any {
-	return map[string]any{"available": true, "enabled": m.Enabled(), "ready": m.Ready(), "conns": m.conns.Load(), "upload": m.Upload()}
+	return map[string]any{"available": true, "enabled": m.Enabled(), "ready": m.Ready(), "conns": m.conns.Load(), "upload": m.Upload(), "download": m.Download()}
 }
 
 // Ready says why the bridge cannot be used now ("" when it can). Only the Mullvad tunnel will do: BitTorrent shows the exit address to every peer.
@@ -561,8 +591,9 @@ func handleBTAPIWith(m *btMgr, w http.ResponseWriter, r *http.Request, path stri
 		writeJSON(w, 200, m.view())
 	case path == "bt/set" && r.Method == http.MethodPost:
 		var b struct {
-			Enabled *bool   `json:"enabled"`
-			Upload  *string `json:"upload"`
+			Enabled  *bool   `json:"enabled"`
+			Upload   *string `json:"upload"`
+			Download *int    `json:"download"`
 		}
 		if json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024)).Decode(&b) != nil {
 			writeJSON(w, 400, map[string]string{"error": "bad request"})
@@ -570,6 +601,12 @@ func handleBTAPIWith(m *btMgr, w http.ResponseWriter, r *http.Request, path stri
 		}
 		if b.Upload != nil {
 			if err := m.SetUpload(*b.Upload); err != nil {
+				writeJSON(w, 400, map[string]string{"error": err.Error()})
+				return
+			}
+		}
+		if b.Download != nil {
+			if err := m.SetDownload(*b.Download); err != nil {
 				writeJSON(w, 400, map[string]string{"error": err.Error()})
 				return
 			}

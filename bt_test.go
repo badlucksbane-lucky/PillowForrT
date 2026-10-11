@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -415,6 +416,43 @@ func TestBTSettings(t *testing.T) {
 	handleBTAPIWith(m, w, httptest.NewRequest("POST", "/api/bt/set", strings.NewReader(`{"upload":"x"}`)), "bt/set")
 	if w.Code != 400 {
 		t.Fatal("bad mode accepted")
+	}
+}
+
+func TestBTDownloadRate(t *testing.T) {
+	p := t.TempDir() + "/bt.json"
+	m := newBTMgr(p)
+	if m.Download() != 256 {
+		t.Fatalf("download must default to 256 KB/s, got %d", m.Download())
+	}
+	for _, bad := range []int{-1, 1, 100, 5000, 1 << 30} {
+		if m.SetDownload(bad) == nil {
+			t.Fatalf("%d KB/s accepted", bad)
+		}
+	}
+	if err := m.SetDownload(1024); err != nil {
+		t.Fatal(err)
+	}
+	if newBTMgr(p).Download() != 1024 {
+		t.Fatal("not saved")
+	}
+	if err := m.SetDownload(0); err != nil || newBTMgr(p).Download() != 0 {
+		t.Fatalf("no limit (0) must be accepted and survive a restart: %v %d", err, newBTMgr(p).Download())
+	}
+	os.WriteFile(p, []byte(`{"enabled":true,"upload":"low"}`), 0o600) // a file from before this setting existed
+	if r := newBTMgr(p); r.Download() != 256 || r.Upload() != "low" {
+		t.Fatalf("an old file keeps the default: %d %q", r.Download(), r.Upload())
+	}
+	m = newBTMgr(p)
+	w := httptest.NewRecorder()
+	handleBTAPIWith(m, w, httptest.NewRequest("POST", "/api/bt/set", strings.NewReader(`{"download":512}`)), "bt/set")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"download":512`) || !strings.Contains(w.Body.String(), `"upload":"low"`) {
+		t.Fatalf("%d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	handleBTAPIWith(m, w, httptest.NewRequest("POST", "/api/bt/set", strings.NewReader(`{"download":7}`)), "bt/set")
+	if w.Code != 400 || m.Download() != 512 {
+		t.Fatalf("a bad rate must be refused and change nothing: %d %d", w.Code, m.Download())
 	}
 }
 
