@@ -205,6 +205,7 @@ func (v *VPN) Reconcile() {
 		v.applyFn(p)
 		return
 	}
+	logFastPathDecision(p, torMgrG.Active())
 	manageSFE(p.Active || torMgrG.Active())
 	ensureHooks()
 	m, f, s6 := planRules(p)
