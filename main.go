@@ -69,6 +69,7 @@ var (
 	knownFile       = flag.String("known-devices", "/data/proxy/knowndevices.json", "MACs seen before, so only a really new device raises an event")
 	canaryIP        = flag.String("canary", "192.168.1.253", "the canary (decoy) address on the LAN; empty switches the canary off entirely")
 	arpWatchOn      = flag.Bool("arp-watch", true, "watch the bridge for ARP spoofing (gateway impersonation, address conflicts)")
+	kidsFile        = flag.String("kids-file", "/data/proxy/kids.json", "Kids mode: the switch, the parent PIN (a hash), the kids' devices and the PIN lockout (not part of the backups)")
 	torFile         = flag.String("tor-file", "/data/proxy/tor.json", "Tor settings (daemon on/off, Tor over Mullvad, the devices sent through Tor)")
 	torBin          = flag.String("tor-bin", "/data/proxy/tor", "the Tor client binary (the Tor recipe)")
 	rogueFile       = flag.String("rogue-file", "/data/proxy/rogue.json", "DHCP servers the owner allowed (their MAC addresses)")
@@ -513,6 +514,7 @@ func main() {
 		rogueMgr = newRogueWatch()
 		rogueMgr.Start()
 	}
+	kidsMgrG = newKidsMgr(*kidsFile)
 	torMgrG = newTorMgr()
 	if dnsProxy != nil {
 		dnsProxy.Tor = torMgrG
