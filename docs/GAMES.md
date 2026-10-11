@@ -102,7 +102,7 @@ Tests: `node scripts/dev/imposter-unit.mjs` (every phase, the timers, stale and 
 2. Fort Pong: the smallest test of the pipeline and latency.
 3. Sumo Push: many players, input rate, reconnects and pause.
 4. Hidden-role game: private panel, per-phone views.
-5. Phone test pass on the Pixel and Moto, plus an iOS check if a device is available.
+5. Phone test pass on the Pixel and Moto, plus an iOS check if a device is available. **Done 2026-10-10 by Ben for all three games (Pi screen, Moto and Pixel controllers); iOS, landscape on a real phone and large rooms were not tried.**
 
 ## Gotchas (from the room channel work)
 

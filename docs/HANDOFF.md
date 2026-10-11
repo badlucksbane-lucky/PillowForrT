@@ -1,24 +1,14 @@
-# Handoff: PillowForrT, 2026-10-10 (room channel done, game system is next; the 2026-10-09 audit text follows)
+# Handoff: PillowForrT, 2026-10-10 (game system built and deployed; the 2026-10-09 audit text follows)
 
 **Playback works. The box (an Orbic RC400L) used to freeze, drop connections and cold-reboot at random, and Tor has been off for every playback test.** A performance and stability audit on 2026-10-09 found the idle load (the daemon at 40 to 50 % CPU, GC pinned against its memory limit) and fixed it, plus seven other choke points; see "Audit and fixes" below. **The freezes are not proven fixed**: the box also restarted six times in 16 minutes after the audit's second deploy (four confirmed as cold reboots by the watcher, a fifth by its uptime), with healthy vitals just before each death, and that is unexplained. See "The reboot cluster".
 
 ## Next session: start here
 
-**Build the browser game system (`bd show pf-0fn`).** Ben chose it on 2026-10-10 and asked for a fresh session. Run `bd ready`, `bd update pf-0fn --claim`, and read "Room channel (2026-10-10)" and "Testing on the phones" below first. The room channel is finished and verified on two real phones, so nothing here needs to be rebuilt.
+**The browser game system is finished and deployed (epic `pf-0fn`, closed 2026-10-10).** Read `docs/GAMES.md` for the design, the input set, the wire rules, the licences of the projects we looked at and each game. In short: `/play` is the screen (a laptop browser, here Chromium on the Pi) and `/pad` is a phone; both sit on the room channel. Games are one file each in `gameclient/` (Pad test, Fort Pong, Sumo Push with 2 to 7 players, Imposter with 3 to 7), registered with `Games.register`. Tests: `node scripts/dev/game-test.mjs`, `pong-unit.mjs`, `sumo-unit.mjs`, `imposter-unit.mjs` and `go test -run TestGame .`.
 
-**What exists to build on** (all deployed, commit `84709f2` and earlier): `roomclient/room.js` (`new Room({name, code})`, direct WebRTC channels with the box as fallback, reconnect, same place after a reload; reliable `send(id, data)` and unordered `send(id, data, {unreliable: true})`), `roomclient/qr.js` and `room.joinUrl()` for the QR and join link, `/room-test` as a worked example page, `roomBounce` (`room.go`) which any page reached from a QR or shared link must call when there is no session, and `scripts/dev/room-test.mjs` as the headless test to copy.
+**Ben played all three games on the Pi (screen) with the Moto and Pixel as controllers and was happy** (2026-10-10). **Never tried: iOS** (motion permission, no vibration), landscape on a real phone, Sumo Push with more than a few phones, and anything with the screen on a TV browser. Open ideas, none filed: Tap Race, Draw & Guess (needs the canvas-input widget, which is not built), a card table, EmulatorJS for homebrew (see GAMES.md for the licences), a `captureStream()` mirror to a second display.
 
-**Measured, so design for it:** phone to phone on the Orbic's Wi-Fi is direct with a **median round trip of about 42 ms (p95 50), nothing lost**. That suits party games, controllers and turn-based play, not twitch games. The box only does rendezvous, so a running game puts no load on it. Limits that matter: **8 places per room (1 screen + 7 controllers or second screens)**, and **on the box relay (the fallback) 100 messages a second per page and 16 KB each**; direct channels have neither limit.
-
-**Design settled in the chat (change it if Ben says so):**
-- One browser is the **screen** (the console: it runs the game and is authoritative and draws a canvas). The box has no display, so the screen is a laptop, a TV browser or similar. Ask Ben which device it will be.
-- Phones are **controllers** (touch pad and buttons, gyro through `DeviceMotion`, vibration, the Gamepad API for real pads) and **private second screens** (a hand of cards, a hidden role, a minimap). A controller sends inputs on the **unordered channel** with a sequence number; the screen sends state (and private views to one phone) on the reliable one. Audio plays on the screen only.
-- Players join by **QR and code**: the screen shows them, the phone opens the join link. A controller's place survives a dropped socket for 60 s (its id is its player slot), and a reload resumes it.
-- **First games: two or three original canvas games** (a two-player game, a party game with private screens). **Emulator cores (WASM, libretro/EmulatorJS) come later and only for homebrew and public-domain titles; no ROMs shipped.** Optional `captureStream()` mirror to a second display.
-
-**Open questions to ask Ben first:** which device is the screen; how many players at once; which games first (suggested: a two-player "Fort Pong" and a hidden-role party game); whether controllers should be landscape, and whether iOS has to work (it needs a tap before `DeviceMotion` and has no vibration).
-
-**Gotchas for this feature:** the controller and screen pages are new pages reached from a QR, so they must call `roomBounce` when there is no session and set `joinPath` for `room.joinUrl()`; request a screen **wake lock** on both; browsers start audio only after a tap, so the screen needs a "start" button; Chrome freezes a page whose screen is off, so a controller that sleeps drops out (the grace period and `Room` reconnect cover it, but the game should pause, not end).
+**What to do next is Ben's call**; the other epics are in `bd ready`. Box stability below is still the open question.
 
 **Box stability is still open (Ben deferred it again on 2026-10-10 to build features).** The earlier start-here list, unchanged:
 
