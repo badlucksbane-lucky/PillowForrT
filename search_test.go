@@ -431,6 +431,9 @@ func TestSearchShellAndLiveSnapshotEscape(t *testing.T) {
 	if !strings.Contains(shell, `id="results"`) || !strings.Contains(shell, "function pfUpdate") {
 		t.Errorf("shell is missing its placeholders or the renderer:\n%s", shell)
 	}
+	if !strings.Contains(shell, "pfArm()") || !strings.Contains(shell, "Connection stalled") {
+		t.Errorf("shell is missing the stall watchdog:\n%s", shell)
+	}
 
 	o := searchOutcome{Cat: catWeb, Results: []searchResult{
 		{Title: "</script><script>alert(1)</script>", URL: "https://example.com/x", Snippet: "ok", Engines: []string{"A"}},

@@ -39,8 +39,19 @@ button{font:inherit;min-height:44px;padding:0 18px;border:0;border-radius:22px;b
 // pfUpdateJS defines pfUpdate(o), called from a <script> chunk flushed after every engine answers (searchPage, below). It only ever uses textContent and element properties (.href,
 // .src) on engine-supplied strings, never innerHTML, so there is nothing here for a hostile title or snippet to break out of; a result's .url has already passed normalizeResultURL
 // (http or https only) before it ever reaches this JSON.
-const pfUpdateJS = `<script>
+// pfStallMS is well above the server's own worst-case window for one search (15s direct/Mullvad, 40s Tor — circuits take time), so a dropped connection gets flagged as "stalled"
+// without the normal slow-but-alive case of a search that is legitimately still running ever triggering it.
+const pfStallMS = 55000
+
+var pfUpdateJS = `<script>
+var pfTimer=null;
+function pfArm(){ clearTimeout(pfTimer); pfTimer=setTimeout(function(){
+  var err=document.getElementById('err');
+  if(!err.textContent) err.textContent='Connection stalled — try reloading';
+}, ` + strconv.Itoa(pfStallMS) + `); }
+pfArm();
 function pfUpdate(o){
+  if(o.done){ clearTimeout(pfTimer); } else { pfArm(); }
   document.getElementById('err').textContent = o.error || (o.done && (!o.results || !o.results.length) ? 'No results' : '');
   var eng=document.getElementById('engines');
   eng.textContent='';
