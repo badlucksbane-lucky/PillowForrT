@@ -5,7 +5,7 @@ Decided 2026-10-11 with Ben. Design the controller top down from a small standar
 ## Decisions
 
 - **Screen:** a laptop browser (the console). It runs the game, is authoritative, draws a canvas and plays all audio. The box only does rendezvous (room channel, see HANDOFF.md "Room channel").
-- **Controllers:** phones, portrait or landscape, **iOS must work** (motion needs a tap first; iOS has no vibration).
+- **Controllers:** phones, portrait or landscape, **iOS must work** (motion needs a tap first; iOS has no vibration). Also: Bluetooth/USB game controllers, standard-mapping only, read through the browser's Gamepad API (gameclient/gamepad.js) wherever one is paired — either to the screen itself (a local player, `id: 'gp:<index>'`, in the same `players` map, so no game code needs to know the difference) or to a phone (pad.js sends its stick and button edges over the room channel exactly like a touch widget would, so again the screen cannot tell the difference).
 - **Own code, not a framework.** The room channel already provides rendezvous, direct WebRTC, resume and QR join. The only third-party piece considered is nipplejs (MIT) for the stick, and we may write that ourselves.
 - **First three games:** Fort Pong (2 players), Sumo Push (up to 8), a hidden-role game (4 to 8). Later: Tap Race, Draw & Guess, a card table.
 
@@ -30,6 +30,9 @@ Optional sensors, off unless a game asks: tilt (`deviceorientation`, beta and ga
 - A game that loses a controller **pauses**, it does not end (the room grace period is 60 s). A controller counts as away when the box says so **or when the screen has heard nothing from it for 4 s** (the phone sends a heartbeat every second): a closed tab's data channel can look open for half a minute. "Continue without" drops the player.
 - A stick is let go if it goes quiet for 600 ms while held (a lost release on the unordered channel must not leave it stuck); a release goes on both channels; a touch or release is sent at once, moves at most every 33 ms.
 - Coordinates: stick x right and y down, -1 to 1 (dead zone 0.12; d-pad mode gives -1, 0 or 1); pointer 0 to 1 inside its area. Each input kind has its own sequence number and a `hello` resets it.
+- **Gamepad API controllers** (gameclient/gamepad.js, `LocalPads`): polled from `navigator.getGamepads()` once a tick, since the Gamepad API gives no per-button events; `LocalPads.poll(onAdd, onRemove, onButton)` turns that snapshot into press/release edges itself, so callers never diff button state by hand. Only `gp.mapping === 'standard'` pads are read; others are ignored outright. Buttons: 0-9 map to A, B, X, Y, L, R, L2, R2, Select, Start; buttons 12-15 (d-pad) override the left stick's axes while held. Unplugging synthesizes a release for anything still held.
+  - **On the screen** (console.js): a pad is a local player (`id: 'gp:<index>'`) in the same `players` map as phones, polled every tick. It counts as away only when physically disconnected (no heartbeat/staleness concept); "Continue without" on a still-connected pad leaves it inert until unplugged and replugged.
+  - **On a phone** (pad.js): a pad paired to the phone itself is read the same way and its stick/buttons sent over the room channel exactly like the touch widgets, so the screen sees no difference. Only the lowest-index pad drives the stick (a phone pairs with one controller at a time); it runs regardless of what widgets the current game declared.
 
 ## Game module contract (sketch)
 

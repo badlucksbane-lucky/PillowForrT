@@ -16,7 +16,8 @@
   function Console(o) {
     var self = this;
     this.canvas = o.canvas; this.g = o.canvas.getContext('2d');
-    this.players = new Map(); // peer id -> player
+    this.players = new Map(); // peer id (a phone) or 'gp:<index>' (a local controller) -> player
+    this.locals = (typeof LocalPads !== 'undefined') ? new LocalPads() : null; // Bluetooth/USB controllers plugged into this screen, see gamepad.js
     this.game = null; this.inst = null; this.state = 'lobby'; // lobby | play | paused
     this.audio = null; this.staleMs = STALE; this.onUpdate = o.onUpdate || function () {};
     var saved = Room.saved();
@@ -112,8 +113,35 @@
   P.awayPlayers = function () { var a = []; this.players.forEach(function (p) { if (p.away) a.push(p); }); return a; };
   P._resumeIfReady = function () { if (this.state === 'paused' && !this.awayPlayers().length) { this.state = 'play'; this._state(); } };
 
+  // ---- local controllers (Bluetooth/USB, plugged into this screen, not a phone) ----
+  P._pollGamepads = function () { // pulled every tick: the Gamepad API gives no per-button events
+    if (!this.locals) return;
+    var self = this;
+    this.locals.poll(
+      function (p) { self._addLocal(p); },
+      function (p) { self._removeLocal(p); },
+      function (p, name, down) { // LocalPads already turned the snapshot into a press/release edge; only forward it for a seated player
+        if (self.state === 'play' && self.players.get(p.id) === p && self.inst && self.inst.onButton) self.inst.onButton(p, name, down);
+      }
+    );
+  };
+  P._addLocal = function (p) {
+    var old = this.players.get(p.id);
+    if (old) { p.slot = old.slot; p.color = old.color; this.players.set(p.id, p); this._away(p); return; } // the same controller came back: keep its seat, not a fresh join
+    if (this.players.size >= this._maxPlayers()) return; // table's full; ignored until a seat frees up
+    p.slot = this._free(); p.color = COLORS[p.slot % COLORS.length];
+    this.players.set(p.id, p);
+    if (this.inst && this.inst.onJoin) this.inst.onJoin(p);
+    this.onUpdate();
+  };
+  P._removeLocal = function (p) {
+    if (!this.players.has(p.id)) return;
+    p.gone = true; this._away(p); // pauses like a phone going away; "Continue without" drops it for good
+  };
+
   // ---- what each phone shows ----
   P._layout = function (p) {
+    if (p.local) return; // a local controller has no phone screen to lay out
     var g = this.game, playing = g && this.state !== 'lobby';
     this.room.send(p.id, { t: 'layout', state: this.state, slot: p.slot, color: p.color, name: p.name, game: g ? g.name : '',
       widgets: playing ? g.widgets : [], orientation: playing ? g.orientation || 'any' : 'any',
@@ -149,6 +177,7 @@
   };
   P._tick = function (t) {
     var dt = Math.min(0.05, (t - this._last) / 1000); this._last = t;
+    this._pollGamepads();
     var c = this.canvas, dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
     if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
     var g = this.g; g.setTransform(dpr, 0, 0, dpr, 0, 0);

@@ -1,5 +1,7 @@
 // The controller (the phone): joins the screen's room, builds the widgets the game asks for, and sends input. Plain script, depends on room.js. Served at /game/pad.js.
 // Protocol: docs/GAMES.md. Coordinates: stick x right and y down, both -1..1 (0 inside the dead zone); pointer x and y 0..1 inside its area; tilt beta and gamma in degrees.
+// A Bluetooth/USB controller paired to the phone itself (not the screen) is read the same way the screen reads one of its own, via LocalPads (gamepad.js):
+// its stick and button edges are sent over the room channel exactly like a touch widget's, so the game on the screen cannot tell the difference.
 //   const pad = new Pad({root: element, name: 'Ben', code: 'ABCD'});   pad.room is the Room; pad.layout is the last layout from the screen
 'use strict';
 (function () {
@@ -13,6 +15,7 @@
     this.layout = null; this.screen = ''; this.seq = 0; this.veil = null;
     this.st = { stick: { x: 0, y: 0, dirty: false, at: 0 }, ptr: { x: 0, y: 0, d: 0, dirty: false, at: 0 }, tilt: { b: 0, g: 0, dirty: false, at: 0, on: false } };
     this.room = new Room({ name: this.name, code: o.code || '', joinPath: '/pad' });
+    this.lp = (typeof LocalPads !== 'undefined') ? new LocalPads() : null; // a controller paired to this phone, see gamepad.js
     window.room = this.room;
     this.room.on('ready', function () { self._hello(); self._paint(); })
       .on('peer', function (p) { self._hello(p.id); })
@@ -21,7 +24,7 @@
       .on('message', function (m) { self._msg(m); })
       .on('status', function () { self._paint(); })
       .on('closed', function (c) { self.closed = c.reason; self._paint(); });
-    this._tm = setInterval(function () { self._flush(); }, RATE);
+    this._tm = setInterval(function () { self._pollLocalPad(); self._flush(); }, RATE);
     this._hb = setInterval(function () { self._to({ t: 'hb' }, { unreliable: true }); }, 1000); // lets the screen tell a phone that went to sleep from one that is just still
     this._hl = setInterval(function () { if (!self.layout && self.room.status === 'online') self._hello(); }, 1500); // until a screen answers
     window.addEventListener('resize', function () { self._paint(); }); // an orientation hint is re-checked
@@ -54,6 +57,21 @@
     if (s.tilt.dirty && s.tilt.on) { s.tilt.dirty = false; this._in('tilt', { b: s.tilt.b, g: s.tilt.g }); }
   };
   P.button = function (name, down) { this._to({ t: 'b', b: name, d: down ? 1 : 0 }); if (down) this.vibrate(12); };
+  P._setStick = function (x, y) { // shared by the touch stick and a local Bluetooth/USB controller's axes
+    var s = this.st.stick; if (s.x === x && s.y === y) return;
+    var edge = !(s.x || s.y) !== !(x || y); // starting or stopping: send at once, not at the next tick
+    s.x = x; s.y = y; s.dirty = true;
+    if (edge) this._flush();
+  };
+  // Polled every tick like console.js does for the screen's own local pads: the Gamepad API has no per-button events, LocalPads turns the snapshot into edges.
+  // Only the lowest-index pad drives the stick (a phone pairs with one controller at a time); its buttons are forwarded exactly like a tap on the touch widget.
+  P._pollLocalPad = function () {
+    if (!this.lp) return;
+    var self = this, first = null;
+    this.lp.poll(function () {}, function () {}, function (p, name, down) { self.button(name, down); });
+    this.lp.list.forEach(function (p) { if (!first || p.id < first.id) first = p; });
+    this._setStick(first ? first.stick.x : 0, first ? first.stick.y : 0);
+  };
 
   // ---- widgets ----
   P._build = function () {
@@ -79,12 +97,7 @@
   P._stick = function (dpad) {
     var self = this, base = el('div', 'stick' + (dpad ? ' dpad' : '')), knob = el('div', 'knob'), pid = null;
     base.append(knob);
-    var set = function (x, y) {
-      var s = self.st.stick; if (s.x === x && s.y === y) return;
-      var edge = !(s.x || s.y) !== !(x || y); // starting or stopping: send at once, not at the next tick
-      s.x = x; s.y = y; s.dirty = true;
-      if (edge) self._flush();
-    };
+    var set = function (x, y) { self._setStick(x, y); };
     var move = function (e) {
       var b = base.getBoundingClientRect(), rad = b.width / 2, dx = (e.clientX - (b.left + rad)) / rad, dy = (e.clientY - (b.top + rad)) / rad, v = Math.hypot(dx, dy);
       if (v > 1) { dx /= v; dy /= v; v = 1; }
