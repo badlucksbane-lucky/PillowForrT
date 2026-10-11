@@ -270,7 +270,28 @@ async function renderSheet(rid){await btStatus();showSheet(true);panel.replaceCh
  try{if(S.tab==='movies')await openMovie(S.id,rid);else if(S.tab==='series')await openSeries(S.id,rid);else if(S.tab==='anime')await openAnime(S.id,rid)}
  catch(e){if(rid===S.sid)panel.replaceChildren(grab(),fail('Could not load this title',()=>renderSheet(rid)))}}
 // ---------- the player: WebTorrent in this page, its TCP peers carried by the box (btclient/) ----------
-const BT={status:null,at:0,client:null,cur:null,timers:[],ac:null};
+const BT={status:null,at:0,client:null,cur:null,timers:[],ac:null,want:new Set(),locks:new Map()};
+// <store-sweep>
+// Downloaded pieces live in the browser's private file system (OPFS), in a folder "<torrent name> - <first 8 of the info-hash>" (and chunks/<same>). destroy() clears them when the player closes, but a tab that is closed
+// or killed while playing never gets that far, and its data would stay on the device for good. So each tab holds a shared Web Lock named for the info-hash of every torrent it plays, and sweepStore() deletes whatever in
+// OPFS has no lock held: at page load, and after each stop. Data is kept for as long as a tab is using it, and not a moment after. Without Web Locks nothing is swept (a live tab cannot be told from a dead one).
+const STORE_LOCK='pf-bt:';
+function holdStore(infoHash){if(!navigator.locks||!/^[0-9a-f]{8,}$/i.test(infoHash||''))return;const name=STORE_LOCK+infoHash.slice(0,8).toLowerCase();
+ if(BT.want.has(name))return;BT.want.add(name); // a stop before the lock is granted must still let it go: want is the truth, the release function only exists once granted
+ navigator.locks.request(name,{mode:'shared'},()=>new Promise(res=>{if(!BT.want.has(name))return res();BT.locks.set(name,res)})).catch(()=>{})}
+function releaseStore(){BT.want.clear();BT.locks.forEach(r=>r());BT.locks.clear()}
+async function sweepStore(){try{
+ if(!navigator.locks||!navigator.storage||!navigator.storage.getDirectory)return;
+ const held=new Set(((await navigator.locks.query()).held||[]).map(l=>l.name).filter(n=>n.startsWith(STORE_LOCK)).map(n=>n.slice(STORE_LOCK.length)));
+ const live=n=>{const m=/ - ([0-9a-f]{8})$/.exec(n);return !!m&&held.has(m[1])};
+ const names=async d=>{const a=[];for await(const [n] of d.entries())a.push(n);return a};
+ const root=await navigator.storage.getDirectory();
+ for(const n of await names(root)){
+  if(n==='chunks'){const d=await root.getDirectoryHandle('chunks');for(const c of await names(d))if(!live(c))await d.removeEntry(c,{recursive:true}).catch(()=>{})}
+  else if(!live(n))await root.removeEntry(n,{recursive:true}).catch(()=>{})}
+}catch(e){}}
+// </store-sweep>
+sweepStore();window.addEventListener('pagehide',()=>{try{stopPlayer()}catch(e){}}); // a tab that goes away takes its downloaded data with it (sweepStore in the next tab catches what this cannot finish)
 async function btStatus(force){if(!force&&BT.status&&Date.now()-BT.at<8000)return BT.status;try{BT.status=await jf('/api/bt',{credentials:'same-origin'})}catch(e){BT.status={available:false}}BT.at=Date.now();return BT.status}
 const loadScript=src=>new Promise((ok,no)=>{const e=document.createElement('script');e.src=src;e.onload=ok;e.onerror=()=>no(new Error('could not load the player'));document.head.append(e)});
 async function engine(){if(BT.client)return BT.client;
@@ -287,7 +308,8 @@ const playerEl=$('#player'),pv=$('#pv'),pstat=$('#pstat'),ppick=$('#ppick');
 const fmtSpeed=n=>n>1048576?(n/1048576).toFixed(1)+' MB/s':Math.round(n/1024)+' KB/s';
 function stopPlayer(){BT.timers.forEach(clearInterval);BT.timers=[];if(BT.audio){BT.audio.dispose();BT.audio=null}if(BT.ac){BT.ac.abort();BT.ac=null}
  const v=pv.querySelector('video');if(v){v.pause();v.removeAttribute('src');v.load()}
- if(BT.cur){try{BT.cur.destroy({destroyStore:true})}catch(e){}BT.cur=null}}
+ if(BT.cur){try{BT.cur.destroy({destroyStore:true})}catch(e){}BT.cur=null}
+ releaseStore();setTimeout(sweepStore,2000)}
 function closePlayer(fromPop){if(!playerEl.classList.contains('open'))return;stopPlayer();pv.replaceChildren();ppick.hidden=true;playerEl.classList.remove('open');playerEl.inert=true;document.body.classList.toggle('lock',sheet.classList.contains('open'));if(!fromPop&&history.state&&history.state.player)history.back()}
 window.addEventListener('popstate',()=>{if(playerEl.classList.contains('open'))closePlayer(true)});
 $('#pclose').addEventListener('click',()=>closePlayer());
@@ -300,7 +322,8 @@ async function play(hash,name,mg,want){
  let c;try{c=await engine()}catch(e){say(e.message,true);return}
  c.throttleDownload(st.download===0?-1:(st.download||256)*1024);// the box's Download setting (KB/s, 0 = no limit), 256 until it is set
  const up=st.upload||'off';c.throttleUpload(up==='normal'?524288:up==='low'?131072:1024);// off: no upload slots at all, so nothing is served to other peers
- const t=BT.cur=c.add('magnet:?xt=urn:btih:'+hash+'&dn='+encodeURIComponent(name),{destroyStoreOnDestroy:true,uploads:up==='off'?false:10});
+ const t=BT.cur=c.add('magnet:?xt=urn:btih:'+hash+'&dn='+encodeURIComponent(name),{destroyStoreOnDestroy:true,storeCacheSlots:0,uploads:up==='off'?false:10}); // no piece cache in memory: it streams in fine from the store
+ holdStore(t.infoHash);t.on('infoHash',()=>holdStore(t.infoHash));
  let started=Date.now(),wires=0,file=null,note='';const bar=h('i'),line=h('div',{class:'row2'}),aud=h('div',{class:'note',style:'color:var(--warn)',hidden:true});pstat.replaceChildren(h('div',{class:'bar'},bar),line,aud);
  const draw=()=>{if(BT.cur!==t)return;const sec=(Date.now()-started)/1000;let msg=!t.infoHash?'Starting…':!t.metadata?(wires?'Fetching the file list…':sec>40?'No peers found for this torrent':'Finding peers…'):(file?(wires?'Buffering…':'Looking for peers…'):'Choose a file');
   if(file&&video().readyState>=3&&!video().paused)msg='Playing';
