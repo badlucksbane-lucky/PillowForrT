@@ -279,7 +279,7 @@ async function engine(){if(BT.client)return BT.client;
  const reg=await navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{throw new Error('The player needs this browser to trust the box certificate')});
  await navigator.serviceWorker.ready;
  if(!navigator.serviceWorker.controller)await new Promise(r=>{navigator.serviceWorker.addEventListener('controllerchange',r,{once:true});setTimeout(r,3000)});
- const c=new WebTorrent({tracker:false,lsd:false,secure:0,maxConns:25,uploadLimit:1024});c.on('error',()=>{});c.createServer({controller:reg});BT.client=c;return c}
+ const c=new WebTorrent({tracker:false,lsd:false,secure:0,maxConns:8,uploadLimit:1024,downloadLimit:262144});c.on('error',()=>{});c.createServer({controller:reg});BT.client=c;return c}
 // AC-3 and E-AC-3 sound the browser cannot decode: /bt/audio.js (Mediabunny + the FFmpeg decoder in WASM) decodes it in the page and plays it through Web Audio, clocked to the video
 async function softAudio(v,a,aud){aud.textContent='Decoding '+a.name+' in the page…';aud.hidden=false;await loadScript('/bt/audio.js');
  const h=await PFAudio.attach(v,m=>{aud.textContent=m;aud.hidden=false});if(!v.isConnected){h.dispose();return}BT.audio=h;aud.hidden=true}
