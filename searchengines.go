@@ -461,7 +461,11 @@ func wolframToken(ctx context.Context, c *http.Client) (string, error) {
 	return wolframTok, nil
 }
 
+// fetchWolfram bounds itself to 6s rather than riding the full per-search budget: the token endpoint either answers fast or, on this reverse-engineered path, hangs or 502s for seconds on
+// end, and letting it do that would make this one unreliable engine set the wait time for every web search.
 func fetchWolfram(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
 	tok, err := wolframToken(ctx, c)
 	if err != nil {
 		return nil, err
