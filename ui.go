@@ -1171,6 +1171,10 @@ func handleAPI(w http.ResponseWriter, r *http.Request) {
 		handleSearchAPI(w, r, path)
 		return
 	}
+	if path == "retro" || strings.HasPrefix(path, "retro/") {
+		handleRetroAPI(w, r, path)
+		return
+	}
 	if isSettingsPath(path) {
 		handleSettings(w, r, path)
 		return

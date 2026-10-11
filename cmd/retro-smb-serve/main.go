@@ -11,17 +11,10 @@
 // ~/smb-proxy's have nothing to hook): this binary is cross-built the same
 // way (see build.sh) and talks SMB itself instead.
 //
-// Config is a flat key=value file, not flags/env, so the password never shows
-// up in `ps`:
-//
-//	server=192.168.1.5
-//	share=roms
-//	user=retro
-//	password=hunter2
-//	workgroup=WORKGROUP   (optional, default WORKGROUP)
-//	bind=127.0.0.1        (optional, default 127.0.0.1)
-//	port=8765             (optional, default 8765; the local HTTP port)
-//	smb_port=445          (optional, default 445; the remote SMB port)
+// Config is a flat key=value file (see internal/retrosmbconf), not
+// flags/env, so the password never shows up in `ps`. It is also the format
+// the box's own admin API (retro_smb_admin.go) writes when it saves this
+// from the admin page - the two never need to agree with each other by hand.
 //
 // The share's root must contain cores/ and roms/ subfolders, same as
 // pi-serve.py's --dir. Read only: no method but GET/HEAD is accepted.
@@ -31,7 +24,6 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -45,68 +37,19 @@ import (
 	"time"
 
 	smb2 "github.com/hirochachacha/go-smb2"
+
+	"tinyfwd/internal/retrosmbconf"
 )
 
 // retroFileName is the same shape retro.go and pi-serve.py accept.
 var retroFileName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._()'+,&-]{0,120}$`)
-
-type config struct {
-	server, share, user, password, workgroup string
-	bind                                      string
-	port, smbPort                             int
-}
-
-func loadConfig(path string) (*config, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	cfg := &config{workgroup: "WORKGROUP", bind: "127.0.0.1", port: 8765, smbPort: 445}
-	for _, line := range strings.Split(string(b), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, val, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key, val = strings.TrimSpace(key), strings.TrimSpace(val)
-		switch key {
-		case "server":
-			cfg.server = val
-		case "share":
-			cfg.share = val
-		case "user":
-			cfg.user = val
-		case "password":
-			cfg.password = val
-		case "workgroup":
-			cfg.workgroup = val
-		case "bind":
-			cfg.bind = val
-		case "port":
-			if n, err := strconv.Atoi(val); err == nil && n > 0 {
-				cfg.port = n
-			}
-		case "smb_port":
-			if n, err := strconv.Atoi(val); err == nil && n > 0 {
-				cfg.smbPort = n
-			}
-		}
-	}
-	if cfg.server == "" || cfg.share == "" || cfg.user == "" {
-		return nil, fmt.Errorf("%s: need at least server=, share= and user=", path)
-	}
-	return cfg, nil
-}
 
 // smbServer holds one lazily-(re)connected SMB session. A connection is
 // opened on first use and kept until a request fails, at which point it is
 // dropped and the next request reconnects - the box has no business retrying
 // forever in the background for a share that may be off for hours.
 type smbServer struct {
-	cfg *config
+	cfg *retrosmbconf.Config
 
 	mu    sync.Mutex
 	conn  net.Conn
@@ -115,15 +58,15 @@ type smbServer struct {
 }
 
 func (s *smbServer) connectLocked() error {
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(s.cfg.server, strconv.Itoa(s.cfg.smbPort)), 5*time.Second)
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(s.cfg.Server, strconv.Itoa(s.cfg.SMBPort)), 5*time.Second)
 	if err != nil {
 		return err
 	}
 	d := &smb2.Dialer{
 		Initiator: &smb2.NTLMInitiator{
-			User:     s.cfg.user,
-			Password: s.cfg.password,
-			Domain:   s.cfg.workgroup,
+			User:     s.cfg.User,
+			Password: s.cfg.Password,
+			Domain:   s.cfg.Workgroup,
 		},
 	}
 	sess, err := d.Dial(conn)
@@ -131,7 +74,7 @@ func (s *smbServer) connectLocked() error {
 		conn.Close()
 		return err
 	}
-	share, err := sess.Mount(s.cfg.share)
+	share, err := sess.Mount(s.cfg.Share)
 	if err != nil {
 		sess.Logoff()
 		conn.Close()
@@ -174,8 +117,12 @@ func (s *smbServer) withShare(fn func(*smb2.Share) error) error {
 // listFiles lists the plain files directly under sub, plus (one level only,
 // not recursive) the plain files in any subfolder of sub - so ROMs can be
 // dropped into organizing folders like roms/NES/ and still show up to
-// retro.go as flat names, same as a file placed directly in roms/.
-func (s *smbServer) listFiles(sub string) []string {
+// retro.go as flat names, same as a file placed directly in roms/. The bool
+// says whether the SMB connection itself worked, independent of whether any
+// matching files were found - an empty result from a share with the wrong
+// password looks the same as an empty result from a share with no ROMs yet
+// unless the caller can tell "connected" apart from "couldn't connect".
+func (s *smbServer) listFiles(sub string) ([]string, bool) {
 	var out []string
 	err := s.withShare(func(sh *smb2.Share) error {
 		ents, err := sh.ReadDir(sub)
@@ -212,10 +159,10 @@ func (s *smbServer) listFiles(sub string) []string {
 	})
 	if err != nil {
 		log.Printf("list %s: %v", sub, err)
-		return nil
+		return nil, false
 	}
 	sort.Strings(out)
-	return out
+	return out, true
 }
 
 // listSubdirs returns the immediate subfolder names of sub (organizing
@@ -299,9 +246,17 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.URL.Path == "/list.json" {
-		body, _ := json.Marshal(map[string][]string{
-			"cores": h.s.listFiles("cores"),
-			"roms":  h.s.listFiles("roms"),
+		cores, coresOK := h.s.listFiles("cores")
+		roms, romsOK := h.s.listFiles("roms")
+		// share_ok is extra for retro.go (which only reads cores/roms and
+		// ignores unknown fields) and load-bearing for the admin page's
+		// status check (see retroSmbRunning in retro_smb_admin.go): an
+		// empty list here is otherwise indistinguishable from "share
+		// unreachable" (wrong password, wrong server, share down).
+		body, _ := json.Marshal(map[string]any{
+			"cores":    cores,
+			"roms":     roms,
+			"share_ok": coresOK && romsOK,
 		})
 		send(w, http.StatusOK, body, "application/json")
 		return
@@ -346,14 +301,14 @@ func main() {
 	cfgPath := flag.String("config", "/data/proxy/retro-smb.conf", "key=value config file (server=, share=, user=, password=, workgroup=, bind=, port=)")
 	flag.Parse()
 
-	cfg, err := loadConfig(*cfgPath)
+	cfg, err := retrosmbconf.Load(*cfgPath)
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
 
 	s := &smbServer{cfg: cfg}
-	addr := net.JoinHostPort(cfg.bind, strconv.Itoa(cfg.port))
-	log.Printf("retro-smb-serve: %s/%s on http://%s (user %s)", cfg.server, cfg.share, addr, cfg.user)
+	addr := net.JoinHostPort(cfg.Bind, strconv.Itoa(cfg.Port))
+	log.Printf("retro-smb-serve: %s/%s on http://%s (user %s)", cfg.Server, cfg.Share, addr, cfg.User)
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           &handler{s: s},

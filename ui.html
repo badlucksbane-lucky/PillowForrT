@@ -122,6 +122,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 <div class="card" id="c-mv"><h2>Mullvad <span id="vpnbadge"></span></h2><div id="vpn" class="mut">loading</div><div id="vmsg" class="msg"></div></div>
 <div class="card" id="c-tor"><h2>Tor <span id="torbadge"></span></h2><div id="tor" class="mut">loading</div><div id="tormsg" class="msg"></div></div>
 <div class="card" id="c-search"><h2>Search</h2><div id="se" class="mut">loading</div><div id="semsg" class="msg"></div></div>
+<div class="card" id="c-retro"><h2>Retro ROMs <span id="rtbadge"></span></h2><div id="rt" class="mut">loading</div><div id="rtmsg" class="msg"></div></div>
 <div class="card" id="c-wall"><h2>Detectors <span id="dtbadge"></span></h2><div class="wall" id="wall"></div></div>
 <div class="sec">Monitoring</div>
 <div class="card"><h2>Events <span id="evbadge"></span></h2><div id="ev" class="mut">loading</div><div id="evmsg" class="msg"></div></div>
@@ -839,6 +840,20 @@ function shrender(force){const el=$('ssh');if(!Sh||guard(el,force))return;
 async function shload(){try{Sh=await (await api('/api/ssh')).json();shrender()}catch(e){}}
 async function shadd(){const r=await apost('ssh/add',{key:$('sh_key').value});$('smsg').textContent=r.j.error||r.j.status||'';if(r.ok)$('sh_key').value='';shload()}
 async function shdel(fp,nm){if(!confirm('Remove the key '+(nm||fp)+'? Whoever holds it can no longer log in over ssh.'))return;const r=await apost('ssh/delete',{fingerprint:fp});$('smsg').textContent=r.j.error||r.j.status||'';shload()}
+let Rt=null;
+function rtrender(force){const el=$('rt');if(!Rt||guard(el,force))return;
+ const badge=!Rt.configured?['',' ']:!Rt.running?['not responding','bad']:!Rt.share_ok?['share unreachable','bad']:['connected','ok'];
+ $('rtbadge').innerHTML=Rt.configured?chip(badge[0],badge[1]):'';
+ el.innerHTML=(!Rt.configured?'<div class="mut">Not set up yet: fill in the SMB share that holds cores/ and roms/, then save.</div>':
+   Rt.running&&!Rt.share_ok?'<div class="err">The bridge is running but cannot reach the SMB share - double check the server, user and password below (an empty roms/cores list elsewhere does not mean it is working).</div>':
+   !Rt.running?'<div class="err">The bridge process is not answering at all.</div>':
+   '<div class="mut">SMB share &lsquo;'+esc(Rt.share)+'&rsquo; on '+esc(Rt.server)+', connected.</div>')+
+  '<div class="row" style="margin-top:8px"><input id="rt_server" placeholder="server (e.g. 192.168.1.2)" value="'+esc(Rt.server||'')+'" style="flex:1"><input id="rt_share" placeholder="share name" value="'+esc(Rt.share||'')+'" style="flex:1"></div>'+
+  '<div class="row" style="margin-top:8px"><input id="rt_user" placeholder="user" value="'+esc(Rt.user||'')+'" style="flex:1"><input id="rt_pass" type="password" autocomplete="off" placeholder="'+(Rt.configured?'password (leave blank to keep)':'password')+'" style="flex:1"></div>'+
+  '<div class="row" style="margin-top:8px"><input id="rt_workgroup" placeholder="workgroup" value="'+esc(Rt.workgroup||'WORKGROUP')+'" style="flex:1"><button class="on" onclick="rtset()">Save and restart</button></div>'+
+  '<div class="mut" style="margin-top:4px">ROMs go in the share’s roms/ folder, cores in cores/. Drop ROMs straight in roms/ or one level into an organizing folder (e.g. roms/NES/) - either way they show up to the game.</div>'}
+async function rtload(){try{Rt=await (await api('/api/retro')).json();rtrender()}catch(e){}}
+async function rtset(){const b={server:$('rt_server').value,share:$('rt_share').value,user:$('rt_user').value,workgroup:$('rt_workgroup').value};const pw=$('rt_pass').value;if(pw)b.password=pw;const r=await apost('retro/set',b);$('rtmsg').textContent=r.j.error||(r.ok?'Saved'+(r.j.restarted?' and restarted.':'; restart it yourself to apply (no init script found).'):'');if(r.ok){$('rt_pass').value='';Rt=r.j;rtrender(true)}}
 let Sm=null,SmAll=false;
 function smrender(force){const el=$('sms');if(!Sm||guard(el,force))return;
  const list=SmAll?Sm.messages:Sm.messages.slice(0,15);
@@ -1084,7 +1099,7 @@ setInterval(()=>{if(!Km||document.hidden)return;const l=kmLeft(),k=kmLock(),a=$(
  if(a)a.textContent=kmfmt(l);if(b)b.textContent=kmfmt(k);
  if((Km.unlocked&&!l)||(Km.locked_for&&!k))kmload()},1000);
 // </kids-card>
-async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();dnsPath(V.own);vrender(V);node(await rc.json());if(tickN++%3===0){kmload();wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Tc)tcload();if(tickN%3===0||!Dx)dxload();if(tickN%3===0||!La)laload();if(tickN%3===0||!Df)dfload();if(tickN%3===0||!Dm)dmload();if(tickN%3===0||!Tt)ttload();if(tickN%3===0||!At)atload();if(tickN%3===0||!St)stload();if(tickN%6===0||!Rb)rbload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%6===5||!Se)seload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===3||!Xp)xpload();if(tickN%3===2||!Tw)twload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
+async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();dnsPath(V.own);vrender(V);node(await rc.json());if(tickN++%3===0){kmload();wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();rtload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Tc)tcload();if(tickN%3===0||!Dx)dxload();if(tickN%3===0||!La)laload();if(tickN%3===0||!Df)dfload();if(tickN%3===0||!Dm)dmload();if(tickN%3===0||!Tt)ttload();if(tickN%3===0||!At)atload();if(tickN%3===0||!St)stload();if(tickN%6===0||!Rb)rbload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%6===5||!Se)seload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===3||!Xp)xpload();if(tickN%3===2||!Tw)twload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
 
 (function(){
  let st={};try{st=JSON.parse(localStorage.getItem('cc')||'{}')}catch(e){}
