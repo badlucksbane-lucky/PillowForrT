@@ -638,3 +638,25 @@ func TestKidsClearAPI(t *testing.T) {
 		t.Errorf("without a ratings service nothing is allowed: %d %v", code, v)
 	}
 }
+
+func TestKidsStateSaysWhetherRatingsAreSetUp(t *testing.T) {
+	k, _, _ := newKidsHTTP(t)
+	oldR := ratingMgrG
+	defer func() { ratingMgrG = oldR }()
+	ratingMgrG = nil
+	if _, v := k.do("GET", "/api/kids", "", nil); v["ratings_key"] != false {
+		t.Errorf("no ratings service: %v", v)
+	}
+	rm, _, _ := testRatings(t)
+	ratingMgrG = rm
+	if _, v := k.do("GET", "/api/kids", "", nil); v["ratings_key"] != true {
+		t.Errorf("a key in place: %v", v)
+	}
+	os.Remove(rm.keyFile)
+	if _, v := k.do("GET", "/api/kids", "", nil); v["ratings_key"] != false {
+		t.Errorf("the key file removed: %v", v)
+	}
+	if _, v := k.do("POST", "/api/kids/lock", `{}`, nil); v["ratings_key"] != false {
+		t.Errorf("every answer carries it: %v", v)
+	}
+}

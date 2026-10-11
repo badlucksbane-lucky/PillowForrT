@@ -406,7 +406,15 @@ type kidsView struct {
 	UnlockLeft int      `json:"unlock_left"` // seconds
 	LockedFor  int      `json:"locked_for"`  // seconds the PIN is locked out, 0 when it is not
 	TriesLeft  int      `json:"tries_left"`
+	RatingsKey bool     `json:"ratings_key"` // a TMDB key is set, so movies and series can be rated; without it Kids mode hides them all
 	Devices    []string `json:"devices"`
+}
+
+// viewOf is what the API returns: the manager's view plus whether ratings are set up (rating.go).
+func (m *kidsMgr) viewOf(sid string) kidsView {
+	v := m.View(sid)
+	v.RatingsKey = ratingMgrG.Configured()
+	return v
 }
 
 func (m *kidsMgr) View(sid string) kidsView {
@@ -456,7 +464,7 @@ func handleKidsAPI(w http.ResponseWriter, r *http.Request, path string) {
 	}
 	sid := kidsSID(r)
 	if path == "kids" && r.Method == http.MethodGet { // the state: also for the script token, which sees a locked view
-		writeJSON(w, 200, m.View(sid))
+		writeJSON(w, 200, m.viewOf(sid))
 		return
 	}
 	// everything else changes something: a signed-in web session only. The script API token never changes Kids mode.
@@ -489,10 +497,10 @@ func handleKidsAPI(w http.ResponseWriter, r *http.Request, path string) {
 			kidsFail(w, err)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"unlocked_for": int(left.Seconds()), "view": m.View(sid)})
+		writeJSON(w, 200, map[string]any{"unlocked_for": int(left.Seconds()), "view": m.viewOf(sid)})
 	case "kids/lock":
 		m.Lock(sid)
-		writeJSON(w, 200, m.View(sid))
+		writeJSON(w, 200, m.viewOf(sid))
 	case "kids/set":
 		if b.On == nil && b.Devices == nil {
 			writeJSON(w, 400, map[string]string{"error": "nothing to change"})
@@ -510,7 +518,7 @@ func handleKidsAPI(w http.ResponseWriter, r *http.Request, path string) {
 				return
 			}
 		}
-		writeJSON(w, 200, m.View(sid))
+		writeJSON(w, 200, m.viewOf(sid))
 	case "kids/clear": // the page is about to play a torrent: is its title allowed?
 		h := strings.ToLower(b.Hash)
 		if !validHash(h) || (b.Kind != "movie" && b.Kind != "series" && b.Kind != "anime") {
@@ -533,7 +541,7 @@ func handleKidsAPI(w http.ResponseWriter, r *http.Request, path string) {
 			kidsFail(w, err)
 			return
 		}
-		writeJSON(w, 200, m.View(sid))
+		writeJSON(w, 200, m.viewOf(sid))
 	default:
 		http.Error(w, "not found", 404)
 	}

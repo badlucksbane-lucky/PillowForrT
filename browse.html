@@ -32,6 +32,7 @@ main{max-width:1100px;margin:0 auto;padding:10px 12px calc(40px + env(safe-area-
 .chip{flex:none;min-height:36px;padding:0 14px;border-radius:18px;border:1px solid var(--ln);background:var(--card);white-space:nowrap}
 .chip.on{background:var(--ac);color:var(--onac);border-color:var(--ac)}
 .sec{display:flex;align-items:baseline;justify-content:space-between;margin:14px 2px 4px}.sec h2{font-size:18px;margin:0}.sec a{color:var(--mut);font-size:13px;text-decoration:none}
+.kb{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--mut);margin:6px 0}.tabs [hidden]{display:none}
 .sortbar{margin:2px 0 6px}.sortbar button{min-height:30px;padding:0 12px;font-size:13px}
 .seg{display:inline-flex;margin:8px 0 4px}.seg button{min-height:34px;padding:0 14px;border:1px solid var(--ln);background:var(--card);margin-left:-1px}.seg button:first-child{border-radius:17px 0 0 17px;margin:0}.seg button:last-child{border-radius:0 17px 17px 0}.seg button.on{background:var(--ac);color:var(--onac);border-color:var(--ac);position:relative}
 .card{display:block;flex:none;width:132px;scroll-snap-align:start;text-decoration:none;position:relative}
@@ -138,7 +139,59 @@ async function alList(cat,o={}){const ex=o.g==='Adventure'?['Action']:null; // A
  const items=await cached(k,HOUR,async()=>((await jf(AL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query($p:Int,$s:[MediaSort],$g:String,$q:String,$ex:[String]){Page(page:$p,perPage:30){media(type:ANIME,sort:$s,genre:$g,search:$q,isAdult:false,genre_not_in:$ex){'+AF+'}}}',variables:v})})).data.Page.media||[]).map(slimA));return {items,more:items.length>=30}}
 async function alOne(id){return cached('al1:'+id,DAY,async()=>slimA((await jf(AL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query($i:Int){Media(id:$i,type:ANIME){'+AF+'}}',variables:{i:+id}})})).data.Media))}
 async function alGenres(){return cached('al:genres',7*DAY,async()=>((await jf(AL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query{GenreCollection}'})})).data.GenreCollection||[]).filter(x=>x!=='Hentai'))}
-const list=(tab,cat,o)=>tab==='anime'?alList(cat,o):cmList(tab,cat,o);
+const rawList=(tab,cat,o)=>tab==='anime'?alList(cat,o):cmList(tab,cat,o);
+// <kids-browse>
+// Kids mode in Browse (kids.go, rating.go). While it is on: a movie, series or anime is shown only when the box says its rating was FOUND and is allowed (/api/rating); a title with no rating, a lookup that
+// failed, or no TMDB key at all is hidden. The lists, the detail sheet and Play all ask, and the box asks again on its own (the torrent bridge refuses a title that was not cleared), so this page is the
+// convenience and the box is the lock. The Web tab and the Nyaa search are gone while it is on.
+let KIDS={on:false,key:true,at:0},CUR=null,KIDS_CSRF='';
+async function kidsState(force){
+ if(!force&&Date.now()-KIDS.at<15000)return KIDS;
+ try{const v=await jf('/api/kids',{credentials:'same-origin',ms:8000});KIDS={on:!!v.on,key:v.ratings_key!==false,at:Date.now()}}
+ catch(e){KIDS.at=Date.now()-10000} // the last known state stands and it is asked again in a few seconds
+ return KIDS}
+const KIND={movies:'movie',series:'series',anime:'anime'};
+const RMEMO=new Map();
+// ratings for ids of one kind: remembered ones at once, the rest from the box in batches of 60; a title the box is still looking up is asked about again a few times
+async function ratingsFor(kind,ids){
+ const out={};let need=[];
+ ids.forEach(id=>{const r=RMEMO.get(kind+':'+id);if(r)out[id]=r;else need.push(id)});
+ for(let tries=0;need.length&&tries<4;tries++){
+  const next=[];
+  for(let i=0;i<need.length;i+=60){
+   const chunk=need.slice(i,i+60),d=await jf('/api/rating?kind='+kind+'&ids='+chunk.map(encodeURIComponent).join(','),{credentials:'same-origin',ms:30000});
+   chunk.forEach(id=>{const r=(d.ratings||{})[id];
+    if(r&&!r.pending){out[id]=r;if(r.why!=='lookup failed'&&r.why!=='no key'){if(RMEMO.size>5000)RMEMO.clear();RMEMO.set(kind+':'+id,r)}}else next.push(id)})}
+  need=next;if(need.length)await new Promise(r=>setTimeout(r,1500))}
+ need.forEach(id=>{out[id]={ok:false,why:'checking'}});
+ return out}
+async function kidsFilter(tab,items){
+ const kind=KIND[tab];if(!kind||!items.length)return items;
+ const r=await ratingsFor(kind,[...new Set(items.map(i=>String(i.id)))]);
+ return items.filter(i=>(r[String(i.id)]||{}).ok===true)}
+async function kidsAllows(kind,id){
+ const k=await kidsState();if(!k.on)return true;
+ const r=await ratingsFor(kind,[String(id)]);return (r[String(id)]||{}).ok===true}
+// the lists: with Kids mode on a page of results can lose most of its titles, so up to 4 pages are read to fill one; KCUR remembers which source page each call of a list starts at
+const KCUR=new Map();
+async function list(tab,cat,o={}){
+ const k=await kidsState();if(!k.on)return rawList(tab,cat,o);
+ const key=[tab,cat,o.g||'',o.q||''].join('|'),n=o.page||0,cur=KCUR.get(key)||[0];
+ let p=cur[n]!==undefined?cur[n]:n,kept=[],more=false;
+ for(let i=0;i<4;i++){const r=await rawList(tab,cat,{...o,page:p});kept=kept.concat(await kidsFilter(tab,r.items));more=!!r.more;p++;if(!more||kept.length>=12)break}
+ cur[n+1]=p;KCUR.set(key,cur);return {items:kept,more}}
+// Play: the box checks the title's rating and clears the torrent for this session (the bridge needs it)
+async function kidsClear(hash){
+ const k=await kidsState();if(!k.on)return {ok:true};
+ if(!CUR)return {ok:false,error:'Hidden by Kids mode'};
+ try{if(!KIDS_CSRF)KIDS_CSRF=(await jf('/api/session',{credentials:'same-origin'})).csrf;
+  const r=await fetch('/api/kids/clear',{method:'POST',credentials:'same-origin',headers:{'X-CSRF-Token':KIDS_CSRF,'Content-Type':'application/json'},body:JSON.stringify({kind:CUR.kind,id:String(CUR.id),hash})});
+  const j=await r.json().catch(()=>({}));return r.ok?{ok:true}:{ok:false,error:j.error||'Hidden by Kids mode'}}
+ catch(e){return {ok:false,error:'Could not check this title'}}}
+const kidsBanner=()=>h('div',{class:'kb'},h('span',{class:'pill',text:'Kids mode'}),KIDS.key?null:h('span',{text:'Ratings are not set up, so movies and series are hidden'}));
+function kidsTabs(){kidsState().then(k=>{const b=$('#tabs [data-t="web"]');if(b)b.hidden=k.on;if(k.on&&S.tab==='web')go({tab:'movies',c:'',g:'',q:''},true)})}
+// </kids-browse>
+
 async function cmMeta(type,id){return cached('meta:'+type+':'+id,DAY,async()=>{const m=(await jf(CM+'/meta/'+(type==='movies'?'movie':'series')+'/'+id+'.json')).meta;if(!m)throw new Error('not found');
  const s=slim(m,type);return {...s,desc:m.description||'',runtime:m.runtime||'',bg:m.background||'',cast:(m.cast||[]).slice(0,6),director:(m.director||[]).slice(0,2),status:m.status||'',
   vids:(m.videos||[]).filter(v=>v.season!=null&&(v.episode||v.number)).map(v=>({s:+v.season,e:+(v.episode||v.number),n:v.name||v.title||'',d:v.released||v.firstAired||'',th:v.thumbnail||'',o:(v.overview||v.description||'').slice(0,300)}))}})}
@@ -191,6 +244,7 @@ function chipsBar(rid){
  return wrap}
 function catSeg(){return h('div',{class:'seg',role:'group','aria-label':'Order'},CATS[S.tab].map(([id,l])=>h('button',{class:(S.c||CATS[S.tab][0][0])===id?'on':'',text:l,onclick:()=>go({c:id})})))}
 function renderBrowse(pane,rid){
+ kidsState().then(k=>{if(k.on&&rid===S.rid)pane.prepend(kidsBanner())});
  if(!S.q)pane.append(chipsBar(rid));
  if(!S.q&&!S.g&&!S.c){ // rows
   CATS[S.tab].forEach(([id,label],i)=>{const box=h('div',{},skRow());pane.append(h('div',{class:'sec'},h('h2',{text:label}),h('a',{href:href({c:id}),text:'See all ›'})),box);
@@ -309,14 +363,17 @@ async function openAnime(id,rid){const m=await alOne(id);if(rid!==S.sid)return;c
  const epIn=h('input',{type:'number',min:'1',max:String(max),value:'1',inputmode:'numeric','aria-label':'Episode'}),setEp=n=>{ep=Math.min(max,Math.max(1,Math.round(+n)||1));epIn.value=ep;loadTio()};
  epIn.addEventListener('change',()=>setEp(epIn.value));
  const stepper=movie?null:h('div',{class:'refine'},h('button',{class:'btn ghost',type:'button',text:'‹','aria-label':'Previous episode',onclick:()=>setEp(ep-1)}),epIn,h('button',{class:'btn ghost',type:'button',text:'›','aria-label':'Next episode',onclick:()=>setEp(ep+1)}));
- panel.replaceChildren(grab(),heroFor(m,m.banner||m.poster),h('div',{class:'body'},bodyBase(m),h('div',{class:'h3',text:'Torrents'}),stepper,fc,tl,h('form',{class:'refine',onsubmit:ev=>{ev.preventDefault();loadNyaa()}},inp,h('button',{class:'btn ghost',type:'submit',text:'Nyaa'}))));
+ panel.replaceChildren(grab(),heroFor(m,m.banner||m.poster),h('div',{class:'body'},bodyBase(m),h('div',{class:'h3',text:'Torrents'}),stepper,fc,tl,KIDS.on?null:h('form',{class:'refine',onsubmit:ev=>{ev.preventDefault();loadNyaa()}},inp,h('button',{class:'btn ghost',type:'submit',text:'Nyaa'}))));
  if(m.color&&/^#[0-9a-f]{6}$/i.test(m.color))panel.style.borderTop='3px solid '+m.color;loadTio()}
 const closeBtn=()=>h('button',{class:'x','aria-label':'Close',text:'×',onclick:closeSheet});
 const grab=()=>h('div',{class:'grab'},closeBtn());
 function closeSheet(){if(S.fromApp){S.fromApp=false;history.back()}else go({id:''},true)}
 function showSheet(on){if(!on&&sheet.contains(document.activeElement))document.activeElement.blur();sheet.classList.toggle('open',on);sheet.inert=!on;document.body.classList.toggle('lock',on);if(!on){panel.style.transform='';panel.style.borderTop='';seasonSwipe=null}else{panel.scrollTop=0;panel.focus({preventScroll:true})}}
 async function renderSheet(rid){await btStatus();showSheet(true);panelIO.disconnect();panelIO=mkPosterIO();panel.replaceChildren(grab(),h('div',{class:'hero sk',style:'height:260px'}));
- try{if(S.tab==='movies')await openMovie(S.id,rid);else if(S.tab==='series')await openSeries(S.id,rid);else if(S.tab==='anime')await openAnime(S.id,rid)}
+ CUR=null;const kind=KIND[S.tab];
+ try{if(kind&&!(await kidsAllows(kind,S.id))){if(rid===S.sid)panel.replaceChildren(grab(),h('div',{class:'body'},h('div',{class:'msg',text:'Hidden by Kids mode'})));return}
+  CUR=kind?{kind,id:S.id}:null;
+  if(S.tab==='movies')await openMovie(S.id,rid);else if(S.tab==='series')await openSeries(S.id,rid);else if(S.tab==='anime')await openAnime(S.id,rid)}
  catch(e){if(rid===S.sid)panel.replaceChildren(grab(),fail('Could not load this title',()=>renderSheet(rid)))}}
 // ---------- the player: WebTorrent in this page, its TCP peers carried by the box (btclient/) ----------
 const BT={status:null,at:0,client:null,cur:null,timers:[],ac:null,want:new Set(),locks:new Map()};
@@ -478,6 +535,7 @@ async function play(hash,name,mg,want,epWant){
  if(!playerEl.classList.contains('open')){history.pushState({player:1},'');playerEl.classList.add('open');playerEl.inert=false;document.body.classList.add('lock')}
  const say=(msg,bad)=>pstat.replaceChildren(h('div',{class:'row2'},h('span',{class:bad?'err':'',text:msg}),h('span',{class:'pbtn'},/certificate/i.test(msg)?h('a',{class:'btn',href:'/api/cert/pillowforrt.crt',text:'Trust certificate'}):null,h('a',{class:'btn ghost',href:mg,text:'Open magnet'}))));
  say('Starting…');
+ const kc=await kidsClear(hash);if(!kc.ok){say(kc.error||'Hidden by Kids mode',true);return}
  const st=await btStatus(true);if(!st.enabled||st.ready){say(st.ready||'Playback is off',true);return}
  let c;try{c=await engine()}catch(e){say(e.message,true);return}
  c.throttleDownload(st.download===0?-1:(st.download||256)*1024);// the box's Download setting (KB/s, 0 = no limit), 256 until it is set
@@ -524,7 +582,7 @@ function hswipe(el,fn){let x0,y0,t0,on=false,car=null,edge=null;el.addEventListe
   car=e.target.closest&&e.target.closest('.scrollx');edge=car?{start:car.scrollLeft<=8,end:car.scrollLeft+car.clientWidth>=car.scrollWidth-8}:null},{passive:true});
  el.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-x0,dy=t.clientY-y0;
   if(Math.abs(dx)>70&&Math.abs(dx)>Math.abs(dy)*1.7&&Date.now()-t0<1000&&(!edge||(dx<0?edge.end:edge.start)))fn(dx)},{passive:true})}
-hswipe($('#main'),dx=>{if(sheet.classList.contains('open'))return;const i=TABS.indexOf(S.tab)+(dx<0?1:-1);if(i>=0&&i<TABS.length)go({tab:TABS[i],c:'',g:'',q:''})});
+hswipe($('#main'),dx=>{if(sheet.classList.contains('open'))return;const i=TABS.indexOf(S.tab)+(dx<0?1:-1);if(i>=0&&i<TABS.length&&!(TABS[i]==='web'&&KIDS.on))go({tab:TABS[i],c:'',g:'',q:''})});
 // a carousel scrolls sideways itself; a swipe only changes the tab once the carousel under the finger is at its edge
 (()=>{let y0=0,dy=0,on=false,t0=0;panel.addEventListener('touchstart',e=>{on=panel.scrollTop<=0&&e.touches.length===1;if(on){y0=e.touches[0].clientY;dy=0;t0=Date.now()}},{passive:true});
  panel.addEventListener('touchmove',e=>{if(!on)return;dy=e.touches[0].clientY-y0;if(dy>8){panel.classList.add('drag');panel.style.transform='translateY('+Math.max(0,dy-8)+'px)';if(e.cancelable)e.preventDefault()}else if(dy<0){on=false;panel.classList.remove('drag');panel.style.transform=''}},{passive:false});
@@ -533,7 +591,7 @@ $('#scrim').addEventListener('click',closeSheet);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&playerEl.classList.contains('open'))closePlayer();else if(e.key==='Escape'&&sheet.classList.contains('open'))closeSheet();else if(e.key==='/'&&document.activeElement.tagName!=='INPUT'){e.preventDefault();$('#q').focus()}});
 // ---------- render ----------
 function indicator(dir){const b=$('#tabs [data-t="'+S.tab+'"]'),ind=$('#ind');ind.style.width=b.offsetWidth*.5+'px';ind.style.transform='translateX('+(b.offsetLeft+b.offsetWidth*.25)+'px)'}
-function render(force){const p=parse(),prevTab=S.tab,key=p.tab+'|'+p.c+'|'+p.g+'|'+p.q,hadSheet=!!S.id;
+function render(force){kidsTabs();const p=parse(),prevTab=S.tab,key=p.tab+'|'+p.c+'|'+p.g+'|'+p.q,hadSheet=!!S.id;
  if(p.id&&!hadSheet&&S.key)S.fromApp=true;if(!p.id)S.fromApp=false;
  Object.assign(S,p);
  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===S.tab));indicator();

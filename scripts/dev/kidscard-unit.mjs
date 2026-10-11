@@ -72,6 +72,14 @@ const kinds = (srv) => srv.calls.map(c => c[0] + (c[1].on !== undefined ? ':' + 
   const all = mkServer({ on: false, pin: '1111', devices: ['aa:bb:cc:dd:ee:01', 'aa:bb:cc:dd:ee:02', 'aa:bb:cc:dd:ee:03', 'aa:bb:cc:dd:ee:04'] }); const p2 = mkPage(all); await p2.api.kmload();
   check('with every device chosen there is no empty add menu', !p2.els.km.innerHTML.includes('<select'), null); }
 
+{ const srv = mkServer({ on: true, pin: '1234' }); const view = srv.get; srv.get = (u) => u === '/api/kids' ? { ...view(u), ratings_key: false } : view(u);
+  const p = mkPage(srv); await p.api.kmload();
+  check('Kids mode on with no ratings key says so (movies and series are all hidden until there is one)', p.els.km.innerHTML.includes('No ratings key') && p.els.km.innerHTML.includes('cnt bad'), p.els.km.innerHTML);
+  srv.get = (u) => u === '/api/kids' ? { ...view(u), ratings_key: true } : view(u); await p.api.kmload();
+  check('and says nothing once there is a key', !p.els.km.innerHTML.includes('No ratings key'), null);
+  srv.get = (u) => u === '/api/kids' ? { ...view(u), on: false, ratings_key: false } : view(u); await p.api.kmload();
+  check('or when Kids mode is off', !p.els.km.innerHTML.includes('No ratings key'), null); }
+
 // ---- the pad ----
 { const srv = mkServer({ pin: '1234' }); const p = mkPage(srv); await p.api.kmload(); p.api.kmunlock(() => {});
   check('the pad opens as a dialog titled "Parent PIN" with four empty dots and OK disabled', !p.els.kmpad.hidden && padTitle(p) === 'Parent PIN' && dots(p).join() === ',,,' && /class="on pok"[^>]* disabled/.test(p.els.kmpad.innerHTML), p.els.kmpad.innerHTML.slice(0, 200));
