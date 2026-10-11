@@ -148,6 +148,41 @@ await s.ev(`gc.start()`);
 check('a game that wants portrait says so on a landscape phone', true, null);
 check('a d-pad is built for it', await p1.until(`!!document.querySelector('.stick.dpad')`, 5000), await p1.ev(`document.body.innerText`));
 
+// Fort Pong with two real pages: the stick's vertical axis moves that player's paddle, A serves
+await s.ev(`gc.stop();gc.select('fortpong');1`);
+const q1 = p1, q2 = await padPage('Bo', code); // Ann (p1) is still in the room
+await q2.ev(`document.querySelector('#go').click();1`);
+check('two players enable Start for Fort Pong', await s.until(`gc.players.size===2&&gc.canStart()`, 8000), await s.ev(`[gc.players.size,gc.canStart()]`));
+await s.ev(`gc.start()`);
+check('the phones get a stick and one button', await q1.until(`!!document.querySelector('.stick')&&document.querySelectorAll('.btn').length===1`, 5000) && await q2.until(`!!document.querySelector('.stick')`, 5000), await q1.ev(`document.body.innerText`));
+check('the game waits for the server', await s.ev(`gc.inst.s.phase==='serve'`), await s.ev(`gc.inst.s`));
+await q2.until(`pad.room.peers.get(pad.screen)&&pad.room.peers.get(pad.screen).state==='direct'`, 10000); await q1.until(`pad.room.peers.get(pad.screen)&&pad.room.peers.get(pad.screen).state==='direct'`, 10000);
+const side = async (c, p) => { const r = await center(c, '.stick'); return { r, p }; };
+const sa = (await side(q1)).r, sb = (await side(q2)).r;
+const py0 = await s.ev(`[...gc.inst.s.py]`);
+// the screen tab is behind the phones' tabs here, and a hidden tab gets no animation frames, so the game is advanced by hand: half a second of play at 60 steps a second
+const adv = n => s.ev(`for(let i=0;i<${n};i++)gc.inst.tick(1/60);1`);
+await touch(q1, 'touchStart', [{ x: sa.x, y: sa.y + sa.h * 0.45, id: 1 }]);
+await sleep(300); await adv(30);
+check("pushing Ann's stick down moves her paddle down and not Bo's", await s.ev(`gc.inst.s.py[0]>${py0[0] + 40}&&gc.inst.s.py[1]===${py0[1]}`), await s.ev(`gc.inst.s.py`));
+await touch(q1, 'touchEnd', []);
+await touch(q2, 'touchStart', [{ x: sb.x, y: sb.y - sb.h * 0.45, id: 1 }]);
+await sleep(300); await adv(30);
+check("pushing Bo's stick up moves his paddle up", await s.ev(`gc.inst.s.py[1]<${py0[1] - 40}`), await s.ev(`gc.inst.s.py`));
+await touch(q2, 'touchEnd', []);
+const ba = await center(q2, '.btn'), ba1 = await center(q1, '.btn');
+await touch(q2, 'touchStart', [{ x: ba.x, y: ba.y, id: 2 }]); await touch(q2, 'touchEnd', []);
+await sleep(300);
+check("the other player's A does not serve", await s.ev(`gc.inst.s.phase==='serve'`), await s.ev(`gc.inst.s.phase`));
+await touch(q1, 'touchStart', [{ x: ba1.x, y: ba1.y, id: 2 }]); await touch(q1, 'touchEnd', []);
+check("the server's A launches the ball", await s.until(`gc.inst.s.phase==='play'&&Math.abs(gc.inst.s.ball.vx)>200`, 3000), await s.ev(`gc.inst.s`));
+const bx = await s.ev(`gc.inst.s.ball.x`); await adv(10);
+check('the ball moves on the screen', await s.ev(`gc.inst.s.ball.x`) !== bx, await s.ev(`gc.inst.s.ball`));
+if (process.env.SHOTS) { await s.send('Page.bringToFront'); await s.shot('pong'); }
+await q2.ev(`pad.leave();1`);
+check('a player who leaves ends the game', await s.until(`gc.state==='lobby'`, 8000), await s.ev(`gc.state`));
+await s.until(`gc.players.size===1`, 5000);
+
 // pause and the same place back
 await s.ev(`gc.staleMs=1500;gc.stop();gc.select('padtest');gc.start()`); // the heartbeat rule, shortened: the grace period here is only 4 s
 await p1.until(`!!document.querySelector('.btn')`, 5000);

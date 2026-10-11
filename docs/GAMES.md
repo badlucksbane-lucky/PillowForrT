@@ -76,6 +76,12 @@ Optional sensors, off unless a game asks: tilt (`deviceorientation`, beta and ga
 - Tests: `node scripts/dev/game-test.mjs` (screen plus phone-sized pages in headless Chromium against the real room server; about 15 s; checks join, every widget, two touches at once, panels, out-of-order and lost input, a full room, pause and the same place back, and that a deliberately broken ordering or heartbeat rule fails) and `go test -run TestGame .`. **Deployed, and tried by Ben with Chromium on the Pi as the screen and the Moto and Pixel as controllers: everything worked. Not yet tried: iOS, landscape on a real phone, more than two phones.**
 - Found while testing: a tab behind the others in headless Chromium never answers a touch and has its timers held back, so the test brings each page to the front first; Chromium has `DeviceOrientationEvent.requestPermission` and fires one empty orientation event when a listener is added, which the pad ignores.
 
+## Fort Pong (pf-0fn.2)
+
+`gameclient/fortpong.js`. Two players, the stick's vertical axis moves the paddle (460 px/s at full tilt), A serves (only the server's A; the player who lost the point serves), first to 7, A again for a rematch with the serve passed on. Ball starts at 330 px/s, speeds up 7 % per paddle hit up to 760, and leaves the paddle at up to 55 degrees by where it hit. The ball moves in steps of at most 6 px so a fast one cannot skip a paddle. A hit buzzes the hitter's phone for 30 ms, a lost point buzzes the loser for 120 ms; beeps play on the screen once the audio context is running. The field is 800 by 450 scaled to fit with battlements top and bottom. A player leaving ends the game (it needs two); a phone that goes quiet pauses it like any other game.
+
+Tests: `node scripts/dev/pong-unit.mjs` (rules without a browser: serve, walls, paddle hits, speed cap, a fast ball not tunnelling, scoring, serve order, winning, rematch; removing the speed cap makes it fail) and a two-phone section in `game-test.mjs`. In that test the screen tab sits behind the phone tabs, and a hidden tab gets no animation frames, so the test advances the game by hand with `gc.inst.tick`. **Not yet played on real phones; the feel at about 42 ms is the thing to judge.** Tuning values are the constants at the top of `create()`.
+
 ## Build order (beads issues under pf-0fn)
 
 1. Console and controller shell: screen page (code, QR, lobby, wake lock, start button for audio), controller page (`roomBounce`, widget renderer, orientation, iOS motion tap), input protocol.
