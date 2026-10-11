@@ -122,9 +122,9 @@ const size=n=>{n=+n;if(!n)return'';const u=['B','KB','MB','GB','TB'];let i=0;whi
 // ---------- sources ----------
 const CM='https://v3-cinemeta.strem.io';
 const GEN={movies:['Action','Adventure','Animation','Comedy','Crime','Documentary','Drama','Family','Fantasy','History','Horror','Mystery','Romance','Sci-Fi','Thriller','War','Western'],
- series:['Action','Adventure','Animation','Comedy','Crime','Documentary','Drama','Family','Fantasy','History','Horror','Mystery','Reality-TV','Romance','Sci-Fi','Thriller','War','Western'],
- anime:['Action','Adventure','Comedy','Drama','Fantasy','Horror','Mahou Shoujo','Mecha','Music','Mystery','Psychological','Romance','Sci-Fi','Slice of Life','Sports','Supernatural','Thriller']};
-const CATS={movies:[['top','Popular'],['imdbRating','Featured'],['year','New']],series:[['top','Popular'],['imdbRating','Featured'],['year','New']],anime:[['trending','Trending'],['popular','Popular'],['score','Top rated']]};
+ series:['Action','Adventure','Animation','Comedy','Crime','Documentary','Drama','Family','Fantasy','History','Horror','Mystery','Reality-TV','Romance','Sci-Fi','Thriller','War','Western']};
+const ALG_N=10; // anime genre chips: first N of AniList's own list, cached a week so the chip bar barely touches upstream
+const CATS={movies:[['top','Popular'],['imdbRating','Featured']],series:[['top','Popular'],['imdbRating','Featured']],anime:[['trending','Trending'],['popular','Popular'],['score','Top rated']]};
 const SORT={trending:'TRENDING_DESC',popular:'POPULARITY_DESC',score:'SCORE_DESC'};
 const slim=(m,type)=>({type,id:m.imdb_id||m.id,name:m.name||'',year:String(m.releaseInfo||m.year||''),rating:m.imdbRating||'',poster:m.poster||'',genres:(m.genres||m.genre||[]).slice(0,3)});
 async function cmList(type,cat,o={}){const ex=[];if(o.q)ex.push('search='+encodeURIComponent(o.q));if(o.g)ex.push('genre='+encodeURIComponent(o.g));if(o.page)ex.push('skip='+o.page*50);
@@ -133,9 +133,11 @@ async function cmList(type,cat,o={}){const ex=[];if(o.q)ex.push('search='+encode
 const AL='https://graphql.anilist.co';
 const AF='id title{romaji english} coverImage{large extraLarge color} bannerImage genres averageScore episodes status seasonYear format description(asHtml:false)';
 const slimA=a=>({type:'anime',id:String(a.id),name:a.title.english||a.title.romaji||'',romaji:a.title.romaji||'',year:String(a.seasonYear||''),rating:a.averageScore?(a.averageScore/10).toFixed(1):'',poster:(a.coverImage||{}).extraLarge||(a.coverImage||{}).large||'',color:(a.coverImage||{}).color||'',banner:a.bannerImage||'',genres:(a.genres||[]).slice(0,3),allGenres:a.genres||[],eps:a.episodes||0,status:a.status||'',format:a.format||'',desc:(a.description||'').replace(/<[^>]*>/g,'')});
-async function alList(cat,o={}){const v={p:(o.page||0)+1,s:[SORT[cat]||'POPULARITY_DESC'],g:o.g||null,q:o.q||null};const k='al:'+JSON.stringify(v);
- const items=await cached(k,HOUR,async()=>((await jf(AL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query($p:Int,$s:[MediaSort],$g:String,$q:String){Page(page:$p,perPage:30){media(type:ANIME,sort:$s,genre:$g,search:$q,isAdult:false){'+AF+'}}}',variables:v})})).data.Page.media||[]).map(slimA));return {items,more:items.length>=30}}
+async function alList(cat,o={}){const ex=o.g==='Adventure'?['Action']:null; // Adventure overlaps heavily with Action (which loads first by default): diff it out, leave every other genre alone
+ const v={p:(o.page||0)+1,s:[SORT[cat]||'POPULARITY_DESC'],g:o.g||null,q:o.q||null,ex};const k='al:'+JSON.stringify(v);
+ const items=await cached(k,HOUR,async()=>((await jf(AL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query($p:Int,$s:[MediaSort],$g:String,$q:String,$ex:[String]){Page(page:$p,perPage:30){media(type:ANIME,sort:$s,genre:$g,search:$q,isAdult:false,genre_not_in:$ex){'+AF+'}}}',variables:v})})).data.Page.media||[]).map(slimA));return {items,more:items.length>=30}}
 async function alOne(id){return cached('al1:'+id,DAY,async()=>slimA((await jf(AL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query($i:Int){Media(id:$i,type:ANIME){'+AF+'}}',variables:{i:+id}})})).data.Media))}
+async function alGenres(){return cached('al:genres',7*DAY,async()=>((await jf(AL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:'query{GenreCollection}'})})).data.GenreCollection||[]).filter(x=>x!=='Hentai'))}
 const list=(tab,cat,o)=>tab==='anime'?alList(cat,o):cmList(tab,cat,o);
 async function cmMeta(type,id){return cached('meta:'+type+':'+id,DAY,async()=>{const m=(await jf(CM+'/meta/'+(type==='movies'?'movie':'series')+'/'+id+'.json')).meta;if(!m)throw new Error('not found');
  const s=slim(m,type);return {...s,desc:m.description||'',runtime:m.runtime||'',bg:m.background||'',cast:(m.cast||[]).slice(0,6),director:(m.director||[]).slice(0,2),status:m.status||'',
@@ -158,7 +160,8 @@ const qrank=s=>{const m=/(\d{3,4})p/.exec(s||'');return m?+m[1]:0};
 // ---------- state and routing: #/tab?c=&g=&q=&id= ----------
 const TABS=['movies','series','anime','web'];
 const S={tab:'movies',c:'',g:'',q:'',id:'',key:'',wasSheet:false,fromApp:false,rid:0,sid:0};
-function parse(){const raw=location.hash.replace(/^#\/?/,''),[t,qs]=raw.split('?'),p=new URLSearchParams(qs||'');return {tab:TABS.includes(t)?t:'movies',c:p.get('c')||'',g:p.get('g')||'',q:p.get('q')||'',id:p.get('id')||''}}
+function parse(){const raw=location.hash.replace(/^#\/?/,''),[t,qs]=raw.split('?'),p=new URLSearchParams(qs||''),tab=TABS.includes(t)?t:'movies';
+ return {tab,c:p.get('c')||'',g:p.get('g')||(tab==='anime'&&!p.get('q')?'Action':''),q:p.get('q')||'',id:p.get('id')||''}}
 function href(o){const s={tab:S.tab,c:S.c,g:S.g,q:S.q,id:'',...o},p=new URLSearchParams();['c','g','q','id'].forEach(k=>s[k]&&p.set(k,s[k]));const qs=p.toString();return '#/'+s.tab+(qs?'?'+qs:'')}
 function go(o,replace){const u=href(o);if(replace)history.replaceState(null,'',u),render();else location.hash=u}
 // ---------- cards, rows, grids ----------
@@ -168,10 +171,19 @@ const card=it=>h('a',{class:'card',href:href({id:it.id}),'aria-label':it.name},p
 const skRow=()=>h('div',{class:'scrollx'},Array.from({length:6},()=>h('div',{class:'skc'},h('div',{class:'poster sk'}),h('div',{class:'l sk'}))));
 const skGrid=()=>h('div',{class:'grid'},Array.from({length:12},()=>h('div',{class:'skc',style:'width:auto'},h('div',{class:'poster sk'}),h('div',{class:'l sk'}))));
 function fail(msg,retry){return h('div',{class:'msg'},h('div',{text:msg}),h('button',{text:'Retry',onclick:retry}))}
-function chipsBar(){const g=GEN[S.tab]||[];return h('div',{class:'scrollx chips',role:'group','aria-label':'Genres'},h('button',{class:'chip'+(S.g?'':' on'),text:'All',onclick:()=>go({g:'',c:'',q:''})}),g.map(x=>h('button',{class:'chip'+(S.g===x?' on':''),text:x,onclick:()=>go({g:x,q:'',c:S.c||CATS[S.tab][0][0]})})))}
+const chip=x=>h('button',{class:'chip'+(S.g===x?' on':''),text:x,onclick:()=>go({g:x,q:'',c:S.c||CATS[S.tab][0][0]})});
+function chipsBar(rid){
+ const wrap=h('div',{class:'scrollx chips',role:'group','aria-label':'Genres'});
+ if(S.tab!=='anime'){wrap.append(h('button',{class:'chip'+(S.g?'':' on'),text:'All',onclick:()=>go({g:'',c:'',q:''})}),...GEN[S.tab].map(chip));return wrap}
+ wrap.append(h('span',{class:'chip',text:'…'}));
+ alGenres().then(list=>{if(rid!==S.rid)return;wrap.replaceChildren();let shown=0;
+  const more=()=>{list.slice(shown,shown+ALG_N).forEach(x=>wrap.append(chip(x)));shown+=ALG_N};
+  more();wrap.addEventListener('scroll',()=>{if(shown<list.length&&wrap.scrollLeft+wrap.clientWidth>=wrap.scrollWidth-40)more()})
+ }).catch(()=>{if(rid===S.rid)wrap.replaceChildren()});
+ return wrap}
 function catSeg(){return h('div',{class:'seg',role:'group','aria-label':'Order'},CATS[S.tab].map(([id,l])=>h('button',{class:(S.c||CATS[S.tab][0][0])===id?'on':'',text:l,onclick:()=>go({c:id})})))}
 function renderBrowse(pane,rid){
- if(!S.q)pane.append(chipsBar());
+ if(!S.q)pane.append(chipsBar(rid));
  if(!S.q&&!S.g&&!S.c){ // rows
   CATS[S.tab].forEach(([id,label],i)=>{const box=h('div',{},skRow());pane.append(h('div',{class:'sec'},h('h2',{text:label}),h('a',{href:href({c:id}),text:'See all ›'})),box);
    const load=()=>list(S.tab,id).then(r=>{if(rid!==S.rid)return;box.replaceChildren(h('div',{class:'scrollx'},r.items.map(card)))}).catch(()=>{if(rid===S.rid)box.replaceChildren(fail('Could not load '+label,load))});
