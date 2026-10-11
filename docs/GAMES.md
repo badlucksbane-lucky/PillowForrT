@@ -82,6 +82,12 @@ Optional sensors, off unless a game asks: tilt (`deviceorientation`, beta and ga
 
 Tests: `node scripts/dev/pong-unit.mjs` (rules without a browser: serve, walls, paddle hits, speed cap, a fast ball not tunnelling, scoring, serve order, winning, rematch; removing the speed cap makes it fail) and a two-phone section in `game-test.mjs`. In that test the screen tab sits behind the phone tabs, and a hidden tab gets no animation frames, so the test advances the game by hand with `gc.inst.tick`. **Not yet played on real phones; the feel at about 42 ms is the thing to judge.** Tuning values are the constants at the top of `create()`.
 
+## Sumo Push (pf-0fn.3)
+
+`gameclient/sumopush.js`. **2 to 7 players, not 8**: a room has 8 places and the screen takes one (the epic said 8). Round arena (radius 205 on an 800 by 450 field) that holds for 6 s then closes at 5 px/s down to 95. The stick pushes your disc (acceleration 700, drag 2.0, so about 350 px/s flat out); A is a dash of 520 px/s the way the stick points (or the way you are moving, or your nose when still), lasting 0.35 s during which the disc counts as 2.2 times heavier so it hits harder, with a 1.6 s cooldown shown as a ring. Discs bounce (0.9) and are stepped at most 10 px at a time so none passes through another. A disc whose centre leaves the arena is out (that phone buzzes 150 ms, hard hits buzz both phones up to 60 ms); last one on takes the round, first to 3 rounds wins, A for a rematch. A 3-second countdown starts every round and nobody moves in it; a draw scores nobody. Someone arriving mid-round watches until the next round; a player leaving is out, and under two players the game ends. A phone that goes quiet pauses it like any game.
+
+Tests: `node scripts/dev/sumo-unit.mjs` (rules without a browser; breaking the collision impulse makes two checks fail) and a two-phone section in `game-test.mjs`. **Not yet played on real phones, and never with more than two.** Tuning values are the constants at the top of `create()`.
+
 ## Build order (beads issues under pf-0fn)
 
 1. Console and controller shell: screen page (code, QR, lobby, wake lock, start button for audio), controller page (`roomBounce`, widget renderer, orientation, iOS motion tap), input protocol.
