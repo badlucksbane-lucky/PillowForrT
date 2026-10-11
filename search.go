@@ -425,6 +425,7 @@ type engineStatus struct {
 	N    int    `json:"n"`
 	Err  string `json:"err,omitempty"`
 	MS   int64  `json:"ms"`
+	Done bool   `json:"done"` // false only in a SearchStream snapshot, for an engine that has not answered yet
 }
 
 type searchOutcome struct {
@@ -453,24 +454,25 @@ func cleanQuery(q string) string {
 	return q
 }
 
-// Search runs one query against one category's engines. A path that is down is an error in the outcome, with no attempt made.
-func (m *searchMgr) Search(ctx context.Context, q, cat string) searchOutcome {
+// searchPrepare validates the request, acquires a run slot, and builds the client and the on-category engine list shared by Search and SearchStream. The caller must defer release()
+// unconditionally (it is a no-op when ok is false); when ok is false, out already carries the reason and nothing was acquired.
+func (m *searchMgr) searchPrepare(ctx context.Context, q, cat string) (rctx context.Context, cl *http.Client, on []searchEngine, out searchOutcome, release func(), ok bool) {
 	if !validSearchCategory(cat) {
 		cat = catWeb
 	}
 	cfg := m.Config()
-	out := searchOutcome{Query: q, Cat: cat, Cfg: cfg}
+	out = searchOutcome{Query: q, Cat: cat, Cfg: cfg}
+	release = func() {}
 	switch {
 	case !cfg.Enabled:
 		out.Err = "Search is off"
-		return out
+		return ctx, nil, nil, out, release, false
 	case q == "":
-		return out
+		return ctx, nil, nil, out, release, false
 	case len(cfg.Engines) == 0:
 		out.Err = "No engine is switched on"
-		return out
+		return ctx, nil, nil, out, release, false
 	}
-	var on []searchEngine
 	for _, e := range searchEngines {
 		if engineCategory(e) != cat {
 			continue
@@ -483,43 +485,45 @@ func (m *searchMgr) Search(ctx context.Context, q, cat string) searchOutcome {
 	}
 	if len(on) == 0 {
 		out.Err = "No engine is switched on for this category"
-		return out
+		return ctx, nil, nil, out, release, false
 	}
 	st := m.state()
 	if err := searchPathReady(cfg.Proxy, st); err != nil {
 		out.Err = "Proxy " + searchModeLabel(cfg.Proxy) + ": " + err.Error()
-		return out
+		return ctx, nil, nil, out, release, false
 	}
 	if err := searchPathReady(cfg.DNS, st); err != nil {
 		out.Err = "DNS " + searchModeLabel(cfg.DNS) + ": " + err.Error()
-		return out
+		return ctx, nil, nil, out, release, false
 	}
 	select {
 	case m.slots <- struct{}{}:
-		defer func() { <-m.slots }()
 	default:
 		out.Busy, out.Err = true, "Another search is running, try again in a moment"
-		return out
+		return ctx, nil, nil, out, release, false
 	}
-	t0 := time.Now()
 	limit := 15 * time.Second
 	if cfg.Proxy == spTor || cfg.Proxy == spTorMullvad || cfg.DNS == spTor || cfg.DNS == spTorMullvad {
 		limit = 40 * time.Second // circuits take time
 	}
-	ctx, cancel := context.WithTimeout(ctx, limit)
-	defer cancel()
-	cl := m.client(cfg)
-	defer cl.CloseIdleConnections()
+	rctx, cancel := context.WithTimeout(ctx, limit)
+	cl = m.client(cfg)
+	release = func() { cancel(); cl.CloseIdleConnections(); <-m.slots }
+	return rctx, cl, on, out, release, true
+}
 
-	type got struct {
-		i   int
-		res []searchResult
-		st  engineStatus
-	}
-	ch := make(chan got, len(on))
+type searchGot struct {
+	i   int
+	res []searchResult
+	st  engineStatus
+}
+
+// searchFanOut starts one goroutine per engine against cl, each reporting on ch as it finishes.
+func searchFanOut(ctx context.Context, cl *http.Client, q string, on []searchEngine) <-chan searchGot {
+	ch := make(chan searchGot, len(on))
 	for i, e := range on {
 		go func(i int, e searchEngine) {
-			s := engineStatus{ID: e.ID, Name: e.Name}
+			s := engineStatus{ID: e.ID, Name: e.Name, Done: true}
 			t := time.Now()
 			res, err := e.fetch(ctx, cl, q)
 			s.MS = time.Since(t).Milliseconds()
@@ -527,9 +531,21 @@ func (m *searchMgr) Search(ctx context.Context, q, cat string) searchOutcome {
 				s.Err = searchErrText(err, q)
 			}
 			s.N = len(res)
-			ch <- got{i, res, s}
+			ch <- searchGot{i, res, s}
 		}(i, e)
 	}
+	return ch
+}
+
+// Search runs one query against one category's engines and waits for all of them. A path that is down is an error in the outcome, with no attempt made.
+func (m *searchMgr) Search(ctx context.Context, q, cat string) searchOutcome {
+	rctx, cl, on, out, release, ok := m.searchPrepare(ctx, q, cat)
+	defer release()
+	if !ok {
+		return out
+	}
+	t0 := time.Now()
+	ch := searchFanOut(rctx, cl, q, on)
 	per := make([][]searchResult, len(on))
 	out.Engines = make([]engineStatus, len(on))
 	for range on {
@@ -539,6 +555,38 @@ func (m *searchMgr) Search(ctx context.Context, q, cat string) searchOutcome {
 	out.Results = mergeResults(per, on)
 	out.Elapsed = time.Since(t0)
 	return out
+}
+
+// SearchStream runs the same fan-out as Search, but calls onUpdate as each engine answers instead of waiting for all of them: every call carries the full merge recomputed over whichever
+// engines have answered so far (an engine that has not answered yet appears in Engines with Done false), so onUpdate always gets a complete, ready-to-render snapshot. The last call has
+// final set and every engine Done. A rejection before any engine runs (search off, no engine on, a path down, busy) is exactly one call with final set.
+func (m *searchMgr) SearchStream(ctx context.Context, q, cat string, onUpdate func(o searchOutcome, final bool)) {
+	rctx, cl, on, out, release, ok := m.searchPrepare(ctx, q, cat)
+	defer release()
+	if !ok {
+		onUpdate(out, true)
+		return
+	}
+	t0 := time.Now()
+	ch := searchFanOut(rctx, cl, q, on)
+	per := make([][]searchResult, len(on))
+	engines := make([]engineStatus, len(on))
+	for i, e := range on {
+		engines[i] = engineStatus{ID: e.ID, Name: e.Name}
+	}
+	snapshot := func() searchOutcome {
+		snap := out
+		snap.Results = mergeResults(per, on)
+		snap.Engines = append([]engineStatus(nil), engines...)
+		snap.Elapsed = time.Since(t0)
+		return snap
+	}
+	onUpdate(snapshot(), false)
+	for n := range on {
+		g := <-ch
+		per[g.i], engines[g.i] = g.res, g.st
+		onUpdate(snapshot(), n == len(on)-1)
+	}
 }
 
 // searchErrText is an error for the page: the query is cut out of it, and it is kept short.

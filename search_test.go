@@ -3,11 +3,14 @@ package main
 import (
 	"context"
 	"net"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func fixture(t *testing.T, name string) []byte {
@@ -273,6 +276,69 @@ func TestSearchCategoryFilter(t *testing.T) {
 	}
 }
 
+func TestSearchStreamRejection(t *testing.T) {
+	m := newSearchMgr("")
+	m.state = func() ownState { return ownState{} }
+	m.cfg.Enabled = false
+	var calls []searchOutcome
+	var finals []bool
+	m.SearchStream(context.Background(), "x", catWeb, func(o searchOutcome, final bool) {
+		calls = append(calls, o)
+		finals = append(finals, final)
+	})
+	if len(calls) != 1 || calls[0].Err != "Search is off" || !finals[0] {
+		t.Fatalf("a rejection before any engine runs should be exactly one final call, got %+v / %v", calls, finals)
+	}
+}
+
+func TestSearchStreamProgressesAndFinishes(t *testing.T) {
+	old := searchEngines
+	defer func() { searchEngines = old }()
+	searchEngines = []searchEngine{
+		{ID: "fast", Name: "Fast", fetch: func(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+			return []searchResult{{Title: "fast result", URL: "https://example.com/fast"}}, nil
+		}},
+		{ID: "slow", Name: "Slow", fetch: func(ctx context.Context, c *http.Client, q string) ([]searchResult, error) {
+			time.Sleep(20 * time.Millisecond)
+			return []searchResult{{Title: "slow result", URL: "https://example.com/slow"}}, nil
+		}},
+	}
+	m := newSearchMgr("")
+	m.state = func() ownState { return ownState{} }
+	m.cfg.Enabled = true
+	m.cfg.Proxy, m.cfg.DNS = spDirect, spDirect
+	m.cfg.Engines = []string{"fast", "slow"}
+
+	var mu sync.Mutex
+	var snaps []searchOutcome
+	var finals []bool
+	m.SearchStream(context.Background(), "x", catWeb, func(o searchOutcome, final bool) {
+		mu.Lock()
+		snaps = append(snaps, o)
+		finals = append(finals, final)
+		mu.Unlock()
+	})
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(snaps) != 3 {
+		t.Fatalf("expected an initial all-pending snapshot plus one per engine, got %d: %+v", len(snaps), snaps)
+	}
+	first := snaps[0]
+	if len(first.Engines) != 2 || first.Engines[0].Done || first.Engines[1].Done || len(first.Results) != 0 {
+		t.Fatalf("the first snapshot should show both engines pending and no results yet: %+v", first)
+	}
+	last := snaps[len(snaps)-1]
+	if !finals[len(finals)-1] || !last.Engines[0].Done || !last.Engines[1].Done || len(last.Results) != 2 {
+		t.Fatalf("the last snapshot should be final with both engines done and both results merged in: %+v", last)
+	}
+	for i, f := range finals[:len(finals)-1] {
+		if f {
+			t.Fatalf("only the last call should be final, but call %d was too", i)
+		}
+	}
+}
+
 func TestSearchDNS(t *testing.T) {
 	q := searchDNSQuery("html.duckduckgo.com")
 	if len(q) < 12 || q[5] != 1 || q[len(q)-4] != 0 || q[len(q)-3] != 1 {
@@ -353,6 +419,33 @@ func TestSearchPageEscapes(t *testing.T) {
 	}
 	if !strings.Contains(out, `href="https://example.com/a?b=1&amp;c=2"`) || !strings.Contains(out, "blocked (CAPTCHA)") {
 		t.Errorf("good result or engine status missing:\n%s", out)
+	}
+}
+
+func TestSearchShellAndLiveSnapshotEscape(t *testing.T) {
+	v := searchView{Q: `"><script>alert(1)</script>`, Cat: catWeb}
+	shell := renderSearchShell(v)
+	if strings.Contains(shell, "<script>alert(1)</script>") {
+		t.Errorf("the query broke out of its attribute in the shell:\n%s", shell)
+	}
+	if !strings.Contains(shell, `id="results"`) || !strings.Contains(shell, "function pfUpdate") {
+		t.Errorf("shell is missing its placeholders or the renderer:\n%s", shell)
+	}
+
+	o := searchOutcome{Cat: catWeb, Results: []searchResult{
+		{Title: "</script><script>alert(1)</script>", URL: "https://example.com/x", Snippet: "ok", Engines: []string{"A"}},
+	}}
+	var buf strings.Builder
+	writeLiveSnapshot(&buf, o, true)
+	out := buf.String()
+	if strings.Contains(out, "</script><script>alert(1)") {
+		t.Fatalf("a result containing a literal </script> closed the chunk early: %s", out)
+	}
+	if !strings.HasPrefix(out, "<script>pfUpdate(") || !strings.HasSuffix(out, ")</script>") {
+		t.Fatalf("chunk is not a single pfUpdate call: %s", out)
+	}
+	if !strings.Contains(out, `</script>`) {
+		t.Fatalf("expected json.Marshal's default HTML-safe escaping on the literal </script>, got: %s", out)
 	}
 }
 
