@@ -12,6 +12,17 @@ const root = path.join(here, '../..');
 process.env.CDP_PORT = process.env.CDP_PORT || String(9300 + Math.floor(Math.random() * 500));
 const { connect } = await import(path.join(here, 'cdp.mjs'));
 
+// Retro with a real core: needs a built core (scripts/retro/build-core.sh puts them in ~/retro-build/out, or set RETRO_CORES) and makes its own ROM; skipped when there is none
+const coresDir = process.env.RETRO_CORES || path.join(os.homedir(), 'retro-build/out');
+const retroDir = fs.existsSync(path.join(coresDir, 'fceumm.wasm')) ? fs.mkdtempSync(path.join(os.tmpdir(), 'retro-test-')) : '';
+if (retroDir) {
+  fs.mkdirSync(path.join(retroDir, 'cores')); fs.mkdirSync(path.join(retroDir, 'roms'));
+  for (const f of ['fceumm.js', 'fceumm.wasm']) fs.copyFileSync(path.join(coresDir, f), path.join(retroDir, 'cores', f));
+  const prg = Buffer.alloc(16384, 0xea); Buffer.from([0xA9,0x3F,0x8D,0x06,0x20, 0xA9,0x00,0x8D,0x06,0x20, 0xA9,0x21,0x8D,0x07,0x20, 0xA9,0x0A,0x8D,0x01,0x20, 0x4C,0x14,0xC0]).copy(prg, 0); // sets the backdrop colour, turns on the picture, loops
+  prg.writeUInt16LE(0xC000, 0x3FFA); prg.writeUInt16LE(0xC000, 0x3FFC); prg.writeUInt16LE(0xC000, 0x3FFE);
+  fs.writeFileSync(path.join(retroDir, 'roms', 'Blue Screen.nes'), Buffer.concat([Buffer.from([0x4E,0x45,0x53,0x1A,1,1,0,0,0,0,0,0,0,0,0,0]), prg, Buffer.alloc(8192)]));
+  process.env.RETRO_TEST_DIR = retroDir;
+}
 const go = spawn('go', ['test', '-count=1', '-run', 'TestRoomServeForJS', '-v', '.'], { cwd: root, env: { ...process.env, ROOM_SERVE: '1' }, stdio: ['ignore', 'pipe', 'inherit'] });
 const info = await new Promise((resolve, reject) => {
   let buf = '';
@@ -31,10 +42,11 @@ const done = async code => {
   await Promise.race([exited, new Promise(r => setTimeout(r, 3000))]);
   await new Promise(r => setTimeout(r, 500));
   try { process.kill(-cr.pid, 'SIGKILL'); } catch (e) { /* none left */ }
+  try { if (retroDir) fs.rmSync(retroDir, { recursive: true, force: true }); } catch (e) { /* a temp directory */ }
   try { fs.rmSync(prof, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch (e) { /* a temp directory */ }
   process.exit(code);
 };
-for (let i = 0; ; i++) { try { await fetch(`http://127.0.0.1:${process.env.CDP_PORT}/json/version`); break; } catch (e) { if (i > 50) { console.error('chromium did not start'); done(2); } await new Promise(r => setTimeout(r, 200)); } }
+for (let i = 0; ; i++) { try { await fetch(`http://127.0.0.1:${process.env.CDP_PORT}/json/version`); break; } catch (e) { if (i > 150) { console.error('chromium did not start'); done(2); } await new Promise(r => setTimeout(r, 200)); } }
 
 const J = JSON.stringify;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -248,6 +260,42 @@ check('Stop on the first phone ends the game', await s.until(`gc.state==='lobby'
 await ia.ev(`pad.leave();1`); await ib.ev(`pad.leave();1`);
 await s.until(`gc.players.size===1`, 8000);
 
+// Retro with a real core, in a second room on the real /play page (its real security headers: the core is WebAssembly) and the real file route
+let s2 = null;
+if (retroDir) {
+  s2 = await connect(); await s2.desktop(); await s2.goto(info.url + '/play-csp');
+  await s2.until(`window.gc&&gc.room.status==='online'&&/^[A-Z]{4}$/.test(gc.room.code)`);
+  const code2 = await s2.ev(`gc.room.code`);
+  const p4 = await padPage('Di', code2); await p4.ev(`document.querySelector('#go').click();1`);
+  await s2.until(`gc.players.size===1`, 10000);
+  await s2.ev(`gc.select('retro');1`);
+  check('Retro offers a 1 to 4 player game and starts with one phone', await s2.until(`gc.canStart()`, 3000) && await s2.ev(`gc.game.players.max===4`), null);
+  await s2.ev(`document.querySelector('#start').click();1`);
+  check('the menu lists the ROM the box has, read over the real route', await s2.until(`gc.inst&&gc.inst.s.list.length===1&&gc.inst.s.list[0].file==='Blue Screen.nes'&&gc.inst.s.list[0].system==='NES'`, 8000), await s2.ev(`gc.inst&&JSON.stringify(gc.inst.s)`));
+  await p4.until(`!!document.querySelector('.btn')&&!!document.querySelector('.stick')`, 5000);
+  const A = await center(p4, '.btn'); // the first button is A
+  await touch(p4, 'touchStart', [{ x: A.x, y: A.y, id: 1 }]); await touch(p4, 'touchEnd', []);
+  check('the lead phone\'s A loads the core under the real CSP and the game runs', await s2.until(`gc.inst.s.phase==='run'&&gc.inst.hs&&gc.inst.hs.loaded`, 60000), await s2.ev(`JSON.stringify(gc.inst.s)`));
+  check('the picture is the core\'s: 256 by 240 at about 60 fps, 48 kHz sound', await s2.ev(`(h=>h.w===256&&h.h===240&&Math.abs(h.fps-60.1)<0.2&&h.rate===48000)(gc.inst.hs)`), await s2.ev(`JSON.stringify(gc.inst.hs)`));
+  const sk = await center(p4, '.stick');
+  await touch(p4, 'touchStart', [{ x: sk.x + sk.w * 0.45, y: sk.y, id: 1 }]);
+  check('a stick held right on the phone reaches the core as the Right button', await s2.until(`gc.players.size===1&&[...gc.players.values()][0].stick.x===1`, 4000), await pl(s2));
+  await s2.ev(`gc.inst.tick(1/60);1`);
+  check('(the joypad mask of port 0 has bit 7)', await s2.ev(`(gc.inst.hs.mask[0]>>7&1)===1&&(gc.inst.hs.mask[0]>>6&1)===0`), await s2.ev(`gc.inst.hs.mask[0]`));
+  await touch(p4, 'touchEnd', []);
+  await s2.until(`[...gc.players.values()][0].stick.x===0`, 3000);
+  const f0 = await s2.ev(`gc.inst.hs.frames`);
+  await s2.ev(`for(let i=0;i<120;i++)gc.inst.tick(1/60);1`);
+  const f1 = await s2.ev(`gc.inst.hs.frames`);
+  check('120 ticks of 1/60 s run about 120 frames', f1 - f0 >= 118 && f1 - f0 <= 122, f1 - f0);
+  const px = await s2.ev(`(()=>{const c=document.querySelector('#cv');c.width=800;c.height=450;gc.g.setTransform(1,0,0,1,0,0);gc.inst.render(gc.g,800,450);return Array.from(gc.g.getImageData(400,225,1,1).data)})()`);
+  check('the frame the ROM drew (blue backdrop) is on our canvas, centre of the screen', Math.abs(px[0] - 0x4c) < 3 && Math.abs(px[1] - 0xa0) < 3 && Math.abs(px[2] - 0xff) < 3, px);
+  check('the audio worklet loaded from /game/ under the same CSP', await s2.until(`gc.inst.s.sound===true`, 5000), await s2.ev(`gc.audio&&gc.audio.state`));
+  await s2.ev(`gc.stop();1`);
+  check('leaving the game closes the core and frees it', await s2.ev(`gc.inst===null&&gc.state==='lobby'`), null);
+  await p4.ev(`pad.leave();1`);
+}
+
 // pause and the same place back
 await s.ev(`gc.staleMs=1500;gc.stop();gc.select('padtest');gc.start()`); // the heartbeat rule, shortened: the grace period here is only 4 s
 await p1.until(`!!document.querySelector('.btn')`, 5000);
@@ -265,7 +313,7 @@ check('Menu / stop returns to the lobby', await s.until(`!document.querySelector
 await s.ev(`gc.closed='no such room';gc.onUpdate();1`);
 check('a room the box forgot offers a new one', await s.ev(`!document.querySelector('#fresh').hidden`), null);
 
-const errs = [s, ...pads].flatMap(x => x.logs).filter(l => !/favicon|Failed to load resource|AudioContext was not allowed|handshake: Unexpected response code: 503/.test(l)) // the test's clicks are not real taps, so the audio context may not start; a 503 is the room channel shedding load while this busy machine runs chromium, and the pages retry;
+const errs = [s, s2, ...pads].filter(Boolean).flatMap(x => x.logs).filter(l => !/favicon|Failed to load resource|AudioContext was not allowed|handshake: Unexpected response code: 503/.test(l)) // the test's clicks are not real taps, so the audio context may not start; a 503 is the room channel shedding load while this busy machine runs chromium, and the pages retry;
 check('no script errors on any page', errs.length === 0, errs);
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nall ok');
 done(fails.length ? 1 : 0);

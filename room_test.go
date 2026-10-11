@@ -163,6 +163,22 @@ func TestRoomServeForJS(t *testing.T) {
 		})
 	}
 	mux.HandleFunc("/game/", gameScript)
+	if dir := os.Getenv("RETRO_TEST_DIR"); dir != "" { // the Retro game with real cores: the real file route and the real /play page (with its real security headers), signed in by the server
+		oldDir := *retroDir
+		*retroDir = dir
+		defer func() { *retroDir = oldDir }()
+		a := testAuth(t)
+		sid, _ := a.NewSession("ben")
+		u := &webUI{auth: a}
+		signed := func(h http.HandlerFunc) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) {
+				r.AddCookie(&http.Cookie{Name: sessionCookie, Value: sid})
+				h(w, r)
+			}
+		}
+		mux.HandleFunc("/retro/", signed(u.retroFiles))
+		mux.HandleFunc("/play-csp", signed(u.gamePage("/play", gamePlayHTML)))
+	}
 	// a stand-in for the box's sign-in: a SameSite=Strict cookie like the real one, to see what a link from another site does to it
 	hasSess := func(r *http.Request) bool { c, err := r.Cookie("sess"); return err == nil && c.Value == "1" }
 	mux.HandleFunc("/fake-login", func(w http.ResponseWriter, r *http.Request) {

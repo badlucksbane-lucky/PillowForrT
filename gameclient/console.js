@@ -3,6 +3,7 @@
 //
 //   Games.register({id, name, players: {min, max}, widgets: [{type:'stick'|'dpad'|'buttons'|'pointer'|'tilt', names?}], orientation: 'any'|'portrait'|'landscape',
 //     create(ctx) -> {onJoin(p), onLeave(p), onHello(p) (a phone said hello again: reconnect or reload), onButton(p, name, down), onPick(p, panelId, index), onPointer(p, x, y, down), tick(dt), render(g, w, h)}})
+//   (optional) destroy(): called when the game is left, to free what it holds (a core, an audio node)
 //   ctx: {players: () => connected players, send panel: panel(p, {id, title, items}) / panel(p, null), rumble(p, ms), audio: AudioContext|null, end()}
 //   a player p: {id, slot, name, color, away, stick: {x, y}, ptr: {x, y, down}, tilt: {b, g}, btn: {A: bool, ...}}
 'use strict';
@@ -141,6 +142,7 @@
   };
   P.stop = function () {
     if (this.state === 'lobby') return;
+    if (this.inst && this.inst.destroy) { try { this.inst.destroy(); } catch (e) { /* a game that fails to clean up is dropped anyway */ } }
     this.state = 'lobby'; this.inst = null;
     this.players.forEach(function (p) { p.stick.x = p.stick.y = 0; p.btn = {}; p.ptr.down = false; });
     this._state();

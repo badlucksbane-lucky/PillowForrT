@@ -180,6 +180,7 @@ func (u *webUI) handler() http.Handler {
 	mux.HandleFunc("/play", u.gamePage("/play", gamePlayHTML))
 	mux.HandleFunc("/pad", u.gamePage("/pad", gamePadHTML))
 	mux.HandleFunc("/game/", gameScript)
+	mux.HandleFunc("/retro/", u.retroFiles)
 	mux.HandleFunc("/room/room.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, roomClientJS) })
 	mux.HandleFunc("/room/qr.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, roomQRJS) })
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) { serveBTAsset(w, btSWJS) })

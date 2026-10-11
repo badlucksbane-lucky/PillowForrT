@@ -17,9 +17,9 @@ nice -n 15 emmake make -f Makefile.libretro platform=emscripten STATIC_LINKING=0
 # That make leaves a non-archive in *_libretro_emscripten.bc, so archive the objects ourselves.
 rm -f "$work/lib$name.a"
 find . -name '*.o' | xargs emar rcs "$work/lib$name.a"
-fns=_malloc,_free,_retro_api_version,_retro_init,_retro_deinit,_retro_set_environment,_retro_set_video_refresh,_retro_set_audio_sample,_retro_set_audio_sample_batch,_retro_set_input_poll,_retro_set_input_state,_retro_get_system_info,_retro_get_system_av_info,_retro_load_game,_retro_unload_game,_retro_run,_retro_reset,_retro_serialize_size,_retro_serialize,_retro_unserialize,_retro_set_controller_port_device
-# MEMFS stays on: fceumm opens the ROM by path even when it is also handed the data.
-nice -n 15 emcc "$work/lib$name.a" -O2 -sEXPORTED_FUNCTIONS=$fns \
+fns=_malloc,_free,_retro_api_version,_retro_init,_retro_deinit,_retro_set_environment,_retro_set_video_refresh,_retro_set_audio_sample,_retro_set_audio_sample_batch,_retro_set_input_poll,_retro_set_input_state,_retro_get_system_info,_retro_get_system_av_info,_retro_load_game,_retro_unload_game,_retro_run,_retro_reset,_retro_serialize_size,_retro_serialize,_retro_unserialize,_retro_set_controller_port_device,_retro_get_memory_data,_retro_get_memory_size
+# em++ (not emcc) so C++ cores get libc++. MEMFS stays on: fceumm opens the ROM by path even when it is also handed the data.
+nice -n 15 em++ "$work/lib$name.a" -O2 -sEXPORTED_FUNCTIONS=$fns \
   -sEXPORTED_RUNTIME_METHODS=addFunction,removeFunction,UTF8ToString,HEAPU8,HEAP16,HEAP32,HEAPU32,HEAPU16,FS \
   -sALLOW_TABLE_GROWTH -sALLOW_MEMORY_GROWTH -sINITIAL_MEMORY=33554432 \
   -sMODULARIZE -sEXPORT_NAME=createCore -sENVIRONMENT=web,worker,node -sNO_EXIT_RUNTIME=1 \

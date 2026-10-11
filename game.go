@@ -43,7 +43,11 @@ func (u *webUI) gamePage(path, body string) http.HandlerFunc {
 			return
 		}
 		secureHeaders(w)
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; form-action 'none'; base-uri 'none'")
+		script := "'self' 'unsafe-inline'"
+		if path == "/play" {
+			script += " 'wasm-unsafe-eval'" // the Retro game compiles WebAssembly cores; the phone page does not
+		}
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; style-src 'unsafe-inline'; script-src "+script+"; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; form-action 'none'; base-uri 'none'")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

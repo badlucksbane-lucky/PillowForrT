@@ -1,12 +1,17 @@
 // Spike: minimal libretro frontend in node, proves a built core runs. Usage: node scripts/dev/retro-core-spike.cjs <dir with fceumm.js> [frames]
-// (loads a hand-made NES ROM; see scripts/retro/build-core.sh)
+// Usage: node scripts/dev/retro-core-spike.cjs <dir> [frames] [fceumm|gambatte]   (loads a hand-made NES or Game Boy ROM; see scripts/retro/build-core.sh)
 const path = require('path');
 const dir = path.resolve(process.argv[2]);
 const FRAMES = +process.argv[3] || 120;
-const createCore = require(path.join(dir, 'fceumm.js'));
+const CORE = process.argv[4] || 'fceumm';
+const createCore = require(path.join(dir, CORE + '.js'));
 
 // Tiny NES ROM: set backdrop palette entry to $21, enable rendering, loop.
+function makeGbRom() { // jump from the entry point to an infinite loop
+  const r = Buffer.alloc(32768); Buffer.from([0xC3, 0x50, 0x01]).copy(r, 0x100); Buffer.from([0x18, 0xFE]).copy(r, 0x150); return r;
+}
 function makeRom() {
+  if (CORE === 'gambatte') return makeGbRom();
   const prg = Buffer.alloc(16384, 0xea);
   const code = [0xA9,0x3F,0x8D,0x06,0x20, 0xA9,0x00,0x8D,0x06,0x20, 0xA9,0x21,0x8D,0x07,0x20,
                 0xA9,0x0A,0x8D,0x01,0x20, 0x4C,0x14,0xC0];
@@ -22,10 +27,11 @@ function makeRom() {
   const stats = { frames: 0, audioFrames: 0, w: 0, h: 0, fmt: -1, pitch: 0, px: 0, envUnknown: new Set() };
   let fmt = 0;
 
-  const logfn = M.addFunction((lvl, fmt, va) => { console.log('[core log ' + lvl + ']', M.UTF8ToString(fmt).trimEnd(), fmt && M.UTF8ToString(fmt).startsWith('%s') ? M.UTF8ToString(M.HEAPU32[va >> 2]) : ''); }, 'viii');
+  const logfn = M.addFunction((lvl, fmt, va) => { console.log('[core log ' + lvl + ']', M.UTF8ToString(fmt).trimEnd(), fmt && M.UTF8ToString(fmt).includes('%s') ? M.UTF8ToString(M.HEAPU32[va >> 2]) : ''); }, 'viii');
   const env = M.addFunction((cmd, data) => {
     cmd &= 0xffff; // strip RETRO_ENVIRONMENT_EXPERIMENTAL/PRIVATE flags
     switch (cmd) {
+      case 3: M.HEAPU8[data] = 1; return 1;                                // GET_CAN_DUPE
       case 10: fmt = M.HEAP32[data >> 2]; stats.fmt = fmt; return 1;      // SET_PIXEL_FORMAT
       case 16: return 1;                                                   // SET_VARIABLES
       case 11: return 1;                                                   // SET_INPUT_DESCRIPTORS
@@ -52,8 +58,8 @@ function makeRom() {
 
   const rom = makeRom();
   const rp = M._malloc(rom.length); M.HEAPU8.set(rom, rp);
-  const gi = M._malloc(16); M.HEAPU32[gi >> 2] = cstr("/rom.nes"); M.HEAPU32[(gi + 4) >> 2] = rp; M.HEAPU32[(gi + 8) >> 2] = rom.length; M.HEAPU32[(gi + 12) >> 2] = 0;
-  M.FS.writeFile("/rom.nes", rom);
+  const gi = M._malloc(16); M.HEAPU32[gi >> 2] = cstr(CORE === "gambatte" ? "/rom.gb" : "/rom.nes"); M.HEAPU32[(gi + 4) >> 2] = rp; M.HEAPU32[(gi + 8) >> 2] = rom.length; M.HEAPU32[(gi + 12) >> 2] = 0;
+  M.FS.writeFile(CORE === "gambatte" ? "/rom.gb" : "/rom.nes", rom);
   const ok = M._retro_load_game(gi);
   const av = M._malloc(40); M._retro_get_system_av_info(av);
   const fps = new Float64Array(M.HEAPU8.buffer.slice(av + 24, av + 40));
