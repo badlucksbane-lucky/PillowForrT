@@ -418,7 +418,7 @@ func (u *webUI) roomTestPage(w http.ResponseWriter, r *http.Request) {
 // signed out and goes to the login page. The page holds nothing but its own path, and a cross-site request still cannot change anything: this only lets a GET of one viewer page carry the cookie.
 func roomBounce(w http.ResponseWriter, r *http.Request, path string) {
 	if r.URL.Query().Get("b") != "" {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		http.Redirect(w, r, loginURL(path), http.StatusSeeOther) // signed out for real: sign in, then come back here (the code in #CODE rides along, see loginPage)
 		return
 	}
 	secureHeaders(w)

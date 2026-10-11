@@ -28,7 +28,7 @@ func writeBrowse(w http.ResponseWriter) {
 
 func (u *webUI) browsePage(w http.ResponseWriter, r *http.Request) {
 	if u.auth.Session(r) == nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		http.Redirect(w, r, loginURL(r.URL.Path), http.StatusSeeOther)
 		return
 	}
 	m := searchMgrG

@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -39,7 +40,7 @@ func TestGamePagesAreGuarded(t *testing.T) {
 		}
 		rec = httptest.NewRecorder()
 		h(rec, httptest.NewRequest("GET", p+"?b=1", nil))
-		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
+		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login?next="+url.QueryEscape(p) {
 			t.Errorf("%s bounced and still signed out: code %d, location %q", p, rec.Code, rec.Header().Get("Location"))
 		}
 	}

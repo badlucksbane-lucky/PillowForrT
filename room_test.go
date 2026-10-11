@@ -321,7 +321,7 @@ func TestRoomBounce(t *testing.T) {
 	}
 	rec = httptest.NewRecorder()
 	roomBounce(rec, httptest.NewRequest("GET", "/room-test?b=1", nil), "/room-test")
-	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login" {
-		t.Fatalf("still signed out after the bounce means go to the login page: %d %v", rec.Code, rec.Header())
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/login?next=%2Froom-test" {
+		t.Fatalf("still signed out after the bounce means go to the login page, told to come back here: %d %v", rec.Code, rec.Header())
 	}
 }

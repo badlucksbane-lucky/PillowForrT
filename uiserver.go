@@ -10,6 +10,7 @@ import (
 	"html"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -45,7 +46,27 @@ func secureHeaders(w http.ResponseWriter) {
 	h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; form-action 'self'")
 }
 
-func (u *webUI) loginPage(w http.ResponseWriter, code int, errMsg string) {
+// loginReturnPaths are the only pages sign-in will send a person back to (the page they asked for before they were sent to the login page). An exact match against this list is the whole check:
+// anything else, a full URL, "//host", a query, another case or an encoded form, is not on it, so the login page can never be made to redirect anywhere but one of our own pages.
+var loginReturnPaths = map[string]bool{"/ui": true, "/search": true, "/browse": true, "/room-test": true, "/play": true, "/pad": true}
+
+// safeNext returns next if it is a page we may return to after sign-in, else "".
+func safeNext(next string) string {
+	if loginReturnPaths[next] {
+		return next
+	}
+	return ""
+}
+
+// loginURL is where a signed-out request for path is sent: the login page, told which page to come back to (the default, /ui, needs no telling).
+func loginURL(path string) string {
+	if n := safeNext(path); n != "" && n != "/ui" {
+		return "/login?next=" + url.QueryEscape(n)
+	}
+	return "/login"
+}
+
+func (u *webUI) loginPage(w http.ResponseWriter, code int, errMsg, next string) {
 	secureHeaders(w)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(code)
@@ -53,43 +74,56 @@ func (u *webUI) loginPage(w http.ResponseWriter, code int, errMsg string) {
 	if !u.auth.Configured() {
 		note = `<p class="err">No login has been set up yet. From a computer on the LAN run <code>scripts/set-login.sh</code>.</p>`
 	}
-	p := strings.NewReplacer("{{NOTE}}", note, "{{ERR}}", html.EscapeString(errMsg), "{{FP}}", html.EscapeString(u.fingerprint())).Replace(loginHTML)
+	nextField := ""
+	if n := safeNext(next); n != "" {
+		nextField = `<input type="hidden" name="next" value="` + html.EscapeString(n) + `">`
+	}
+	p := strings.NewReplacer("{{NOTE}}", note, "{{ERR}}", html.EscapeString(errMsg), "{{FP}}", html.EscapeString(u.fingerprint()), "{{NEXT}}", nextField).Replace(loginHTML)
 	w.Write([]byte(p))
 }
 
 func (u *webUI) login(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		next := r.URL.Query().Get("next")
 		if u.auth.Session(r) != nil {
-			http.Redirect(w, r, "/ui", http.StatusSeeOther)
+			http.Redirect(w, r, orUI(safeNext(next)), http.StatusSeeOther)
 			return
 		}
-		u.loginPage(w, 200, "")
+		u.loginPage(w, 200, "", next)
 	case http.MethodPost:
 		ip := clientAddr(r)
-		if u.auth.Throttled(ip) {
-			u.loginPage(w, http.StatusTooManyRequests, "Too many failed attempts. Wait ten minutes.")
-			return
-		}
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		if err := r.ParseForm(); err != nil {
-			u.loginPage(w, 400, "Bad request.")
+			u.loginPage(w, 400, "Bad request.", "")
 			return
 		}
-		user, pass := r.PostForm.Get("user"), r.PostForm.Get("password")
+		user, pass, next := r.PostForm.Get("user"), r.PostForm.Get("password"), r.PostForm.Get("next")
+		if u.auth.Throttled(ip) {
+			u.loginPage(w, http.StatusTooManyRequests, "Too many failed attempts. Wait ten minutes.", next)
+			return
+		}
 		if !u.auth.Configured() || !u.auth.Check(user, pass) {
 			u.auth.RecordFail(ip)
 			time.Sleep(500 * time.Millisecond)
-			u.loginPage(w, http.StatusUnauthorized, "Wrong username or password.")
+			u.loginPage(w, http.StatusUnauthorized, "Wrong username or password.", next)
 			return
 		}
 		u.auth.ClearFails(ip)
 		id, _ := u.auth.NewSession(user)
 		setSessionCookie(w, r, id, int(sessionLife.Seconds()))
-		http.Redirect(w, r, "/ui", http.StatusSeeOther)
+		// The redirect has no fragment, so the browser keeps the one the form was sent from: the login page's script adds a room code (#ABCD) from its own address to the form's action.
+		http.Redirect(w, r, orUI(safeNext(next)), http.StatusSeeOther)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func orUI(p string) string {
+	if p == "" {
+		return "/ui"
+	}
+	return p
 }
 
 func (u *webUI) logout(w http.ResponseWriter, r *http.Request) {

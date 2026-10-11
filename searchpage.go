@@ -99,7 +99,7 @@ func (v *searchView) dots(cfg searchCfg, ready map[string]string) {
 
 func (u *webUI) searchPage(w http.ResponseWriter, r *http.Request) {
 	if u.auth.Session(r) == nil {
-		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		http.Redirect(w, r, loginURL(r.URL.Path), http.StatusSeeOther)
 		return
 	}
 	secureHeaders(w)

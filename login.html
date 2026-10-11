@@ -11,12 +11,15 @@ input{font:inherit;width:100%;box-sizing:border-box;padding:8px;border:1px solid
 button{font:inherit;margin-top:14px;width:100%;padding:9px;border:0;border-radius:8px;background:var(--ac);color:var(--onac);cursor:pointer}
 .err{color:var(--bad);margin-top:10px}.note{color:var(--mut);font-size:12px;margin-top:14px;word-break:break-all}
 </style></head><body>
-<form method="post" action="/login" autocomplete="on">
+<form id="f" method="post" action="/login" autocomplete="on">
 <div class="brand"><img class="mark" src="/favicon.svg" alt=""><div><h1>PillowForrT</h1><div class="tag">a watchman for your hotspot</div></div></div>
 {{NOTE}}
+{{NEXT}}
 <label for="u">Username</label><input id="u" name="user" autocomplete="username" autofocus required>
 <label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password" required>
 <button type="submit">Sign in</button>
 <div class="err">{{ERR}}</div>
 <div class="note">This page uses a self-signed certificate. Check that your browser's certificate fingerprint matches (SHA-256):<br>{{FP}}</div>
-</form></body></html>
+</form>
+<script>/* a room code in the address (#ABCD, from a scanned QR) goes with the form, so the browser keeps it through the redirect to the page that was asked for */
+var f=document.getElementById("f");if(f.querySelector("input[name=next]")&&/^#[A-Za-z]{4}$/.test(location.hash))f.action=f.getAttribute("action")+location.hash;</script></body></html>
