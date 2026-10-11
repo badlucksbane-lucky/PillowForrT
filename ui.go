@@ -484,7 +484,7 @@ func handleSettings(w http.ResponseWriter, r *http.Request, path string) {
 		}
 		writeJSON(w, 200, torMgrG.View())
 	case path == "tor/set" && r.Method == http.MethodPost:
-		var b struct{ Enabled bool } // the .onion settings are not here: they are changed only over SSH (onion.go, -onion)
+		var b struct{ Enabled bool }
 		if torMgrG == nil || json.NewDecoder(r.Body).Decode(&b) != nil {
 			writeJSON(w, 400, map[string]string{"error": "bad request"})
 			return

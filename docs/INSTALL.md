@@ -239,21 +239,13 @@ starts a new chain with a marker event, so a cleared log is never mistaken for a
 head hash shown on the card somewhere else now and then: someone with a root shell can rewrite the
 whole file, hashes included, and the copy is what tells you that happened.
 
-### .onion settings (SSH only)
+### .onion (removed)
 
-Nothing about `.onion` can be changed from the web page or its API, so a stolen session cannot open a door. Both features are **off** until you switch them on over SSH with the program itself:
-
-```
-/data/proxy/tinyfwd -onion status
-/data/proxy/tinyfwd -onion "house=on"                         # .onion names for devices on the network (Tor must be on: Tor card)
-/data/proxy/tinyfwd -onion "add=laptop:<its 52-letter x25519 public key>,door=on"
-/data/proxy/tinyfwd -onion "write=on"                         # let the page change things through the door (off by default)
-/data/proxy/tinyfwd -onion "remove=laptop"                    # the last device going switches the door off
-```
-
-The changes are saved to `/data/proxy/tor.json`; restart the program to apply them (`/etc/init.d/http_proxy stop; sleep 1; /etc/init.d/http_proxy start`), and do it straight away, since a
-running program writes that file back from memory the next time anything in the Tor card changes. The door's web listener (loopback only) starts only while the door is on; the
-`-onion-listen` flag can pin another loopback address. The door needs at least one authorized device and refuses to run without one.
+There is no `.onion` access on this box, and no setting, flag or command that brings it back (removed 2026-10-11). The onion door (a Tor onion service for the web page), the house-wide `.onion`
+bridge and the SSH-only `-onion` command are gone from the program. Every `.onion` lookup, from any device (Tor devices included), is answered NXDOMAIN by the DNS stub and never reaches a
+resolver; the attempt is recorded as a `tor_bypass_onion` event. Tor's SOCKS port listens on the box's loopback address only (nothing on the LAN can use Tor as a proxy), and `proxy.pac` has
+no Tor rule. The first start of the new program deletes the old hidden-service directory (`/data/proxy/tor-data/onion`: the service's identity key and its authorized devices). Tor itself
+stays for the devices you assign to it on the Tor card and for the box's own lookups.
 
 ### Turn one off
 **Canary** and **DNS canary** have a switch on their cards. The rest are on while the daemon runs, with
@@ -299,7 +291,7 @@ One JSON object per line, in the shape of Suricata's `eve.json`: `timestamp`, `e
 id, kind, severity, page text, generic sentence and chain hashes. `since` is the last id you have (the
 card shows the newest); `follow=1` keeps the connection open and writes each new event as it happens.
 A client that falls far behind is dropped and reconnects with `since`. Point Filebeat, Vector,
-Promtail, Wazuh's Suricata decoder or `jq` at it. Through the onion door the `text` field is left out.
+Promtail, Wazuh's Suricata decoder or `jq` at it. With `?public=1` the `text` field is left out.
 
 ### Syslog
 Give the collector's `ip:port` in the card and tick "send". Lines are RFC 5424 over UDP, facility
@@ -316,7 +308,7 @@ curl -sN -H "X-UI-Token: $TOKEN" "https://pillowforrt.lan:3129/api/tap?filter=dn
 ```
 `filter` is `all`, `arp`, `dns` (UDP 53), `dhcp`, `tls` (TCP 443) or `icmp`; `seconds` runs up to
 3600 (default 300); `snaplen` up to 2048 bytes (default 1600). The output is a classic pcap file,
-Ethernet link type, written packet by packet. One tap runs at a time, never through the onion door,
+Ethernet link type, written packet by packet. One tap runs at a time,
 and the tap's own HTTPS flow is excluded in the kernel filter so it does not capture itself.
 What it sees is what the detectors see: broadcasts, multicast, anything aimed at the router, and
 everything headed for the internet, but not traffic the radio relays Wi-Fi-to-Wi-Fi. Switch it off
@@ -363,7 +355,7 @@ it. A repeat of the same cell from the same spot within 10 minutes replaces the 
 parked box does not fill the log; a cell change or a move of 25 m adds one. The log is capped at
 5000 rows in `/data/proxy/cells.json` (mode 0600) and "Delete all" clears it. The cell and the
 location are the one thing on this box that says where you are: they are never in `/status.json`,
-`/metrics`, an event, a notification, the syslog or MQTT event exports, or the onion door. The Home
+`/metrics`, an event, a notification, the syslog or MQTT event exports. The Home
 Assistant state (LAN only, if you turned it on) carries the current cell and signal.
 
 ## If something goes wrong

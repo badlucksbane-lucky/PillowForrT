@@ -342,7 +342,7 @@ func socksDial(ctx context.Context, network, addr string) (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	return socksConnect(onionSocksAddr, host, port, 25*time.Second)
+	return socksConnect(torSocksAddr, host, port, 25*time.Second)
 }
 
 // dialer returns the connect function for a proxy mode, checked against the path's state at every connection.

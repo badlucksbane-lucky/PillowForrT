@@ -5,7 +5,7 @@ package main
 //
 //   - /api/events/stream: the event log as newline-delimited JSON in the shape of Suricata's EVE log (one "alert" record per event), so Wazuh, Graylog, Loki, Vector,
 //     Elastic, Splunk and anything else with an EVE parser reads it with no custom code. `?since=<id>` returns the kept events after that id; `?follow=1` keeps the
-//     connection open and writes each new event as it happens. Behind the login (or the script token) like every /api path; through the onion door only the generic
+//     connection open and writes each new event as it happens. Behind the login (or the script token) like every /api path; with ?public=1 only the generic
 //     sentence is sent, never the text that may name a device.
 //   - syslog: the same events forwarded as RFC 5424 messages over UDP to a collector on the LAN (rsyslog, syslog-ng, Graylog, a SIEM), with the event's id, kind,
 //     severity and chain hash as structured data so a collector keeps the chain verifiable. Off until an address is given.
@@ -372,7 +372,7 @@ func serveEventStream(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	public := viaOnion(r) || r.URL.Query().Get("public") == "1"
+	public := r.URL.Query().Get("public") == "1"
 	since := -1
 	if v := r.URL.Query().Get("since"); v != "" {
 		n, err := strconv.Atoi(v)

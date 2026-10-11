@@ -325,7 +325,7 @@ func ownDial(ctx context.Context, network, addr string) (net.Conn, error) {
 		if err != nil {
 			return nil, err
 		}
-		c, err := socksConnect(onionSocksAddr, host, port, 15*time.Second)
+		c, err := socksConnect(torSocksAddr, host, port, 15*time.Second)
 		ownR.reportTor(err == nil) // a Tor that is "ready" but cannot carry this is given up (rungs.go)
 		return c, err
 	case routeBlock:

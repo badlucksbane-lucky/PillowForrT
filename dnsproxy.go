@@ -490,7 +490,7 @@ type DNSProxy struct {
 	BlockTTL uint32
 	Neigh    *neighbours // optional: ties a device's IPv6 address to its IPv4 one
 	VPN      *VPN        // optional: a device whose exit is Mullvad resolves through the tunnel
-	Tor      *torMgr     // optional: .onion names, and every name a Tor device asks, are answered by Tor and never go to a public resolver
+	Tor      *torMgr     // optional: every name a Tor device asks is answered by Tor and never goes to a public resolver; a .onion name is refused for everyone
 	warnMu   sync.Mutex
 	warnAt   map[string]time.Time
 	flight   dnsFlight
@@ -639,11 +639,9 @@ func (p *DNSProxy) Handle(q []byte) []byte {
 				finish("blocked")
 				return buildBlocked(q, dq, p.BlockTTL)
 			}
-			if dq.Name != "onion" && !strings.HasSuffix(dq.Name, ".onion") { // an onion name's answer is the bridge's own private range, by design
-				if _, refuse := rebindMgr.Refuse(dq.Name, resp); refuse {
-					finish("rebind")
-					return buildRcode(q, dq, 5)
-				}
+			if _, refuse := rebindMgr.Refuse(dq.Name, resp); refuse {
+				finish("rebind")
+				return buildRcode(q, dq, 5)
 			}
 			finish("tor")
 			return resp

@@ -246,8 +246,7 @@ func (a *Auth) EndSession(r *http.Request) {
 	}
 }
 
-// setSessionCookie: Secure whenever the request came over TLS (always, on the LAN page). The onion door's loopback listener is plain HTTP on purpose (the onion hop is end-to-end encrypted and a
-// self-signed certificate for a .onion would only teach people to click through warnings), and a browser would refuse to send a Secure cookie back over it.
+// setSessionCookie: Secure whenever the request came over TLS (always: the web page is served over TLS only).
 func setSessionCookie(w http.ResponseWriter, r *http.Request, id string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: id, Path: "/", MaxAge: maxAge, HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode})
 }

@@ -93,7 +93,7 @@ func loadAvg1() float64 {
 
 // probeTorViable asks whether Tor can carry a real connection: a TLS handshake with a public resolver, through Tor's SOCKS port.
 func probeTorViable() bool {
-	c, err := socksConnect(onionSocksAddr, "1.1.1.1", 443, 10*time.Second)
+	c, err := socksConnect(torSocksAddr, "1.1.1.1", 443, 10*time.Second)
 	if err != nil {
 		return false
 	}

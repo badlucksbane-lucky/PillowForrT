@@ -8,7 +8,6 @@ import (
 	"crypto/subtle"
 	_ "embed"
 	"html"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -203,61 +202,6 @@ func (u *webUI) handler() http.Handler {
 			return
 		}
 		mux.ServeHTTP(w, r)
-	})
-}
-
-// ---- the onion door's web listener (127.0.0.1 only; Tor is its only client). See ONION-SERVICE.md. ----
-
-type onionCtxKey struct{}
-
-// viaOnion says whether the request came in through the onion listener (a context value set there, so a client cannot fake it).
-func viaOnion(r *http.Request) bool { v, _ := r.Context().Value(onionCtxKey{}).(bool); return v }
-
-func isLoopbackAddr(addr string) bool {
-	h, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		h = addr
-	}
-	ip := net.ParseIP(h)
-	return ip != nil && ip.IsLoopback()
-}
-
-// onionPathOK: the only paths an onion visitor can reach. Not /status.json, /metrics, /beat, the PAC file or the proxy: fail closed.
-func onionPathOK(p string) bool {
-	switch p {
-	case "/", "/login", "/logout", "/ui":
-		return true
-	}
-	return strings.HasPrefix(p, "/api/") && !strings.HasPrefix(p, "/api/bt") && !strings.HasPrefix(p, "/api/room") // the torrent bridge and the room channel are for the LAN only
-}
-
-// onionLANOnly: changes that are refused through the onion door even when remote writes are switched on: the door's own settings (a remote session must never authorize more keys or loosen its
-// own limits), SSH keys, the login itself and restoring a backup.
-func onionLANOnly(p string) bool {
-	return strings.HasPrefix(p, "/api/ssh") || strings.HasPrefix(p, "/api/account/") || strings.HasPrefix(p, "/api/backup/restore") || strings.HasPrefix(p, "/api/export") || p == "/api/tap" || strings.HasPrefix(p, "/api/towers")
-}
-
-// onionHandler is the web page for a visitor who came through the onion service: same login, same pages, but read-only (any change is refused) unless remote writes are on, and the
-// door's own management never goes through it.
-func (u *webUI) onionHandler(remoteWrite func() bool) http.Handler {
-	inner := u.handler()
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !isLoopbackAddr(r.RemoteAddr) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		if !onionPathOK(r.URL.Path) {
-			http.NotFound(w, r)
-			return
-		}
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.URL.Path != "/login" && r.URL.Path != "/logout" {
-			if onionLANOnly(r.URL.Path) || !remoteWrite() {
-				secureHeaders(w)
-				writeJSON(w, 403, map[string]string{"error": "this page is read-only when opened through the onion door: make changes from the LAN page"})
-				return
-			}
-		}
-		inner.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), onionCtxKey{}, true)))
 	})
 }
 

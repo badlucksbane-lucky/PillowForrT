@@ -5,7 +5,7 @@ package main
 // TTL later) to 192.168.1.1, 127.0.0.1 or a printer on the LAN, and the browser's same-origin rule now lets that page's script talk to the device as if it were the attacker's
 // own host. Nothing on this box ever resolves a public name to a private address on purpose, so such an answer is refused (REFUSED, rcode 5, which a browser treats as a
 // failure and caches nothing of) instead of relayed. What counts as private: RFC 1918, loopback, link-local, 0.0.0.0, carrier-grade NAT (100.64/10), the IPv6 equivalents
-// (ULA, ::1, fe80::/10, IPv4-mapped forms of the same), and this box's own Tor bridge range 198.18/15, which only the stub itself may hand out (tor.go). An allow-list of
+// (ULA, ::1, fe80::/10, IPv4-mapped forms of the same), and the benchmarking range 198.18/15 (nothing legitimate resolves there; this box once used it for .onion names and no longer does). An allow-list of
 // name patterns (the same `*.example.com` shapes as the filter) exempts the few services that do this legitimately; `*.plex.direct` is in it from the start, since Plex
 // resolves such names to a LAN address by design. The guard is on by default, because there is no quiet "watch first" to be had here: a rebinding answer is harmful on
 // arrival, and dnsmitm.go still records every one it would have refused, so the card shows what happened either way. Local names never reach the stub (dnsmasq answers
@@ -67,7 +67,7 @@ func privateAnswer(ip net.IP) bool {
 			return true
 		case ip4[0] == 100 && ip4[1]&0xC0 == 64: // 100.64.0.0/10, carrier-grade NAT: a device could be reached through the carrier's own fabric
 			return true
-		case ip4[0] == 198 && ip4[1]&0xFE == 18: // 198.18.0.0/15: the Tor bridge range the stub itself hands out, and nothing else may
+		case ip4[0] == 198 && ip4[1]&0xFE == 18: // 198.18.0.0/15: the benchmarking range, never a public answer
 			return true
 		}
 		return false

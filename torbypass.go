@@ -4,8 +4,8 @@ package main
 // see because Tor traffic to a public relay looks like an ordinary HTTPS connection to the service allow-list. Two signals, both passive:
 //   tor_bypass_exit    a device that is NOT one of the MACs assigned to tor.go's forced-Tor path has opened a connection to a known Tor relay or bridge address. That device is
 //                       running its own Tor client (or a proxy that chains through one), unseen by and unaffected by the house's own Tor controls.
-//   tor_bypass_onion   a device asked the DNS stub for a .onion name while house-wide .onion is off and the device itself is not assigned to Tor. tor.go already answers this
-//                       NXDOMAIN (never resolved, nothing leaked); this only notes that the attempt happened, since trying is itself a signal even though it was refused.
+//   tor_bypass_onion   a device asked the DNS stub for a .onion name. There is no .onion access on this box: tor.go answers every such lookup NXDOMAIN (never resolved, nothing leaked),
+//                       whoever asks; this only notes that the attempt happened, since trying is itself a signal even though it was refused.
 // The relay/bridge address list is the hard part: Tor's own consensus lists thousands of relays that change by the hour, so this ships with the list EMPTY and off by default
 // (Available()==false) until something populates torExitFile (one dotted IP or CIDR per line, '#' comments) -- a cron action (actions.go) refreshing it from a trusted list is the
 // natural source, deliberately left out here so nothing is fetched from the network without the owner choosing a feed. With no list loaded, tor_bypass_exit never fires: silence,
@@ -190,8 +190,8 @@ func (w *torBypassWatch) ObserveFlow(mac, src, dst string, now time.Time) {
 	w.emit(evt{T: now.Unix(), Kind: "tor_bypass_exit", Sev: sevAttention, Text: fmt.Sprintf("%s connected directly to a known Tor relay address (%s) but is not one of the devices assigned to the box's own Tor path: it is likely running its own Tor client or a proxy that chains through one, unseen by the house's Tor controls.", who, dst), Public: "A device reached the Tor network outside the router's own Tor controls"})
 }
 
-// ObserveOnionAttempt is called from tor.go's DNS when a non-Tor device's .onion lookup is refused because house-wide .onion is off: the refusal already stops anything from
-// resolving, this only notes that the attempt happened.
+// ObserveOnionAttempt is called from tor.go's DNS for every .onion lookup (all of them are refused): the refusal already stops anything from resolving, this only notes that the
+// attempt happened.
 func (w *torBypassWatch) ObserveOnionAttempt(mac, client, name string, now time.Time) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -204,7 +204,7 @@ func (w *torBypassWatch) ObserveOnionAttempt(mac, client, name string, now time.
 	if mac != "" {
 		who = w.label(mac)
 	}
-	w.emit(evt{T: now.Unix(), Kind: "tor_bypass_onion", Sev: sevAttention, Text: fmt.Sprintf("%s asked for the .onion name %s while house-wide .onion is off and it is not assigned to Tor; the lookup was refused (never resolved), but the attempt is worth a look.", who, name), Public: "A device attempted a .onion lookup that the router refused"})
+	w.emit(evt{T: now.Unix(), Kind: "tor_bypass_onion", Sev: sevAttention, Text: fmt.Sprintf("%s asked for the .onion name %s; there is no .onion access on this box, so the lookup was refused (never resolved), but the attempt is worth a look.", who, name), Public: "A device attempted a .onion lookup that the router refused"})
 }
 
 type torBypassView struct {

@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-// A LAN client must not be able to use the proxy to reach the hotspot's own listeners (the onion door on 127.0.0.1:3130, Tor's SocksPort, dnsmasq):
-// the onion handler trusts a loopback source as "came through Tor", and a direct-exit device could route through Tor's socks port.
+// A LAN client must not be able to use the proxy to reach the hotspot's own listeners (Tor's SocksPort, dnsmasq):
+// a direct-exit device could otherwise route through Tor's socks port.
 func TestGuardedDialRefusesOwnAddresses(t *testing.T) {
 	saved := ownAddrs
 	ownAddrs = func() []net.IP { return []net.IP{net.ParseIP("192.168.1.1"), net.ParseIP("10.64.0.2")} }
@@ -69,6 +69,6 @@ func TestProxyTransportsUseTheGuard(t *testing.T) {
 	}
 	var v *VPN
 	if _, err := v.DialFor(context.Background(), "192.168.1.40", "tcp", "127.0.0.1:3130"); err == nil {
-		t.Error("CONNECT to the onion door's listener was allowed")
+		t.Error("CONNECT to a loopback listener was allowed")
 	}
 }

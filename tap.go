@@ -8,7 +8,7 @@ package main
 // same socket with a filter you choose and pcap framing on the way out. Honest limits: the bridge never sees traffic the radio relays Wi-Fi-to-Wi-Fi, so an IDS fed from
 // here sees what the detectors see (broadcasts, multicast, anything aimed at the router, and everything headed for the internet), not more. And this is the one feature
 // that exports raw frames with addresses in them, which cuts against the rule that nothing named leaves the box: so it is OFF until switched on from the page, served
-// only to the LAN (never through the onion door), behind the login or the script token, one tap at a time, for at most an hour per request. The tap's own HTTPS
+// only to the LAN, behind the login or the script token, one tap at a time, for at most an hour per request. The tap's own HTTPS
 // connection is excluded in the kernel filter so the stream does not capture itself.
 
 import (
@@ -144,10 +144,6 @@ func handleTap(w http.ResponseWriter, r *http.Request) {
 	}
 	if exports == nil || !exports.Cfg().Tap.Enabled {
 		writeJSON(w, 403, map[string]string{"error": "the packet tap is switched off: turn it on in the Export card first"})
-		return
-	}
-	if viaOnion(r) {
-		writeJSON(w, 403, map[string]string{"error": "the packet tap is not served through the onion door"})
 		return
 	}
 	q := r.URL.Query()

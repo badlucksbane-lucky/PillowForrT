@@ -2,9 +2,9 @@ package main
 
 // Tor on the box: a minimal client-only Tor (the Tor recipe) supervised by tinyfwd, used two ways.
 //
-//   House-wide .onion: any device can open a .onion name with no setup. The DNS stub answers an A query for a valid v3 .onion name with an address from 198.18.0.0/16 and a firewall rule
-//   sends TCP aimed at that range to the onion bridge (onionbridge.go), which connects to the name through Tor's SOCKS port. (Tor's own DNS port cannot give an onion name an IPv4 address, hence the
-//   bridge. Browsers that read proxy.pac also get a SOCKS rule for .onion.) A .onion name never goes to a public resolver: with the switch off it gets NXDOMAIN, with Tor not ready SERVFAIL.
+//   No .onion access of any kind (removed 2026-10-11): there is no onion service on the box, no house-wide .onion bridge, and no way to switch either back on. A .onion name is refused for every
+//   device, Tor devices included: the DNS stub answers NXDOMAIN and never sends it upstream, and the attempt is noted as a tor_bypass_onion event (torbypass.go). Tor's SOCKS port listens on the
+//   loopback address only, so nothing on the LAN can use Tor as a proxy, and proxy.pac has no Tor rule.
 //
 //   Per device: a device chosen on the page has ALL its internet traffic forced through Tor, enforced in the kernel by MAC address, and FAILS CLOSED:
 //     nat    HS_TOR   : its TCP (except to the LAN and DNS) is REDIRECTed into Tor's transparent port; with Tor down that is a refused connection, never a direct one
@@ -50,16 +50,13 @@ const (
 	torTransPort = 9040
 	torDNSPort   = 9053
 	torSocksPort = 9050
-	torVirtCIDR  = "198.18.0.0/16" // the private addresses the DNS stub gives .onion names (onionbridge.go)
 	torHouseIP   = "192.168.1.1"
 )
 
 type torConfig struct {
-	Enabled bool      `json:"enabled"`  // the daemon runs
-	Onion   bool      `json:"onion"`    // house-wide .onion
-	OverVPN bool      `json:"over_vpn"` // Tor's own connections leave through the Mullvad tunnel instead of the cellular link (Tor over VPN)
-	Devices []string  `json:"devices"`  // MACs whose traffic is forced through Tor
-	Door    onionDoor `json:"door"`     // the onion door (onion.go): remote web (read-only) and SSH for a few keyed devices
+	Enabled bool     `json:"enabled"`  // the daemon runs
+	OverVPN bool     `json:"over_vpn"` // Tor's own connections leave through the Mullvad tunnel instead of the cellular link (Tor over VPN)
+	Devices []string `json:"devices"`  // MACs whose traffic is forced through Tor
 }
 
 // ---- pure pieces: torrc, firewall rules, log parsing, the supervisor's decisions ----
@@ -72,9 +69,7 @@ func torrcFor(dataDir, logPath string, extra ...string) string {
 		"ClientOnly 1",
 		"AvoidDiskWrites 1",
 		"SocksPort 127.0.0.1:" + strconv.Itoa(torSocksPort),
-		"SocksPort " + torHouseIP + ":" + strconv.Itoa(torSocksPort),
 		"SocksPolicy accept 127.0.0.1",
-		"SocksPolicy accept " + lanCIDR,
 		"SocksPolicy reject *",
 		"DNSPort 127.0.0.1:" + strconv.Itoa(torDNSPort),
 		"TransPort " + torHouseIP + ":" + strconv.Itoa(torTransPort),
@@ -89,7 +84,6 @@ func torrcFor(dataDir, logPath string, extra ...string) string {
 
 type torRulePlan struct {
 	Devices []string
-	Onion   bool
 }
 
 func (p torRulePlan) active() bool { return len(p.Devices) > 0 }
@@ -102,9 +96,6 @@ func planTorRules(p torRulePlan) (nat, filter, v6 string) {
 	s.WriteString("*filter\n:HS_TOR6 - [0:0]\n")
 	devs := append([]string(nil), p.Devices...)
 	sort.Strings(devs)
-	if p.Onion || p.active() {
-		fmt.Fprintf(&n, "-A HS_TOR -p tcp -d %s -j REDIRECT --to-ports %d\n", torVirtCIDR, torBridgePort)
-	}
 	for _, m := range devs {
 		mr := macRule(m)
 		fmt.Fprintf(&n, "-A HS_TOR %s -d %s -j RETURN\n", mr, lanCIDR)
@@ -196,7 +187,6 @@ type torMgr struct {
 	nameOf     func(mac string) string
 	startProc  func(m *torMgr) (*exec.Cmd, error)
 	resolve    func(q []byte) ([]byte, error)
-	onions     *onionMap
 	vpnUp      func() bool // is the Mullvad tunnel up (Tor over VPN starts only then)
 	proxyKey   string      // the secret Tor presents to tinyfwd's CONNECT proxy for this run (Tor over VPN); empty when not in use
 }
@@ -239,7 +229,6 @@ func newTorMgr() *torMgr {
 	m.startProc = startTorProc
 	m.resolve = torResolve
 	m.vpnUp = func() bool { return vpn != nil && vpn.tun.isUp() }
-	m.onions = newOnionMap()
 	if b, err := os.ReadFile(m.path); err == nil {
 		json.Unmarshal(b, &m.cfg)
 	}
@@ -252,7 +241,7 @@ func (m *torMgr) save() {
 }
 
 func (m *torMgr) plan() torRulePlan {
-	return torRulePlan{Devices: append([]string(nil), m.cfg.Devices...), Onion: m.cfg.Onion}
+	return torRulePlan{Devices: append([]string(nil), m.cfg.Devices...)}
 }
 
 // Active says whether any device is forced through Tor (the Qualcomm fast path must then stay unloaded, as for Mullvad).
@@ -319,6 +308,25 @@ func prepareTorCache(dir string) {
 	}
 }
 
+// renderTorrc is the one place the torrc is built. The caller holds m.mu.
+func (m *torMgr) renderTorrc() string {
+	return torrcFor(m.dataDir, m.logPath, torVPNTorrcLines(m.cfg.OverVPN, m.proxyKey)...)
+}
+
+// removeOnionLeftovers deletes what the old onion door left in Tor's data directory: the service's identity key, its address and its list of authorized devices. It runs at every start and does
+// nothing once the directory is gone.
+func (m *torMgr) removeOnionLeftovers() {
+	dir := filepath.Join(m.dataDir, "onion")
+	if _, err := os.Lstat(dir); err != nil {
+		return
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		fmt.Fprintf(os.Stderr, "tor: could not remove the old onion service directory %s: %v\n", dir, err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "tor: removed the old onion service directory %s\n", dir)
+}
+
 func startTorProc(m *torMgr) (*exec.Cmd, error) {
 	if _, err := os.Stat(m.bin); err != nil {
 		return nil, fmt.Errorf("the Tor binary is not installed (%s)", m.bin)
@@ -328,9 +336,6 @@ func startTorProc(m *torMgr) (*exec.Cmd, error) {
 	}
 	os.Remove(m.logPath)
 	prepareTorCache(m.dataDir)
-	if err := syncOnionDir(m.onionDir(), m.cfg.Door, torOwner()); err != nil { // the caller (Tick) holds m.mu
-		return nil, err
-	}
 	m.proxyKey = ""
 	if m.cfg.OverVPN {
 		m.proxyKey = newTorProxyKey() // a fresh secret for every run of Tor: only this Tor knows it
@@ -524,11 +529,7 @@ func (m *torMgr) killStray() {
 func (m *torMgr) Run() {
 	removeLegacyTorOut()
 	m.killStray()
-	m.mu.Lock()
-	if err := m.applyDoorLocked(); err != nil { // after a boot: the authorized_clients files and the SSH flag match the settings again
-		m.lastErr = "onion door: " + err.Error()
-	}
-	m.mu.Unlock()
+	m.removeOnionLeftovers()
 	time.Sleep(40 * time.Second) // after a boot: let the uplink, DNS and the clock settle (Tor needs a sane clock)
 	n := 0
 	for {
@@ -592,36 +593,19 @@ func (m *torMgr) ready() bool {
 	return m.running() && m.boot >= 100
 }
 
-// DNS answers a query that must not reach a public resolver: a .onion name (anyone), or any name asked by a Tor device. handled is false for everything else.
+// DNS answers a query that must not reach a public resolver: a .onion name (anyone: refused), or any name asked by a Tor device. handled is false for everything else.
 func (m *torMgr) DNS(client string, dq dnsQuery, q []byte) (resp []byte, handled bool) {
 	if m == nil {
 		return nil, false
 	}
-	onion := dq.Name == "onion" || strings.HasSuffix(dq.Name, ".onion")
-	dev := m.IsDevice(client)
-	if !onion && !dev {
-		return nil, false
-	}
-	m.mu.Lock()
-	house := m.cfg.Onion
-	m.mu.Unlock()
-	if onion && !house && !dev {
+	if dq.Name == "onion" || strings.HasSuffix(dq.Name, ".onion") { // no .onion access for anyone: refused, never resolved, never sent to a public resolver
 		if torBypassMgr != nil {
 			torBypassMgr.ObserveOnionAttempt(m.macOfIP()[client], client, dq.Name, m.now())
 		}
-		return buildRcode(q, dq, 3), true // house-wide .onion is off: NXDOMAIN, and never upstream
+		return buildRcode(q, dq, 3), true
 	}
-	if onion {
-		switch {
-		case !validOnion(dq.Name):
-			return buildRcode(q, dq, 3), true // not a v3 onion name: it cannot exist
-		case !m.ready():
-			return buildRcode(q, dq, 2), true // Tor is not ready: SERVFAIL, fail closed
-		case dq.Type == 1:
-			return buildA(q, dq, m.onions.ipFor(dq.Name), 30), true // an address from the onion range; the onion bridge finishes the job (onionbridge.go)
-		default:
-			return buildRcode(q, dq, 0), true // AAAA and the rest: no data (IPv6 is not carried)
-		}
+	if !m.IsDevice(client) {
+		return nil, false
 	}
 	if dq.Type != 1 && dq.Type != 12 { // A and PTR only: IPv6 is not carried (an AAAA answer would only send a client down a path that is refused), and Tor's DNS port speaks nothing else; the rest is "no data", never a leak
 		return buildRcode(q, dq, 0), true
@@ -657,17 +641,10 @@ func torResolve(q []byte) ([]byte, error) {
 
 // ---- settings ----
 
-// SetEnabled switches the Tor daemon on or off and leaves the .onion settings alone (those are changed only over SSH).
+// SetEnabled switches the Tor daemon on or off.
 func (m *torMgr) SetEnabled(enabled bool) error {
 	m.mu.Lock()
-	on := m.cfg.Onion
-	m.mu.Unlock()
-	return m.Set(enabled, on)
-}
-
-func (m *torMgr) Set(enabled, onion bool) error {
-	m.mu.Lock()
-	m.cfg.Enabled, m.cfg.Onion = enabled, onion
+	m.cfg.Enabled = enabled
 	if enabled {
 		m.yieldTil, m.nextTry, m.wait = time.Time{}, time.Time{}, torMinRestartWait
 	}
@@ -773,7 +750,6 @@ type torView struct {
 	Available bool            `json:"available"`
 	Installed bool            `json:"installed"`
 	Enabled   bool            `json:"enabled"`
-	Onion     bool            `json:"onion"`
 	Running   bool            `json:"running"`
 	Ready     bool            `json:"ready"`
 	Boot      int             `json:"bootstrap"` // percent; -1 not running
@@ -795,7 +771,7 @@ func (m *torMgr) View() torView {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	_, ierr := os.Stat(m.bin)
-	v := torView{Available: true, Installed: ierr == nil, Enabled: m.cfg.Enabled, Onion: m.cfg.Onion, Running: m.running(), Boot: m.boot, Restarts: m.restarts, Err: m.lastErr,
+	v := torView{Available: true, Installed: ierr == nil, Enabled: m.cfg.Enabled, Running: m.running(), Boot: m.boot, Restarts: m.restarts, Err: m.lastErr,
 		Socks: torHouseIP + ":" + strconv.Itoa(torSocksPort), AvailMB: float64(m.memAvail()) / 1024, Devices: []torDeviceView{}}
 	if v.Running {
 		v.Ready = m.boot >= 100
@@ -829,7 +805,7 @@ func (m *torMgr) View() torView {
 // torSelfTest asks check.torproject.org, through the local SOCKS port, whether the request arrived from Tor. It proves Tor works on the box; a device's own path needs a test from the device.
 func torSelfTest() (map[string]any, error) {
 	host := "check.torproject.org"
-	c, err := socksConnect(onionSocksAddr, host, 443, 60*time.Second)
+	c, err := socksConnect(torSocksAddr, host, 443, 60*time.Second)
 	if err != nil {
 		return nil, err
 	}

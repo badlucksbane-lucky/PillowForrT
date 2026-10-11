@@ -661,10 +661,6 @@ func handleCellAPI(w http.ResponseWriter, r *http.Request, path string) {
 		towers.Clear()
 		writeJSON(w, 200, map[string]string{"status": "observations deleted"})
 	case path == "towers/wigle.csv" && r.Method == http.MethodGet:
-		if viaOnion(r) {
-			writeJSON(w, 403, map[string]string{"error": "the tower log is not served through the onion door"})
-			return
-		}
 		towers.mu.Lock()
 		obs := append([]cellObs{}, towers.obs...)
 		towers.mu.Unlock()

@@ -2,8 +2,8 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,7 +20,7 @@ const torMAC2 = "aa:bb:cc:dd:ee:02"
 
 func TestTorrcIsClientOnly(t *testing.T) {
 	rc := torrcFor("/var/volatile/tor", "/var/volatile/tor/notice.log")
-	for _, want := range []string{"ClientOnly 1", "DNSPort 127.0.0.1:9053", "TransPort 192.168.1.1:9040", "SocksPort 192.168.1.1:9050", "SocksPolicy reject *", "DataDirectory /var/volatile/tor", "ClientUseIPv6 0", "SafeLogging 1"} {
+	for _, want := range []string{"ClientOnly 1", "DNSPort 127.0.0.1:9053", "TransPort 192.168.1.1:9040", "SocksPort 127.0.0.1:9050", "SocksPolicy accept 127.0.0.1", "SocksPolicy reject *", "DataDirectory /var/volatile/tor", "ClientUseIPv6 0", "SafeLogging 1"} {
 		if !strings.Contains(rc, want+"\n") {
 			t.Errorf("torrc is missing %q:\n%s", want, rc)
 		}
@@ -33,17 +33,23 @@ func TestTorrcIsClientOnly(t *testing.T) {
 	if strings.Contains(rc, "0.0.0.0") {
 		t.Error("Tor must not listen on every interface (the cellular one included)")
 	}
+	// no easy access: Tor's SOCKS port is loopback only, and no LAN address may use it
+	if strings.Contains(rc, "SocksPort 192.168.") || strings.Contains(rc, "SocksPolicy accept 192.168.") || strings.Contains(rc, "HiddenService") || strings.Contains(rc, "198.18") {
+		t.Errorf("the torrc must give the LAN no way to use Tor as a proxy and run no onion service:\n%s", rc)
+	}
+	if n := strings.Count(rc, "SocksPort "); n != 1 {
+		t.Errorf("exactly one SocksPort (loopback): %d\n%s", n, rc)
+	}
 }
 
 func TestTorRulesFailClosedPerDevice(t *testing.T) {
-	nat, f, v6 := planTorRules(torRulePlan{Devices: []string{torMAC2, torMAC}, Onion: false})
+	nat, f, v6 := planTorRules(torRulePlan{Devices: []string{torMAC2, torMAC}})
 	// TCP is redirected into Tor, except to the LAN and to DNS (which the stub answers through Tor)
 	for _, want := range []string{
 		"-A HS_TOR -m mac --mac-source " + torMAC + " -d 192.168.1.0/24 -j RETURN",
 		"-A HS_TOR -m mac --mac-source " + torMAC + " -p udp --dport 53 -j RETURN",
 		"-A HS_TOR -m mac --mac-source " + torMAC + " -p tcp --dport 53 -j RETURN",
 		"-A HS_TOR -m mac --mac-source " + torMAC + " -p tcp -j REDIRECT --to-ports 9040",
-		"-A HS_TOR -p tcp -d 198.18.0.0/16 -j REDIRECT --to-ports 9041",
 	} {
 		if !strings.Contains(nat, want+"\n") {
 			t.Errorf("nat is missing %q:\n%s", want, nat)
@@ -78,17 +84,19 @@ func TestTorRulesFailClosedPerDevice(t *testing.T) {
 	}
 }
 
-func TestTorRulesHouseWideOnionOnly(t *testing.T) {
-	nat, f, v6 := planTorRules(torRulePlan{Onion: true})
-	if !strings.Contains(nat, "-d 198.18.0.0/16 -j REDIRECT --to-ports 9041") {
-		t.Error("house-wide .onion needs the virtual range redirected for everybody")
+// No .onion address range is redirected anywhere: with devices, with none, the firewall has no rule for the old bridge (198.18/16, port 9041).
+func TestTorRulesHaveNoOnionRange(t *testing.T) {
+	for _, p := range []torRulePlan{{}, {Devices: []string{torMAC}}} {
+		nat, f, v6 := planTorRules(p)
+		for _, blk := range []string{nat, f, v6} {
+			if strings.Contains(blk, "198.18") || strings.Contains(blk, "9041") {
+				t.Errorf("the old onion bridge range must not appear in the rules:\n%s", blk)
+			}
+		}
 	}
-	if strings.Contains(nat, "mac-source") || strings.Contains(f, "mac-source") || strings.Contains(v6, "mac-source") {
-		t.Error("with no device assigned, no device is touched")
-	}
-	nat, _, _ = planTorRules(torRulePlan{})
-	if strings.Contains(nat, "REDIRECT") {
-		t.Error("with nothing on, nothing is redirected (the chain is emptied)")
+	nat, f, v6 := planTorRules(torRulePlan{})
+	if strings.Contains(nat, "REDIRECT") || strings.Contains(nat, "mac-source") || strings.Contains(f, "mac-source") || strings.Contains(v6, "mac-source") {
+		t.Error("with no device assigned, nothing is redirected and no device is touched (the chains are emptied)")
 	}
 }
 
@@ -129,7 +137,6 @@ func testTor(t *testing.T) (*torMgr, *[]evt, *time.Time, *torRulePlan) {
 	m := &torMgr{path: filepath.Join(dir, "tor.json"), bin: filepath.Join(dir, "tor"), dataDir: filepath.Join(dir, "data"), torrc: filepath.Join(dir, "torrc"),
 		logPath: filepath.Join(dir, "data", "notice.log"), boot: -1, wait: torMinRestartWait,
 		now: func() time.Time { return now }, emit: func(e evt) { got = append(got, e) }}
-	m.onions = newOnionMap()
 	m.applyRules = func(p torRulePlan) error { applied = p; return nil }
 	m.memAvail = func() uint64 { return 70 * 1024 }
 	m.rssOf = func(int) uint64 { return 30 * 1024 }
@@ -150,7 +157,7 @@ func TestTorDeviceAssignmentAndPersistence(t *testing.T) {
 	if len(applied.Devices) != 1 || applied.Devices[0] != torMAC || !m.Active() {
 		t.Errorf("the rules are applied at once: %+v", applied)
 	}
-	if err := m.Set(false, true); err != nil || !applied.Onion || len(applied.Devices) != 1 {
+	if err := m.SetEnabled(false); err != nil || len(applied.Devices) != 1 {
 		t.Errorf("switching the daemon off must not release the device (fail closed): %+v %v", applied, err)
 	}
 	b, _ := os.ReadFile(m.path)
@@ -261,40 +268,37 @@ func TestTorDNSHook(t *testing.T) {
 	if _, ok := m.DNS("192.168.1.60", dq, b); ok {
 		t.Error("ordinary lookups are untouched")
 	}
-	// .onion with the house-wide switch off: NXDOMAIN, never upstream
+	// .onion: refused for everyone, NXDOMAIN, never upstream, whatever state Tor is in
 	const goodOnion = "duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion"
 	b, dq = q(goodOnion, 1)
 	if r, ok := m.DNS("192.168.1.60", dq, b); !ok || rc(r) != 3 {
-		t.Errorf(".onion off must be NXDOMAIN and handled: %v %v", r, ok)
+		t.Errorf(".onion must be NXDOMAIN and handled: %v %v", r, ok)
 	}
-	// on but Tor not ready: SERVFAIL (fail closed)
-	m.cfg.Onion = true
-	if r, ok := m.DNS("192.168.1.60", dq, b); !ok || rc(r) != 2 {
-		t.Errorf(".onion with Tor not ready must be SERVFAIL: %v %v", r, ok)
-	}
-	// ready: resolved through Tor, id preserved
-	m.cmd = exec.Command("sleep", "30")
+	m.cmd = exec.Command("sleep", "30") // Tor running and ready changes nothing: there is no .onion access
 	m.cmd.Start()
 	defer m.cmd.Process.Kill()
 	m.boot = 100
-	r, ok := m.DNS("192.168.1.60", dq, b)
-	if !ok || len(r) < 16 || r[0] != 0x12 || r[1] != 0x34 || r[2]&0x80 == 0 || rc(r) != 0 || r[7] != 1 {
-		t.Fatalf("a ready Tor gives .onion one answer: %v %v", r, ok)
+	if r, ok := m.DNS("192.168.1.60", dq, b); !ok || rc(r) != 3 || r[6] != 0 || r[7] != 0 {
+		t.Errorf(".onion with a ready Tor is still NXDOMAIN, with no answer record: %v %v", r, ok)
 	}
-	if ip := net.IP(r[len(r)-4:]); ip[0] != 198 || ip[1] != 18 {
-		t.Errorf("the answer is an address from the onion range: %v", ip)
-	} else if n, ok := m.onions.nameFor(ip); !ok || n != goodOnion {
-		t.Errorf("the address maps back to the name: %q %v", n, ok)
-	}
-	// AAAA for an onion name: no data (IPv6 is not carried); a made-up name: NXDOMAIN
 	b6, dq6 := q(goodOnion, 28)
-	if r, ok := m.DNS("192.168.1.60", dq6, b6); !ok || rc(r) != 0 || r[7] != 0 {
-		t.Errorf("onion AAAA is NODATA: %v", r)
+	if r, ok := m.DNS("192.168.1.60", dq6, b6); !ok || rc(r) != 3 {
+		t.Errorf("onion AAAA is NXDOMAIN too: %v", r)
 	}
-	bb, dqb := q("abcdefghij.onion", 1)
-	if r, ok := m.DNS("192.168.1.60", dqb, bb); !ok || rc(r) != 3 {
-		t.Errorf("an invalid onion name is NXDOMAIN: %v", r)
+	for _, name := range []string{"abcdefghij.onion", "onion", "sub." + goodOnion, "a.b.c.onion"} {
+		bb, dqb := q(name, 1)
+		if r, ok := m.DNS("192.168.1.60", dqb, bb); !ok || rc(r) != 3 {
+			t.Errorf("%s must be NXDOMAIN: %v", name, r)
+		}
 	}
+	m.cfg.Devices = []string{torMAC} // a Tor device is refused a .onion name as well: Tor's DNS port is never asked
+	asked := false
+	m.resolve = func(q []byte) ([]byte, error) { asked = true; return q, nil }
+	if r, ok := m.DNS("192.168.1.50", dq, b); !ok || rc(r) != 3 || asked {
+		t.Errorf("a Tor device gets NXDOMAIN for .onion and Tor is not asked: %v %v asked=%v", r, ok, asked)
+	}
+	m.resolve = func(q []byte) ([]byte, error) { r := append([]byte(nil), q...); r[2] |= 0x80; return r, nil }
+	m.cfg.Devices = nil
 	// a Tor device: every name goes through Tor, even when it is not .onion; A/AAAA/PTR only, the rest is "no data"
 	m.cfg.Devices = []string{torMAC}
 	b, dq = q("example.com", 1)
@@ -563,5 +567,95 @@ func TestTorProxyAllowed(t *testing.T) {
 	var nilMgr *torMgr
 	if isTor, _ := nilMgr.torProxyAllowed(req("127.0.0.1:1", "tor", "x")); isTor {
 		t.Error("no manager, nothing is Tor's")
+	}
+}
+
+// An old tor.json that still carries the removed "onion" and "door" settings loads without trouble, and the next save no longer has them.
+func TestTorOldOnionSettingsAreDropped(t *testing.T) {
+	m, _, _, _ := testTor(t)
+	os.WriteFile(m.path, []byte(`{"enabled":true,"onion":true,"over_vpn":true,"devices":["`+torMAC+`"],"door":{"enabled":true,"remote_write":true,"clients":[{"name":"laptop","pub":"X"}]}}`), 0o600)
+	if b, err := os.ReadFile(m.path); err == nil {
+		json.Unmarshal(b, &m.cfg)
+	}
+	if !m.cfg.Enabled || !m.cfg.OverVPN || len(m.cfg.Devices) != 1 {
+		t.Fatalf("the settings that still exist load: %+v", m.cfg)
+	}
+	m.save()
+	b, _ := os.ReadFile(m.path)
+	if strings.Contains(string(b), "onion") || strings.Contains(string(b), "door") || strings.Contains(string(b), "remote_write") || strings.Contains(string(b), "laptop") {
+		t.Errorf("a saved file must not keep the removed onion settings: %s", b)
+	}
+}
+
+// The old onion service directory (the identity key, the address, the authorized devices) is deleted at start, and only that directory.
+func TestTorRemovesOnionLeftovers(t *testing.T) {
+	m, _, _, _ := testTor(t)
+	od := filepath.Join(m.dataDir, "onion", "admin", "authorized_clients")
+	os.MkdirAll(od, 0o700)
+	os.WriteFile(filepath.Join(m.dataDir, "onion", "admin", "hs_ed25519_secret_key"), []byte("secret"), 0o600)
+	os.WriteFile(filepath.Join(od, "laptop.auth"), []byte("descriptor:x25519:X"), 0o600)
+	os.WriteFile(filepath.Join(m.dataDir, "state"), []byte("Guard x\n"), 0o600) // Tor's own state stays
+	os.MkdirAll(filepath.Join(m.dataDir, "keys"), 0o700)
+	m.removeOnionLeftovers()
+	if _, err := os.Stat(filepath.Join(m.dataDir, "onion")); err == nil {
+		t.Error("the onion directory must be gone")
+	}
+	if _, err := os.Stat(filepath.Join(m.dataDir, "state")); err != nil {
+		t.Error("Tor's own state must stay")
+	}
+	if _, err := os.Stat(filepath.Join(m.dataDir, "keys")); err != nil {
+		t.Error("Tor's own keys directory must stay")
+	}
+	m.removeOnionLeftovers() // nothing left: a no-op
+}
+
+// Every .onion lookup is noted for the bypass watcher, for an ordinary device and a Tor device alike.
+func TestTorOnionLookupIsNoted(t *testing.T) {
+	m, got, _, _ := testTor(t)
+	old := torBypassMgr
+	torBypassMgr = newTorBypassWatch(filepath.Join(t.TempDir(), "exits.txt"))
+	torBypassMgr.emit = func(e evt) { *got = append(*got, e) }
+	defer func() { torBypassMgr = old }()
+	b := []byte{0x12, 0x34, 0x01, 0x00, 0, 1, 0, 0, 0, 0, 0, 0}
+	for _, l := range []string{"abcdefghij", "onion"} {
+		b = append(b, byte(len(l)))
+		b = append(b, l...)
+	}
+	b = append(b, 0, 0, 1, 0, 1)
+	dq, err := parseQuery(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.cfg.Devices = []string{torMAC}
+	m.DNS("192.168.1.60", dq, b) // an ordinary device
+	m.DNS("192.168.1.50", dq, b) // a Tor device
+	n := 0
+	for _, e := range *got {
+		if e.Kind == "tor_bypass_onion" {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Errorf("both lookups are noted as tor_bypass_onion events, got %d: %+v", n, *got)
+	}
+}
+
+// Run (an endless loop) must clear the old onion service directory before anything else; the wiring is checked in the source.
+func TestTorRunCallsOnionCleanup(t *testing.T) {
+	src, err := os.ReadFile("tor.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(src)
+	i := strings.Index(s, "func (m *torMgr) Run() {")
+	if i < 0 {
+		t.Fatal("no Run")
+	}
+	body := s[i:]
+	if j := strings.Index(body, "\n}\n"); j > 0 {
+		body = body[:j]
+	}
+	if !strings.Contains(body, "m.removeOnionLeftovers()") || strings.Index(body, "m.removeOnionLeftovers()") > strings.Index(body, "m.Tick()") {
+		t.Error("Run must call removeOnionLeftovers before its first Tick")
 	}
 }

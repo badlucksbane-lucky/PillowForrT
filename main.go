@@ -69,7 +69,7 @@ var (
 	knownFile       = flag.String("known-devices", "/data/proxy/knowndevices.json", "MACs seen before, so only a really new device raises an event")
 	canaryIP        = flag.String("canary", "192.168.1.253", "the canary (decoy) address on the LAN; empty switches the canary off entirely")
 	arpWatchOn      = flag.Bool("arp-watch", true, "watch the bridge for ARP spoofing (gateway impersonation, address conflicts)")
-	torFile         = flag.String("tor-file", "/data/proxy/tor.json", "Tor settings (daemon on/off, house-wide .onion, the devices sent through Tor)")
+	torFile         = flag.String("tor-file", "/data/proxy/tor.json", "Tor settings (daemon on/off, Tor over Mullvad, the devices sent through Tor)")
 	torBin          = flag.String("tor-bin", "/data/proxy/tor", "the Tor client binary (the Tor recipe)")
 	rogueFile       = flag.String("rogue-file", "/data/proxy/rogue.json", "DHCP servers the owner allowed (their MAC addresses)")
 	torExitFile     = flag.String("tor-exit-file", "/data/proxy/tor-exits.txt", "known Tor relay/bridge addresses, one IP or CIDR per line; empty or missing turns tor_bypass_exit off")
@@ -102,8 +102,6 @@ var (
 	uiTokenFlag     = flag.String("ui-token-file", "", "file holding the API-key token that scripts send as X-UI-Token instead of signing in (empty = script tokens are OFF and every such header is refused; the web login is unaffected)")
 	vpnDir          = flag.String("vpn-dir", "/data/proxy/vpn", "directory for the Mullvad exit's state (holds this device's WireGuard key, mode 0600; empty = VPN off)")
 	uiListen        = flag.String("ui-listen", ":3129", "address for the HTTPS web page (login required); empty = the web page is off")
-	onionListen     = flag.String("onion-listen", "", "loopback address of the web page for the onion door (plain HTTP, read-only by default; Tor is its only client); empty = off unless the door is switched on over SSH, then 127.0.0.1:3130")
-	onionCmd        = flag.String("onion", "", "change or show the .onion settings over SSH, then exit: comma-separated status, house=on|off, door=on|off, write=on|off, add=NAME:PUBKEY, remove=NAME")
 	uiHost          = flag.String("ui-host", "pillowforrt.lan", "the name plain-HTTP requests are redirected to (https://<name>/...)")
 	secureDir       = flag.String("secure-dir", "/data/proxy/secure", "directory (mode 0700) for the login hash and the HTTPS certificate")
 	setLogin        = flag.String("set-login", "", "set the web login for this user (the password is read from stdin) and exit")
@@ -328,16 +326,6 @@ func main() {
 		fmt.Println("login set for", *setLogin)
 		os.Exit(0)
 	}
-	if *onionCmd != "" {
-		m := newTorMgr()
-		out, err := onionCLI(m, *onionCmd)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "not changed:", err)
-			os.Exit(1)
-		}
-		fmt.Print(out)
-		os.Exit(0)
-	}
 	if *setWifi != "" {
 		msg, err := setWifiCLI(newWifiManager(defaultWifiEnv()), *setWifi, *setWifi5, os.Stdin)
 		if err != nil {
@@ -530,7 +518,6 @@ func main() {
 		dnsProxy.Tor = torMgrG
 	}
 	go torMgrG.Run()
-	go newOnionBridge(torMgrG.onions).Serve(torHouseIP + ":" + strconv.Itoa(torBridgePort))
 	speedMgr = newSpeedTester(*speedFile)
 	go speedMgr.Loop()
 	snaps = defaultSnapStore()
@@ -584,18 +571,6 @@ func main() {
 			hs := &http.Server{Addr: *uiListen, Handler: ui.handler(), ErrorLog: httpErrorLog(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10,
 				TLSConfig: &tls.Config{GetCertificate: cm.GetCertificate, MinVersion: tls.VersionTLS12}}
 			go func() { log.Printf("web page: %v", hs.ListenAndServeTLS("", "")) }()
-			onionAddr := *onionListen
-			if onionAddr == "" && torMgrG.DoorEnabled() {
-				onionAddr = onionWebTarget // the door is on (set over SSH): its web page listens on the loopback address Tor forwards to
-			}
-			if onionAddr != "" {
-				if !isLoopbackAddr(onionAddr) {
-					log.Printf("onion web page off: %q is not a loopback address", onionAddr)
-				} else {
-					ohs := &http.Server{Addr: onionAddr, ErrorLog: httpErrorLog(), Handler: ui.onionHandler(func() bool { return torMgrG.RemoteWrite() }), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 2 * time.Minute, MaxHeaderBytes: 16 << 10}
-					go func() { log.Printf("onion web page: %v", ohs.ListenAndServe()) }()
-				}
-			}
 		}
 	}
 	sig := make(chan os.Signal, 1)

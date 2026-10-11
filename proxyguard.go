@@ -1,7 +1,7 @@
 package main
 
-// The forward proxy's destination guard. A LAN client may use the proxy to reach the internet, never the hotspot itself: not loopback (the onion door's
-// listener, Tor's SocksPort, dnsmasq), not link-local, and not the unit's own interface addresses. The guard resolves the name itself and dials only the
+// The forward proxy's destination guard. A LAN client may use the proxy to reach the internet, never the hotspot itself: not loopback (Tor's SocksPort,
+// dnsmasq), not link-local, and not the unit's own interface addresses. The guard resolves the name itself and dials only the
 // vetted addresses, so a name that points at 127.0.0.1 cannot slip past a check made on the name.
 
 import (

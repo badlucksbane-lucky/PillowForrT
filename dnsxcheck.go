@@ -104,7 +104,7 @@ func (w *dnsXWatch) label(ip, mac string) string {
 	return ip
 }
 
-// unroutable reports whether an address is one no public name should resolve to: private, loopback, link-local, CGNAT, the benchmark range this box uses for .onion, or unspecified.
+// unroutable reports whether an address is one no public name should resolve to: private, loopback, link-local, CGNAT, the benchmarking range, or unspecified.
 func unroutable(ip net.IP) bool {
 	if ip == nil {
 		return true
