@@ -84,6 +84,7 @@ main{max-width:1100px;margin:0 auto;padding:10px 12px calc(40px + env(safe-area-
 .player{position:fixed;inset:0;z-index:80;background:#000;color:#eee;display:flex;flex-direction:column;visibility:hidden}.player.open{visibility:visible}
 .ph{display:flex;align-items:center;gap:10px;padding:max(8px,env(safe-area-inset-top)) 12px 8px}.ph .pt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;opacity:.9}
 .ph button{width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:20px;line-height:1}
+.pnav{display:flex;align-items:center;gap:4px;font-size:13px;white-space:nowrap}.pnav[hidden]{display:none}.ph .pnav button{width:34px;height:34px;font-size:18px}.ph .pnav button:disabled{opacity:.35}
 .ph select{max-width:46vw;height:38px;border-radius:19px;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:14px;padding:0 12px}.ph select[hidden]{display:none}.ph select option{color:#000}
 .pv{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#000}.pv video{width:100%;max-height:100%;background:#000}
 .ps{padding:8px 12px max(12px,env(safe-area-inset-bottom));font-size:13px}.ps .bar{height:3px;background:rgba(255,255,255,.2);border-radius:2px;overflow:hidden;margin-bottom:8px}.ps .bar i{display:block;height:100%;width:0;background:var(--ac,#d3a96e);transition:width .5s}
@@ -98,7 +99,7 @@ main{max-width:1100px;margin:0 auto;padding:10px 12px calc(40px + env(safe-area-
 <form id="sf" role="search"><input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="120" aria-label="Search"></form></div>
 <nav class="tabs" role="tablist" id="tabs"><button role="tab" data-t="movies">Movies</button><button role="tab" data-t="series">Series</button><button role="tab" data-t="anime">Anime</button><button role="tab" data-t="web">Web</button><i class="ind" id="ind"></i></nav></header>
 <main id="main"></main>
-<div class="player" id="player" inert><div class="ph"><div class="pt" id="ptitle"></div><select id="paudio" aria-label="Audio track" hidden></select><button id="pclose" aria-label="Close player">×</button></div><div class="pv" id="pv"></div><div class="pick" id="ppick" hidden></div><div class="ps" id="pstat"></div></div>
+<div class="player" id="player" inert><div class="ph"><div class="pt" id="ptitle"></div><span class="pnav" id="pnav" hidden></span><select id="paudio" aria-label="Audio track" hidden></select><button id="pclose" aria-label="Close player">×</button></div><div class="pv" id="pv"></div><div class="pick" id="ppick" hidden></div><div class="ps" id="pstat"></div></div>
 <div class="sheet" id="sheet" inert><div class="scrim" id="scrim"></div><section class="panel" id="panel" role="dialog" aria-modal="true" tabindex="-1"></section></div>
 <script>
 (()=>{'use strict';
@@ -203,9 +204,9 @@ const audioPlays=(a,v)=>!a||a.can===undefined||(a.can!==null&&v.canPlayType('aud
 // ---------- the detail sheet ----------
 const sheet=$('#sheet'),panel=$('#panel');
 const maybeNot=n=>/hevc|x265|h\.?265|10[- ]?bit|hi10|\bav1\b|dts|truehd|atmos|e-?ac-?3|\bac-?3\b|ddp|\bdd\+?[257]\.[01]\b|dolby|\.avi|\.wmv/i.test(n||'');
-function tor(label,sub,hash,name,seeds,sz,file){const mg=magnet(hash,name);if(!mg)return null;const n=+seeds||0,bt=BT.status&&BT.status.enabled,warn=bt&&maybeNot(label+' '+name);
- const pb=bt?h('button',{class:n?'btn':'btn ghost',text:'Play','aria-label':'Play '+name,onclick:()=>{if(!n&&!pb.dataset.ok){pb.dataset.ok='1';pb.textContent='Play anyway';return}play(hash,name,mg,file)}}):null;
- return h('div',{class:'tor'},h('div',{class:'m'},h('div',{class:'t',text:label}),h('div',{class:'s'},h('span',{class:'dot '+(n>=10?'g':n>0?'a':'')}),h('span',{text:n+' seeds'}),sz?h('span',{text:sz}):null,sub?h('span',{text:sub}):null,warn?h('span',{text:'may not play',title:'HEVC, 10-bit, or an AC-3, E-AC-3, DTS or TrueHD audio track (Dolby Digital and similar): phones often play the picture with no sound. Prefer an AAC release, or use Magnet with a desktop player.',style:'color:var(--warn)'}):null)),
+function tor(label,sub,hash,name,seeds,sz,file,ep){const mg=magnet(hash,name);if(!mg)return null;const n=+seeds||0,bt=BT.status&&BT.status.enabled,warn=bt&&maybeNot(label+' '+name);
+ const pb=bt?h('button',{class:n?'btn':'btn ghost',text:'Play','aria-label':'Play '+name,onclick:()=>{if(!n&&!pb.dataset.ok){pb.dataset.ok='1';pb.textContent='Play anyway';return}play(hash,name,mg,file,ep)}}):null;
+ return h('div',{class:'tor'},h('div',{class:'m'},h('div',{class:'t',text:label}),h('div',{class:'s'},h('span',{class:'dot '+(n>=10?'g':n>0?'a':'')}),h('span',{text:n+' seeds'}),sz?h('span',{text:sz}):null,packTitle(label+' '+name)?h('span',{text:'season pack',title:'Several episodes in one download. The player finds the one you picked, and has Previous and Next.'}):null,sub?h('span',{text:sub}):null,warn?h('span',{text:'may not play',title:'HEVC, 10-bit, or an AC-3, E-AC-3, DTS or TrueHD audio track (Dolby Digital and similar): phones often play the picture with no sound. Prefer an AAC release, or use Magnet with a desktop player.',style:'color:var(--warn)'}):null)),
   h('div',{class:'tb'},
    h('button',{class:'btn ghost',title:'Copy magnet link','aria-label':'Copy magnet link',text:'Copy',onclick:ev=>{const b=ev.currentTarget;(navigator.clipboard?navigator.clipboard.writeText(mg):Promise.reject()).then(()=>{b.textContent='Copied'},()=>{b.textContent='Select';prompt('Magnet link',mg)});setTimeout(()=>b.textContent='Copy',1500)}}),
    pb,
@@ -236,7 +237,7 @@ async function openSeries(id,rid){const m=await cmMeta('series',id);if(rid!==S.s
    const fill=()=>{const k=v.s+':'+v.e;let st=tio.get(k);if(!st&&!fut){st={done:false,err:false,list:[]};tio.set(k,st);tioFor('series/'+id+':'+k).then(l=>{st.list=l},()=>{st.err=true}).then(()=>{st.done=true;st.cb&&st.cb()})}
     if(st)st.cb=()=>{if(rid===S.sid&&el.isConnected&&el.classList.contains('open'))fill()};
     const have=new Set(counts(v.s,v.e).map(x=>String(x.h).toLowerCase())),t=[...counts(v.s,v.e),...(st?st.list:[]).filter(x=>!have.has(x.h))].sort((a,b)=>qrank(b.t)-qrank(a.t)||b.n-a.n);
-    tl.replaceChildren(...torRows(t,x=>tor(x.t,x.src||'',x.h,x.t,x.n,size(x.z),x.f),fut?'Not aired yet':(!ezDone&&!ezErr)||(st&&!st.done)?'Looking for torrents…':'No torrents found'))};
+    tl.replaceChildren(...torRows(t,x=>tor(x.t,x.src||'',x.h,x.t,x.n,size(x.z),x.f,{s:v.s,e:v.e}),fut?'Not aired yet':(!ezDone&&!ezErr)||(st&&!st.done)?'Looking for torrents…':'No torrents found'))};
    el.append(h('button',{class:'eh','aria-expanded':'false',onclick:()=>{el.classList.toggle('open');el.firstChild.setAttribute('aria-expanded',el.classList.contains('open'));fill()}},
      h('div',{class:'th'},v.th?img(v.th,'',''):null),h('div',{class:'em'},h('div',{class:'en',text:(v.e+'. ')+(v.n||'Episode '+v.e)}),h('div',{class:'ed',text:v.d?new Date(v.d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}):''})),h('span',{class:'badge'+(ts.length?' has':''),text:ts.length||(ezDone||fut?'–':'…')})),tl);
    if(open.has(String(v.e))){el.classList.add('open');fill()}return el}));
@@ -252,7 +253,7 @@ async function kitsuFor(al){return cached('ku:'+al,7*DAY,async()=>{const d=await
  const it=(((d.data||[])[0]||{}).relationships||{}).item;const k=it&&it.data&&it.data.id;if(!/^\d+$/.test(k||''))throw new Error('no Kitsu entry');return k})}
 async function openAnime(id,rid){const m=await alOne(id);if(rid!==S.sid)return;const movie=m.format==='MOVIE',max=m.eps||9999,tl=h('div',{}),inp=h('input',{value:m.romaji||m.name,'aria-label':'Search Nyaa',maxlength:'100',autocomplete:'off'});let filt='',items=[],ep=1,seq=0;
  const fc=h('div',{class:'scrollx chips'},[['','All'],['1080','1080p'],['720','720p'],['batch','Batch']].map(([k,l])=>h('button',{class:'chip'+(k===''?' on':''),text:l,onclick:ev=>{filt=k;fc.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));ev.currentTarget.classList.add('on');draw()}})));
- const draw=()=>{const f=items.filter(t=>!filt||(filt==='batch'?/batch|complete|\d+\s*[-~]\s*\d+/i.test(t.title):t.title.toLowerCase().includes(filt)));tl.replaceChildren(...torRows(f.slice(0,80),t=>tor(t.title,t.src||'',t.hash,t.title,t.seeds,t.size,t.file),'No torrents'))};
+ const draw=()=>{const f=items.filter(t=>!filt||(filt==='batch'?/batch|complete|\d+\s*[-~]\s*\d+/i.test(t.title):t.title.toLowerCase().includes(filt)));tl.replaceChildren(...torRows(f.slice(0,80),t=>tor(t.title,t.src||'',t.hash,t.title,t.seeds,t.size,t.file,movie?null:{s:null,e:ep}),'No torrents'))};
  // the default lookup runs in this page (Kitsu id, then Torrentio); the Nyaa box below is the only thing that asks the box
  const loadTio=()=>{const my=++seq;tl.replaceChildren(h('div',{class:'note',text:'Looking for torrents…'}));
   kitsuFor(id).then(k=>tioFor(movie?'movie/kitsu:'+k:'series/kitsu:'+k+':'+ep)).then(l=>{if(rid!==S.sid||my!==seq)return;items=l.map(x=>({title:x.t,hash:x.h,seeds:x.n,size:size(x.z),src:x.src,file:x.f})).sort((a,b)=>b.seeds-a.seeds);draw()})
@@ -339,11 +340,53 @@ function stopPlayer(){BT.timers.forEach(clearInterval);BT.timers=[];if(BT.audio)
  const v=pv.querySelector('video');if(v){v.pause();v.removeAttribute('src');v.load()}
  if(BT.cur){try{BT.cur.destroy({destroyStore:true})}catch(e){}BT.cur=null}
  releaseStore();setTimeout(sweepStore,2000);
- const pa=$('#paudio');if(pa){pa.hidden=true;pa.onchange=null;pa.replaceChildren()}}
+ const pa=$('#paudio');if(pa){pa.hidden=true;pa.onchange=null;pa.replaceChildren()}const pn=$('#pnav');if(pn){pn.hidden=true;pn.replaceChildren()}}
 function closePlayer(fromPop){if(!playerEl.classList.contains('open'))return;stopPlayer();pv.replaceChildren();ppick.hidden=true;playerEl.classList.remove('open');playerEl.inert=true;document.body.classList.toggle('lock',sheet.classList.contains('open'));if(!fromPop&&history.state&&history.state.player)history.back()}
 window.addEventListener('popstate',()=>{if(playerEl.classList.contains('open'))closePlayer(true)});
 $('#pclose').addEventListener('click',()=>closePlayer());
-async function play(hash,name,mg,want){
+// <season-packs>
+// Season packs: one torrent holding many episodes. The episode that was asked for is found by reading season and episode out of the file names; the rest are listed in order, and while playing the top bar has
+// Previous / Next (an episode that ends moves on by itself). A pure block: scripts/dev/seasonpack-unit.mjs runs it against made-up file lists.
+const isVideoName=n=>/\.(mp4|m4v|mkv|webm|mov|avi|ts)$/i.test(n);
+const isSample=p=>/(^|[^a-z])sample([^a-z]|$)/i.test(String(p).split('/').pop());
+// {s, e} from a file path; either may be null. Reads S02E05, 2x05, "Season 2 Episode 5", a Season folder with "05 - Title", " - 05 [1080p]" (fansub style), E05 / Ep05 / Episode 5.
+function parseEp(path){
+ const parts=String(path).split('/'),base=parts[parts.length-1].replace(/\.[a-z0-9]{2,4}$/i,''),dirs=parts.slice(0,-1).join('/');let m;
+ if(m=/(?:^|[^a-z0-9])s(\d{1,2})[ ._-]?e(\d{1,4})(?!\d)/i.exec(base))return {s:+m[1],e:+m[2]};
+ if(m=/(?:^|[^a-z0-9])(\d{1,2})x(\d{2,3})(?![0-9a-z])/i.exec(base))return {s:+m[1],e:+m[2]};
+ if(m=/season[ ._-]*(\d{1,2})[^/]*?(?:episode|ep|e)[ ._-]*(\d{1,4})(?!\d)/i.exec(base))return {s:+m[1],e:+m[2]};
+ let sd=null,r=/(?:^|[\/ ._-])(?:season|series|saison|staffel|s)[ ._-]*(\d{1,2})(?![0-9a-z])/gi,x;while(x=r.exec(dirs))sd=+x[1];
+ if(m=/(?:^|[^a-z0-9])(?:episode|ep|e)[ ._-]?(\d{1,4})(?![0-9a-z])/i.exec(base))return {s:sd,e:+m[1]};
+ if((m=/\s-\s(\d{1,4})(?:v\d)?(?=\s|\[|\(|\.|$)/.exec(base))&&!(+m[1]>=1900&&+m[1]<=2100))return {s:sd,e:+m[1]};
+ if(m=/^(\d{1,3})(?=[ ._-]|$)/.exec(base))return {s:sd,e:+m[1]};
+ return {s:sd,e:null}}
+const epKey=p=>(p.s==null?'':p.s)+':'+p.e;
+const epLabel=p=>p.e==null?'':(p.s!=null?'S'+String(p.s).padStart(2,'0'):'')+'E'+String(p.e).padStart(2,'0');
+const filePath=f=>f.path||f.name;
+// A pack has at least two files that are different episodes.
+const isPack=files=>new Set(files.map(f=>parseEp(filePath(f))).filter(p=>p.e!=null).map(epKey)).size>=2;
+// Episode order: season, then episode, files with no episode last by name.
+const packOrder=files=>files.map(f=>({f,p:parseEp(filePath(f))})).sort((a,b)=>(a.p.e==null)-(b.p.e==null)||(a.p.s??0)-(b.p.s??0)||(a.p.e??0)-(b.p.e??0)||filePath(a.f).localeCompare(filePath(b.f))).map(x=>x.f);
+// The file for episode ep={s, e} (s null for anime numbered straight through), or null when it is not clear. Several files for one episode (two qualities): the biggest.
+function pickEpisode(files,ep){
+ if(!ep||ep.e==null)return null;
+ const all=files.map(f=>({f,p:parseEp(filePath(f))})),same=all.filter(x=>x.p.e===ep.e);let pool;
+ if(ep.s!=null){pool=same.filter(x=>x.p.s===ep.s);if(!pool.length&&!all.some(x=>x.p.s!=null))pool=same} // a pack with no season in its names at all is taken to be the season asked for
+ else{pool=same;if(new Set(pool.map(x=>x.p.s)).size>1)return null} // "05" of which season? let the person choose
+ return pool.length?pool.sort((a,b)=>b.f.length-a.f.length)[0].f:null}
+// What to do with the video files of a torrent (vids, biggest first): {play: file} or {list: files, pack, missing}. The order of preference: the exact file name the source gave, the episode asked for, a list in
+// episode order for a pack, then what the player always did (the big files, or the biggest alone).
+function chooseFile(vids,want,ep){
+ const hit=want&&vids.find(f=>f.name.toLowerCase()===want.toLowerCase());if(hit)return {play:hit};
+ const byEp=pickEpisode(vids,ep);if(byEp)return {play:byEp};
+ if(isPack(vids))return {list:packOrder(vids),pack:true,missing:!!(ep&&ep.e!=null)};
+ const big=vids.filter(f=>f.length>=vids[0].length*.3);
+ return big.length>1?{list:big}:{play:vids[0]}}
+// A search result that looks like a whole season (or more) in one download.
+const packTitle=t=>!/s\d{1,2}[ ._-]?e\d/i.test(t)&&/(^|[^a-z0-9])s\d{1,2}([^a-z0-9]|$)|season[ ._-]?\d|complete|batch|\d{1,3}\s*[-~]\s*\d{1,3}/i.test(t);
+// </season-packs>
+function resetAudio(){if(BT.audio){BT.audio.dispose();BT.audio=null}const pa=$('#paudio');if(pa){pa.hidden=true;pa.onchange=null;pa.replaceChildren()}}
+async function play(hash,name,mg,want,epWant){
  stopPlayer();pv.replaceChildren();ppick.hidden=true;$('#ptitle').textContent=name;
  if(!playerEl.classList.contains('open')){history.pushState({player:1},'');playerEl.classList.add('open');playerEl.inert=false;document.body.classList.add('lock')}
  const say=(msg,bad)=>pstat.replaceChildren(h('div',{class:'row2'},h('span',{class:bad?'err':'',text:msg}),h('span',{class:'pbtn'},/certificate/i.test(msg)?h('a',{class:'btn',href:'/api/cert/pillowforrt.crt',text:'Trust certificate'}):null,h('a',{class:'btn ghost',href:mg,text:'Open magnet'}))));
@@ -352,9 +395,11 @@ async function play(hash,name,mg,want){
  let c;try{c=await engine()}catch(e){say(e.message,true);return}
  c.throttleDownload(st.download===0?-1:(st.download||256)*1024);// the box's Download setting (KB/s, 0 = no limit), 256 until it is set
  const up=st.upload||'off';c.throttleUpload(up==='normal'?524288:up==='low'?131072:1024);// off: no upload slots at all, so nothing is served to other peers
- const t=BT.cur=c.add('magnet:?xt=urn:btih:'+hash+'&dn='+encodeURIComponent(name),{destroyStoreOnDestroy:true,storeCacheSlots:0,uploads:up==='off'?false:10}); // no piece cache in memory: it streams in fine from the store
+ const t=BT.cur=c.add('magnet:?xt=urn:btih:'+hash+'&dn='+encodeURIComponent(name),{destroyStoreOnDestroy:true,storeCacheSlots:0,deselect:true,uploads:up==='off'?false:10}); // no piece cache in memory: it streams in fine from the store
+ // deselect: WebTorrent otherwise selects the WHOLE torrent when the file list arrives, and file.deselect() cannot undo that for a multi-file torrent (it removes only an exactly matching range),
+ // so a season pack would download every episode into the device's storage. Started with nothing selected, only what the video reads is fetched.
  holdStore(t.infoHash);t.on('infoHash',()=>holdStore(t.infoHash));
- let started=Date.now(),wires=0,file=null,note='';const bar=h('i'),line=h('div',{class:'row2'}),aud=h('div',{class:'note',style:'color:var(--warn)',hidden:true});pstat.replaceChildren(h('div',{class:'bar'},bar),line,aud);
+ let started=Date.now(),wires=0,file=null,note='',pack=null,go=()=>{};const bar=h('i'),line=h('div',{class:'row2'}),aud=h('div',{class:'note',style:'color:var(--warn)',hidden:true});pstat.replaceChildren(h('div',{class:'bar'},bar),line,aud);
  const draw=()=>{if(BT.cur!==t)return;const sec=(Date.now()-started)/1000;let msg=!t.infoHash?'Starting…':!t.metadata?(wires?'Fetching the file list…':sec>40?'No peers found for this torrent':'Finding peers…'):(file?(wires?'Buffering…':'Looking for peers…'):'Choose a file');
   if(file&&video().readyState>=3&&!video().paused)msg='Playing';
   bar.style.width=Math.round((file?file.progress:t.progress)*100)+'%';
@@ -370,17 +415,22 @@ async function play(hash,name,mg,want){
   catch(e){}finally{busy=false}};
  t.on('infoHash',()=>{feed();let last=Date.now(),tries=0;BT.timers.push(setInterval(()=>{const idle=Date.now()-last,low=t.numPeers<10;if(!low)tries=0;if(low&&idle>90000&&tries<5||!low&&idle>300000){if(low)tries++;last=Date.now();feed()}},5000))});
  t.on('ready',()=>{
-  const vids=t.files.filter(f=>/\.(mp4|m4v|mkv|webm|mov|avi|ts)$/i.test(f.name)).sort((a,b)=>b.length-a.length);
+  const found=t.files.filter(f=>isVideoName(f.name)),real=found.filter(f=>!isSample(filePath(f))),vids=(real.length?real:found).sort((a,b)=>b.length-a.length); // a sample clip is not an episode
   if(!vids.length){say('This torrent has no video file',true);return}
-  const start=f=>{file=f;ppick.hidden=true;t.files.forEach(x=>{if(x!==f)x.deselect()});
+  pack=isPack(vids)?packOrder(vids):null;
+  const navDraw=()=>{const pn=$('#pnav');if(!pack||!file){pn.hidden=true;pn.replaceChildren();return}const i=pack.indexOf(file),l=epLabel(parseEp(filePath(file)));pn.hidden=false;
+   pn.replaceChildren(h('button',{type:'button','aria-label':'Previous episode',text:'‹',disabled:i<=0,onclick:()=>go(-1)}),h('span',{text:l||(i+1)+' / '+pack.length}),h('button',{type:'button','aria-label':'Next episode',text:'›',disabled:i<0||i>=pack.length-1,onclick:()=>go(1)}))};
+  const start=f=>{resetAudio();file=f;ppick.hidden=true;navDraw();if(pack)$('#ptitle').textContent=name+'  ·  '+(epLabel(parseEp(filePath(f)))||f.name);t.files.forEach(x=>{if(x!==f)x.deselect()});
    const v=h('video',{controls:true,controlsList:'nodownload',playsinline:true,autoplay:true,oncontextmenu:e=>e.preventDefault()}); // no Download in the player's menu (nor Save video as)
    v.addEventListener('error',()=>{note='the browser cannot play this file (codec or container)';v.remove()});v.addEventListener('loadedmetadata',()=>{fetch(v.currentSrc,{headers:{Range:'bytes=0-131071'},referrerPolicy:'no-referrer'}).then(r=>r.arrayBuffer()).then(b=>{const bytes=new Uint8Array(b),a=firstAudio(bytes),bad=!audioPlays(a,v),soft=bad&&(a.can==='ac-3'||a.can==='ec-3'),sel=$('#paudio');
     const nosound=why=>{aud.textContent='No sound on this device: the audio track is '+a.name+', which this browser cannot play'+(why?' ('+why+')':'')+'. The picture will play. '+(sel.hidden?'Pick a release with AAC audio.':'Choose another audio track above.');aud.hidden=false};
     const before=()=>{if(!bad)return;if(soft)softAudio(v,a,aud).catch(e=>nosound(e&&e.message));else nosound()}; // what happened before there was a track menu
-    if(audioCount(bytes)>=2)audioPicker(v,aud,sel,{soft,nosound}).then(ok=>{if(!ok)before();else if(bad&&!soft)nosound()},before);else before()}).catch(()=>{})},{once:true});pv.replaceChildren(v);f.streamTo(v);v.play().catch(()=>{});draw()};
-  const hit=want&&vids.find(f=>f.name.toLowerCase()===want.toLowerCase());if(hit){start(hit);return}
-  const big=vids.filter(f=>f.length>=vids[0].length*.3);
-  if(big.length>1){ppick.hidden=false;ppick.replaceChildren(...big.map(f=>h('button',{text:f.name+'  ·  '+size(f.length),onclick:()=>start(f)})))}else start(vids[0])});
+    if(audioCount(bytes)>=2)audioPicker(v,aud,sel,{soft,nosound}).then(ok=>{if(!ok)before();else if(bad&&!soft)nosound()},before);else before()}).catch(()=>{})},{once:true});v.addEventListener('ended',()=>go(1));pv.replaceChildren(v);f.streamTo(v);v.play().catch(()=>{});draw()};
+  go=d=>{const i=pack?pack.indexOf(file)+d:-1;if(pack&&pack[i])start(pack[i])};
+  const pick=chooseFile(vids,want,epWant);
+  if(pick.play){start(pick.play);return}
+  if(pick.missing)note='episode '+epWant.e+' is not in this pack';
+  ppick.hidden=false;ppick.replaceChildren(...pick.list.map(f=>{const l=pick.pack?epLabel(parseEp(filePath(f))):'';return h('button',{text:(l?l+'  ·  ':'')+f.name+'  ·  '+size(f.length),onclick:()=>start(f)})}))});
  draw()}
 // ---------- gestures ----------
 function hswipe(el,fn){let x0,y0,t0,on=false,car=null,edge=null;el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;x0=e.touches[0].clientX;y0=e.touches[0].clientY;t0=Date.now();on=true;
