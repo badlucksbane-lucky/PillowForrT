@@ -84,6 +84,7 @@ main{max-width:1100px;margin:0 auto;padding:10px 12px calc(40px + env(safe-area-
 .player{position:fixed;inset:0;z-index:80;background:#000;color:#eee;display:flex;flex-direction:column;visibility:hidden}.player.open{visibility:visible}
 .ph{display:flex;align-items:center;gap:10px;padding:max(8px,env(safe-area-inset-top)) 12px 8px}.ph .pt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;opacity:.9}
 .ph button{width:38px;height:38px;border-radius:50%;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:20px;line-height:1}
+.ph select{max-width:46vw;height:38px;border-radius:19px;border:0;background:rgba(255,255,255,.16);color:#fff;font-size:14px;padding:0 12px}.ph select[hidden]{display:none}.ph select option{color:#000}
 .pv{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#000}.pv video{width:100%;max-height:100%;background:#000}
 .ps{padding:8px 12px max(12px,env(safe-area-inset-bottom));font-size:13px}.ps .bar{height:3px;background:rgba(255,255,255,.2);border-radius:2px;overflow:hidden;margin-bottom:8px}.ps .bar i{display:block;height:100%;width:0;background:var(--ac,#d3a96e);transition:width .5s}
 .ps .row2{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}.ps .err{color:#ff9a8f}.ps .pbtn{margin-left:auto;display:flex;gap:8px}
@@ -97,7 +98,7 @@ main{max-width:1100px;margin:0 auto;padding:10px 12px calc(40px + env(safe-area-
 <form id="sf" role="search"><input id="q" type="search" enterkeyhint="search" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="120" aria-label="Search"></form></div>
 <nav class="tabs" role="tablist" id="tabs"><button role="tab" data-t="movies">Movies</button><button role="tab" data-t="series">Series</button><button role="tab" data-t="anime">Anime</button><button role="tab" data-t="web">Web</button><i class="ind" id="ind"></i></nav></header>
 <main id="main"></main>
-<div class="player" id="player" inert><div class="ph"><div class="pt" id="ptitle"></div><button id="pclose" aria-label="Close player">×</button></div><div class="pv" id="pv"></div><div class="pick" id="ppick" hidden></div><div class="ps" id="pstat"></div></div>
+<div class="player" id="player" inert><div class="ph"><div class="pt" id="ptitle"></div><select id="paudio" aria-label="Audio track" hidden></select><button id="pclose" aria-label="Close player">×</button></div><div class="pv" id="pv"></div><div class="pick" id="ppick" hidden></div><div class="ps" id="pstat"></div></div>
 <div class="sheet" id="sheet" inert><div class="scrim" id="scrim"></div><section class="panel" id="panel" role="dialog" aria-modal="true" tabindex="-1"></section></div>
 <script>
 (()=>{'use strict';
@@ -302,6 +303,34 @@ async function engine(){if(BT.client)return BT.client;
  if(!navigator.serviceWorker.controller)await new Promise(r=>{navigator.serviceWorker.addEventListener('controllerchange',r,{once:true});setTimeout(r,3000)});
  const c=new WebTorrent({tracker:false,lsd:false,secure:0,maxConns:8,uploadLimit:1024});c.on('error',()=>{});c.createServer({controller:reg});BT.client=c;return c}
 // AC-3 and E-AC-3 sound the browser cannot decode: /bt/audio.js (Mediabunny + the FFmpeg decoder in WASM) decodes it in the page and plays it through Web Audio, clocked to the video
+// <audio-tracks>
+// Audio track choice. The browser's own <video> menu has none (Chrome cannot switch tracks), so a file with two or more audio tracks gets a small menu in the player's top bar. Where the browser exposes
+// video.audioTracks (Safari) it switches the track itself; elsewhere /bt/audio.js (Mediabunny) lists the tracks, and the chosen one is decoded in the page and played through Web Audio while the video's own sound is silenced.
+// How many audio tracks a file has, read from its first 128 KB (MKV: codec ids in the track list; MP4: sound handlers in a moov box that is up front). 0 when it cannot tell, 1 when there is nothing to choose.
+const binStr=bytes=>{let s='';for(let i=0;i<bytes.length;i+=8192)s+=String.fromCharCode.apply(null,bytes.subarray(i,i+8192));return s};
+function audioCount(bytes){const s=binStr(bytes);
+ if(s.slice(4,8)==='ftyp'){const m=s.indexOf('moov');return m<0?0:(s.slice(m).match(/hdlr[\s\S]{8}soun/g)||[]).length}
+ return (s.match(/A_[A-Z]{2,}/g)||[]).length} // each codec id starts with A_ and capitals; counting starts, not whole ids, so two ids side by side still count two
+const langName=c=>{if(!c||c==='und'||c==='zxx')return '';try{return new Intl.DisplayNames(['en'],{type:'language'}).of(c)||c}catch(e){return c}};
+const CODEC_NAMES={aac:'AAC',ac3:'AC-3',eac3:'E-AC-3',opus:'Opus',vorbis:'Vorbis',flac:'FLAC',mp3:'MP3'};
+const chName=n=>n===1?'mono':n===2?'stereo':n===6?'5.1':n===8?'7.1':n?n+' ch':'';
+const trackLabel=t=>[langName(t.lang)||t.name||'Track '+(t.index+1),CODEC_NAMES[t.codec]||String(t.codec||'').toUpperCase(),chName(t.channels)].filter(Boolean).join(' · ');
+// Fills and shows the menu. Resolves true when a menu is up, false when the file turned out to have nothing to choose (the caller then does what it did before); rejects when the tracks cannot be read.
+// o.soft: the first track is one the browser cannot decode but the page can (AC-3), so it is played in the page at once; o.nosound(why) says so when that fails.
+async function audioPicker(v,aud,sel,o){
+ const show=(items,cur,pick)=>{sel.replaceChildren(...items.map((t,i)=>h('option',{value:i,text:t})));sel.value=cur;sel.hidden=false;sel.onchange=()=>pick(+sel.value)};
+ const nat=v.audioTracks;
+ if(nat&&nat.length>1){const a=Array.from(nat);show(a.map((t,i)=>langName(t.language)||t.label||'Track '+(i+1)),Math.max(0,a.findIndex(t=>t.enabled)),i=>{a.forEach((t,k)=>{t.enabled=k===i})});return true}
+ await loadScript('/bt/audio.js');
+ const c=await PFAudio.open(v,m=>{aud.textContent=m;aud.hidden=false});
+ if(!v.isConnected||BT.audio||c.tracks.length<2){c.dispose();return false}
+ BT.audio=c;
+ show(c.tracks.map(trackLabel),c.primaryIndex,async i=>{aud.textContent='Switching audio…';aud.hidden=false;
+  try{await c.select(i,{silenceVideo:true});aud.hidden=true}
+  catch(e){aud.textContent='Cannot play that track here ('+(e&&e.message||e)+')';aud.hidden=false;sel.value=c.current>=0?c.current:c.primaryIndex}});
+ if(o&&o.soft){try{await c.select(c.primaryIndex)}catch(e){o.nosound(e&&e.message)}}
+ return true}
+// </audio-tracks>
 async function softAudio(v,a,aud){aud.textContent='Decoding '+a.name+' in the page…';aud.hidden=false;await loadScript('/bt/audio.js');
  const h=await PFAudio.attach(v,m=>{aud.textContent=m;aud.hidden=false});if(!v.isConnected){h.dispose();return}BT.audio=h;aud.hidden=true}
 const playerEl=$('#player'),pv=$('#pv'),pstat=$('#pstat'),ppick=$('#ppick');
@@ -309,7 +338,8 @@ const fmtSpeed=n=>n>1048576?(n/1048576).toFixed(1)+' MB/s':Math.round(n/1024)+' 
 function stopPlayer(){BT.timers.forEach(clearInterval);BT.timers=[];if(BT.audio){BT.audio.dispose();BT.audio=null}if(BT.ac){BT.ac.abort();BT.ac=null}
  const v=pv.querySelector('video');if(v){v.pause();v.removeAttribute('src');v.load()}
  if(BT.cur){try{BT.cur.destroy({destroyStore:true})}catch(e){}BT.cur=null}
- releaseStore();setTimeout(sweepStore,2000)}
+ releaseStore();setTimeout(sweepStore,2000);
+ const pa=$('#paudio');if(pa){pa.hidden=true;pa.onchange=null;pa.replaceChildren()}}
 function closePlayer(fromPop){if(!playerEl.classList.contains('open'))return;stopPlayer();pv.replaceChildren();ppick.hidden=true;playerEl.classList.remove('open');playerEl.inert=true;document.body.classList.toggle('lock',sheet.classList.contains('open'));if(!fromPop&&history.state&&history.state.player)history.back()}
 window.addEventListener('popstate',()=>{if(playerEl.classList.contains('open'))closePlayer(true)});
 $('#pclose').addEventListener('click',()=>closePlayer());
@@ -343,7 +373,11 @@ async function play(hash,name,mg,want){
   const vids=t.files.filter(f=>/\.(mp4|m4v|mkv|webm|mov|avi|ts)$/i.test(f.name)).sort((a,b)=>b.length-a.length);
   if(!vids.length){say('This torrent has no video file',true);return}
   const start=f=>{file=f;ppick.hidden=true;t.files.forEach(x=>{if(x!==f)x.deselect()});
-   const v=h('video',{controls:true,playsinline:true,autoplay:true});v.addEventListener('error',()=>{note='the browser cannot play this file (codec or container)';v.remove()});v.addEventListener('loadedmetadata',()=>{fetch(v.currentSrc,{headers:{Range:'bytes=0-131071'},referrerPolicy:'no-referrer'}).then(r=>r.arrayBuffer()).then(b=>{const a=firstAudio(new Uint8Array(b));if(!audioPlays(a,v)){const nosound=why=>{aud.textContent='No sound on this device: the audio track is '+a.name+', which this browser cannot play'+(why?' ('+why+')':'')+'. The picture will play. Pick a release with AAC audio.';aud.hidden=false};if(a.can==='ac-3'||a.can==='ec-3')softAudio(v,a,aud).catch(e=>nosound(e&&e.message));else nosound()}}).catch(()=>{})},{once:true});pv.replaceChildren(v);f.streamTo(v);v.play().catch(()=>{});draw()};
+   const v=h('video',{controls:true,controlsList:'nodownload',playsinline:true,autoplay:true,oncontextmenu:e=>e.preventDefault()}); // no Download in the player's menu (nor Save video as)
+   v.addEventListener('error',()=>{note='the browser cannot play this file (codec or container)';v.remove()});v.addEventListener('loadedmetadata',()=>{fetch(v.currentSrc,{headers:{Range:'bytes=0-131071'},referrerPolicy:'no-referrer'}).then(r=>r.arrayBuffer()).then(b=>{const bytes=new Uint8Array(b),a=firstAudio(bytes),bad=!audioPlays(a,v),soft=bad&&(a.can==='ac-3'||a.can==='ec-3'),sel=$('#paudio');
+    const nosound=why=>{aud.textContent='No sound on this device: the audio track is '+a.name+', which this browser cannot play'+(why?' ('+why+')':'')+'. The picture will play. '+(sel.hidden?'Pick a release with AAC audio.':'Choose another audio track above.');aud.hidden=false};
+    const before=()=>{if(!bad)return;if(soft)softAudio(v,a,aud).catch(e=>nosound(e&&e.message));else nosound()}; // what happened before there was a track menu
+    if(audioCount(bytes)>=2)audioPicker(v,aud,sel,{soft,nosound}).then(ok=>{if(!ok)before();else if(bad&&!soft)nosound()},before);else before()}).catch(()=>{})},{once:true});pv.replaceChildren(v);f.streamTo(v);v.play().catch(()=>{});draw()};
   const hit=want&&vids.find(f=>f.name.toLowerCase()===want.toLowerCase());if(hit){start(hit);return}
   const big=vids.filter(f=>f.length>=vids[0].length*.3);
   if(big.length>1){ppick.hidden=false;ppick.replaceChildren(...big.map(f=>h('button',{text:f.name+'  ·  '+size(f.length),onclick:()=>start(f)})))}else start(vids[0])});
