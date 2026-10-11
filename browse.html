@@ -165,8 +165,16 @@ function parse(){const raw=location.hash.replace(/^#\/?/,''),[t,qs]=raw.split('?
 function href(o){const s={tab:S.tab,c:S.c,g:S.g,q:S.q,id:'',...o},p=new URLSearchParams();['c','g','q','id'].forEach(k=>s[k]&&p.set(k,s[k]));const qs=p.toString();return '#/'+s.tab+(qs?'?'+qs:'')}
 function go(o,replace){const u=href(o);if(replace)history.replaceState(null,'',u),render();else location.hash=u}
 // ---------- cards, rows, grids ----------
-function img(url,cls,alt){const i=h('img',{alt:alt||'',loading:'lazy',decoding:'async',class:cls||''});if(okUrl(url)){i.addEventListener('load',()=>i.classList.add('ld'));i.addEventListener('error',()=>{i.remove()});i.src=url}else i.remove();return i}
-function poster(it){const p=h('div',{class:'poster'+(okUrl(it.poster)?'':' nopic'),'data-t':it.name});if(okUrl(it.poster))p.append(img(it.poster,'',it.name));if(it.rating)p.append(h('span',{class:'rate',text:'★ '+it.rating}));return p}
+// Posters and thumbnails load only once they are within LOOK_AHEAD of the viewport (not the whole fetched page at once), via a per-pane/per-panel
+// IntersectionObserver so a long browsing session never keeps loading images for titles the person scrolled past long ago.
+const LOOK_AHEAD='900px 0px';
+const mkPosterIO=()=>new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){const i=e.target;if(i.dataset.src){i.src=i.dataset.src;delete i.dataset.src}i.io.unobserve(i)}}),{rootMargin:LOOK_AHEAD});
+let paneIO=mkPosterIO(),panelIO=mkPosterIO();
+function img(url,cls,alt,io){const i=h('img',{alt:alt||'',decoding:'async',class:cls||''});if(!okUrl(url)){i.remove();return i}
+ i.addEventListener('load',()=>i.classList.add('ld'));i.addEventListener('error',()=>{i.remove()});i.dataset.src=url;i.io=io||paneIO;i.io.observe(i);return i}
+// Appends items a handful at a time (one rAF apart) instead of painting a whole fetched page in one go, so only what is about to be on screen gets built and the look-ahead buffer above can stagger the image loads it triggers.
+function appendChunked(container,items,render,n=8){let i=0;const step=()=>{items.slice(i,i+n).forEach(it=>{const el=render(it);el&&container.append(el)});i+=n;if(i<items.length)requestAnimationFrame(step)};step()}
+function poster(it,io){const p=h('div',{class:'poster'+(okUrl(it.poster)?'':' nopic'),'data-t':it.name});if(okUrl(it.poster))p.append(img(it.poster,'',it.name,io));if(it.rating)p.append(h('span',{class:'rate',text:'★ '+it.rating}));return p}
 const card=it=>h('a',{class:'card',href:href({id:it.id}),'aria-label':it.name},poster(it),h('div',{class:'ct',text:it.name}),h('div',{class:'cy',text:it.year}));
 const skRow=()=>h('div',{class:'scrollx'},Array.from({length:6},()=>h('div',{class:'skc'},h('div',{class:'poster sk'}),h('div',{class:'l sk'}))));
 const skGrid=()=>h('div',{class:'grid'},Array.from({length:12},()=>h('div',{class:'skc',style:'width:auto'},h('div',{class:'poster sk'}),h('div',{class:'l sk'}))));
@@ -186,7 +194,7 @@ function renderBrowse(pane,rid){
  if(!S.q)pane.append(chipsBar(rid));
  if(!S.q&&!S.g&&!S.c){ // rows
   CATS[S.tab].forEach(([id,label],i)=>{const box=h('div',{},skRow());pane.append(h('div',{class:'sec'},h('h2',{text:label}),h('a',{href:href({c:id}),text:'See all ›'})),box);
-   const load=()=>list(S.tab,id).then(r=>{if(rid!==S.rid)return;box.replaceChildren(h('div',{class:'scrollx'},r.items.map(card)))}).catch(()=>{if(rid===S.rid)box.replaceChildren(fail('Could not load '+label,load))});
+   const load=()=>list(S.tab,id).then(r=>{if(rid!==S.rid)return;const row=h('div',{class:'scrollx'});box.replaceChildren(row);appendChunked(row,r.items,card)}).catch(()=>{if(rid===S.rid)box.replaceChildren(fail('Could not load '+label,load))});
    if(i===0)load();else{const io=new IntersectionObserver(es=>{if(es[0].isIntersecting){io.disconnect();load()}},{rootMargin:'500px'});io.observe(box)}})
   return}
  if(!S.q)pane.append(catSeg());
@@ -194,7 +202,7 @@ function renderBrowse(pane,rid){
  const grid=h('div',{class:'grid'}),holder=h('div',{},skGrid());pane.append(holder);let page=0,busy=false,done=false;
  const sentinel=h('div',{class:'more'});
  const next=()=>{if(busy||done||rid!==S.rid)return;busy=true;list(S.tab,S.c||CATS[S.tab][0][0],{g:S.g,q:S.q,page}).then(r=>{if(rid!==S.rid)return;if(page===0){holder.replaceChildren(grid);if(!r.items.length){holder.replaceChildren(h('div',{class:'msg',text:'Nothing found'}));done=true;return}holder.append(sentinel)}
-   r.items.forEach(it=>grid.append(card(it)));page++;busy=false;if(!r.more){done=true;sentinel.remove()}else requestAnimationFrame(()=>{if(sentinel.getBoundingClientRect().top<innerHeight+700)next()})}).catch(()=>{busy=false;if(rid!==S.rid)return;if(page===0)holder.replaceChildren(fail('Could not load this list',()=>{holder.replaceChildren(skGrid());next()}));else done=true})};
+   appendChunked(grid,r.items,card);page++;busy=false;if(!r.more){done=true;sentinel.remove()}else requestAnimationFrame(()=>{if(sentinel.getBoundingClientRect().top<innerHeight+700)next()})}).catch(()=>{busy=false;if(rid!==S.rid)return;if(page===0)holder.replaceChildren(fail('Could not load this list',()=>{holder.replaceChildren(skGrid());next()}));else done=true})};
  new IntersectionObserver(es=>{if(es[0].isIntersecting)next()},{rootMargin:'700px'}).observe(sentinel);
  next()}
 // ---------- the web tab (the box's own metasearch) ----------
@@ -251,7 +259,7 @@ function torSorted(items,empty,o={}){
  out.push(...order(singles));
  if(packs.length){const d=h('details',{class:'allres'},h('summary',{text:'Season packs ('+packs.length+')'}),...order(packs));if(opened||!singles.length)d.open=true;out.push(d)}
  return out}
-function heroFor(m,bd){return h('div',{class:'hero'},bd&&okUrl(bd)?img(bd,'bd',''):null,h('div',{class:'hi'},poster(m),h('div',{},h('h1',{text:m.name}),factsFor(m))))}
+function heroFor(m,bd){return h('div',{class:'hero'},bd&&okUrl(bd)?img(bd,'bd','',panelIO):null,h('div',{class:'hi'},poster(m,panelIO),h('div',{},h('h1',{text:m.name}),factsFor(m))))}
 function factsFor(m){const f=[];if(m.rating)f.push(h('b',{text:'★ '+m.rating}));if(m.year)f.push(m.year);if(m.runtime)f.push(m.runtime);if(m.type==='anime'){if(m.format)f.push(m.format.replace('_',' '));if(m.eps)f.push(m.eps+' eps');if(m.status)f.push(m.status.replace('_',' ').toLowerCase())}else if(m.status)f.push(m.status);return h('div',{class:'facts'},f.map(x=>x.nodeType?x:h('span',{text:x})))}
 function descBlock(t){const d=h('div',{class:'desc'+(t.length>260?' clamp':''),text:t});if(t.length<=260)return d;const b=h('button',{class:'more-b',text:'More',onclick:()=>{const c=d.classList.toggle('clamp');b.textContent=c?'More':'Less'}});return h('div',{},d,b)}
 function bodyBase(m){return [h('div',{class:'gen'},(m.allGenres||m.genres||[]).map(g=>h('span',{text:g}))),m.desc?descBlock(m.desc):null,(m.cast&&m.cast.length)?h('div',{class:'cast',text:'Cast: '+m.cast.join(', ')}):null]}
@@ -278,7 +286,7 @@ async function openSeries(id,rid){const m=await cmMeta('series',id);if(rid!==S.s
     const have=new Set(counts(v.s,v.e).map(x=>String(x.h).toLowerCase())),t=[...counts(v.s,v.e),...(st?st.list:[]).filter(x=>!have.has(x.h))].sort((a,b)=>qrank(b.t)-qrank(a.t)||b.n-a.n);
     tl.replaceChildren(...torSorted(t.map(x=>({t:x.t,n:x.n,z:+x.z||0,make:()=>tor(x.t,x.src||'',x.h,x.t,x.n,size(x.z),x.f,{s:v.s,e:v.e})})),fut?'Not aired yet':(!ezDone&&!ezErr)||(st&&!st.done)?'Looking for torrents…':'No torrents found',{host:tl,redraw:fill}))};
    el.append(h('button',{class:'eh','aria-expanded':'false',onclick:()=>{el.classList.toggle('open');el.firstChild.setAttribute('aria-expanded',el.classList.contains('open'));fill()}},
-     h('div',{class:'th'},v.th?img(v.th,'',''):null),h('div',{class:'em'},h('div',{class:'en',text:(v.e+'. ')+(v.n||'Episode '+v.e)}),h('div',{class:'ed',text:v.d?new Date(v.d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}):''})),h('span',{class:'badge'+(ts.length?' has':''),text:ts.length||(ezDone||fut?'–':'…')})),tl);
+     h('div',{class:'th'},v.th?img(v.th,'','',panelIO):null),h('div',{class:'em'},h('div',{class:'en',text:(v.e+'. ')+(v.n||'Episode '+v.e)}),h('div',{class:'ed',text:v.d?new Date(v.d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}):''})),h('span',{class:'badge'+(ts.length?' has':''),text:ts.length||(ezDone||fut?'–':'…')})),tl);
    if(open.has(String(v.e))){el.classList.add('open');fill()}return el}));
   if(!eps.childNodes.length)eps.append(h('div',{class:'note',text:'No episodes listed'}))}
  const loadEz=()=>{ezErr=false;note.replaceChildren();ezAll(id,(list,d)=>{if(rid!==S.sid)return;ez=list;ezDone=d;draw()}).then(l=>{if(rid===S.sid){ez=l;ezDone=true;draw()}}).catch(()=>{if(rid!==S.sid)return;ezErr=true;ezDone=true;note.replaceChildren(h('div',{class:'note'},'EZTV did not answer',h('button',{text:'Retry',onclick:loadEz})));draw()})};
@@ -307,7 +315,7 @@ const closeBtn=()=>h('button',{class:'x','aria-label':'Close',text:'×',onclick:
 const grab=()=>h('div',{class:'grab'},closeBtn());
 function closeSheet(){if(S.fromApp){S.fromApp=false;history.back()}else go({id:''},true)}
 function showSheet(on){if(!on&&sheet.contains(document.activeElement))document.activeElement.blur();sheet.classList.toggle('open',on);sheet.inert=!on;document.body.classList.toggle('lock',on);if(!on){panel.style.transform='';panel.style.borderTop='';seasonSwipe=null}else{panel.scrollTop=0;panel.focus({preventScroll:true})}}
-async function renderSheet(rid){await btStatus();showSheet(true);panel.replaceChildren(grab(),h('div',{class:'hero sk',style:'height:260px'}));
+async function renderSheet(rid){await btStatus();showSheet(true);panelIO.disconnect();panelIO=mkPosterIO();panel.replaceChildren(grab(),h('div',{class:'hero sk',style:'height:260px'}));
  try{if(S.tab==='movies')await openMovie(S.id,rid);else if(S.tab==='series')await openSeries(S.id,rid);else if(S.tab==='anime')await openAnime(S.id,rid)}
  catch(e){if(rid===S.sid)panel.replaceChildren(grab(),fail('Could not load this title',()=>renderSheet(rid)))}}
 // ---------- the player: WebTorrent in this page, its TCP peers carried by the box (btclient/) ----------
@@ -530,7 +538,7 @@ function render(force){const p=parse(),prevTab=S.tab,key=p.tab+'|'+p.c+'|'+p.g+'
  Object.assign(S,p);
  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===S.tab));indicator();
  const qi=$('#q');if(document.activeElement!==qi)qi.value=S.q;qi.placeholder={movies:'Search movies',series:'Search series',anime:'Search anime',web:'Search the web'}[S.tab];
- if(force||key!==S.key){S.key=key;const rid=++S.rid,pane=h('div',{class:'pane'+(prevTab!==S.tab?(TABS.indexOf(S.tab)>TABS.indexOf(prevTab)?' inL':' inR'):'')});$('#main').replaceChildren(pane);window.scrollTo(0,0);S.tab==='web'?renderWeb(pane,rid):renderBrowse(pane,rid)}
+ if(force||key!==S.key){S.key=key;const rid=++S.rid,pane=h('div',{class:'pane'+(prevTab!==S.tab?(TABS.indexOf(S.tab)>TABS.indexOf(prevTab)?' inL':' inR'):'')});paneIO.disconnect();paneIO=mkPosterIO();$('#main').replaceChildren(pane);window.scrollTo(0,0);S.tab==='web'?renderWeb(pane,rid):renderBrowse(pane,rid)}
  if(S.id){const sid=++S.sid;renderSheet(sid)}else if(hadSheet||sheet.classList.contains('open')){++S.sid;showSheet(false)}}
 $('#sf').addEventListener('submit',e=>{e.preventDefault();const q=$('#q').value.trim();$('#q').blur();go({q,g:'',c:''})});
 $('#tabs').addEventListener('click',e=>{const b=e.target.closest('button');if(b&&b.dataset.t!==S.tab)go({tab:b.dataset.t,c:'',g:'',q:''})});
