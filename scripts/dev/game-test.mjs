@@ -206,6 +206,48 @@ await r2.ev(`pad.leave();1`);
 check('a game with fewer than two players ends', await s.until(`gc.state==='lobby'`, 8000), await s.ev(`gc.state`));
 await s.until(`gc.players.size===1`, 5000);
 
+// Imposter with three real pages: secrets arrive as private panels, answers go back, a rebuilt or reloaded phone keeps its panel
+await s.ev(`gc.select('imposter');1`);
+const ia = await padPage('Bo', code), ib = await padPage('Cy', code);
+await ia.ev(`document.querySelector('#go').click();1`); await ib.ev(`document.querySelector('#go').click();1`);
+check('three players enable Start for Imposter', await s.until(`gc.players.size===3&&gc.canStart()`, 10000), await s.ev(`[gc.players.size,gc.canStart()]`));
+await s.ev(`gc.start()`);
+const trio = [p1, ia, ib];
+const tapPick = async (c, n) => { const r = await c.ev(`(()=>{const b=document.querySelectorAll('.pick')[${n}].getBoundingClientRect();return {x:b.x+b.width/2,y:b.y+b.height/2}})()`); await touch(c, 'touchStart', [{ x: r.x, y: r.y, id: 1 }]); await touch(c, 'touchEnd', []); };
+const secret = c => c.ev(`document.querySelector('.panel')&&!document.querySelector('.panel').hidden?document.querySelector('.panel').innerText:''`);
+check('every phone gets its own secret in a private panel', (await Promise.all(trio.map(c => c.until(`!document.querySelector('.panel').hidden&&document.querySelectorAll('.pick').length===1`, 6000)))).every(Boolean), await Promise.all(trio.map(secret)));
+if (process.env.SHOTS) { await p1.send('Page.bringToFront'); await p1.shot('pad-panel'); }
+const texts = await Promise.all(trio.map(secret)), word = await s.ev(`gc.inst.s.word`), imp = await s.ev(`gc.inst.s.imposter`);
+const ids3 = await s.ev(`JSON.stringify([...gc.players.keys()])`).then(JSON.parse);
+const byId = Object.fromEntries(ids3.map((id, i) => [id, trio[i]]));
+check('the crew see the word, the imposter does not', ids3.every((id, i) => id === imp ? !texts[i].includes(word) && /IMPOSTER/.test(texts[i]) : texts[i].includes(word)), texts);
+check('and the shared screen shows no word', !(await s.ev(`document.body.innerText`)).includes(word), null);
+await s.ev(`gc._state()`); await sleep(400); // a pause or resume rebuilds every phone's page
+check('a phone that is rebuilt still shows its panel', (await Promise.all(trio.map(c => c.ev(`!document.querySelector('.panel').hidden&&document.querySelectorAll('.pick').length===1`)))).every(Boolean), null);
+const rl = byId[ids3[1]]; await rl.goto(info.url + '/pad'); // a reload comes back to the same place, and the screen sends the panel again
+check('a phone that reloads gets its panel back', await rl.until(`window.pad&&!document.querySelector('.panel').hidden`, 10000), await rl.ev(`document.body.innerText`));
+for (const c of trio) await tapPick(c, 0);
+check('everyone tapping Got it starts the clues', await s.until(`gc.inst.s.phase==='clues'`, 5000), await s.ev(`gc.inst.s.phase`));
+const sp = await s.ev(`gc.inst.s.order[gc.inst.s.idx]`);
+check('only the speaker has a Done button', await byId[sp].until(`!document.querySelector('.panel').hidden`, 4000) && (await Promise.all(ids3.filter(i => i !== sp).map(i => byId[i].ev(`document.querySelector('.panel').hidden`)))).every(Boolean), sp);
+for (let i = 0; i < 3; i++) { const who = await s.ev(`gc.inst.s.order[gc.inst.s.idx]`); await byId[who].until(`!document.querySelector('.panel').hidden`, 4000); await tapPick(byId[who], 0); await sleep(250); }
+if (process.env.SHOTS) { await s.send('Page.bringToFront'); await sleep(200); await s.ev(`gc.inst.tick(0.01);1`); await s.shot('imposter'); }
+check('after the last clue everyone gets Ready to vote', await s.until(`gc.inst.s.phase==='discuss'`, 5000), await s.ev(`gc.inst.s.phase`));
+for (const c of trio) { await c.until(`!document.querySelector('.panel').hidden`, 4000); await tapPick(c, 0); }
+check('all ready starts the vote with the other two as choices', await s.until(`gc.inst.s.phase==='vote'`, 5000) && await p1.until(`document.querySelectorAll('.pick').length===2`, 4000), await s.ev(`gc.inst.s.phase`));
+for (const c of trio) { await c.until(`document.querySelectorAll('.pick').length===2`, 4000); await tapPick(c, 0); await sleep(250); }
+check('the votes come in and are shown', await s.until(`gc.inst.s.phase==='reveal'||gc.inst.s.phase==='guess'||gc.inst.s.phase==='result'`, 5000), await s.ev(`gc.inst.s.phase`));
+await s.ev(`gc.inst.tick(5);gc.inst.tick(0.1);1`); // out of the reveal
+await sleep(300);
+const ph = await s.ev(`gc.inst.s.phase`);
+if (ph === 'guess') { await byId[imp].until(`document.querySelectorAll('.pick').length===4`, 4000); await tapPick(byId[imp], 0); await sleep(300); }
+check('the round ends with a result and the word on the screen', await s.until(`gc.inst.s.phase==='result'`, 5000) && (await s.ev(`document.body.innerText`)) !== undefined, await s.ev(`gc.inst.s.phase`));
+await s.ev(`gc.inst.tick(0.01);1`);
+const host = ids3[0]; await byId[host].until(`document.querySelectorAll('.pick').length===2`, 4000); await tapPick(byId[host], 1);
+check('Stop on the first phone ends the game', await s.until(`gc.state==='lobby'`, 5000), await s.ev(`gc.state`));
+await ia.ev(`pad.leave();1`); await ib.ev(`pad.leave();1`);
+await s.until(`gc.players.size===1`, 8000);
+
 // pause and the same place back
 await s.ev(`gc.staleMs=1500;gc.stop();gc.select('padtest');gc.start()`); // the heartbeat rule, shortened: the grace period here is only 4 s
 await p1.until(`!!document.querySelector('.btn')`, 5000);

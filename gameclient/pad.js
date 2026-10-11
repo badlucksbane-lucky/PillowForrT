@@ -33,7 +33,7 @@
   P._msg = function (m) {
     var d = m.data;
     if (!d || typeof d !== 'object') return;
-    if (d.t === 'layout') { this.screen = m.from; this.layout = d; this._build(); this._paint(); }
+    if (d.t === 'layout') { this.screen = m.from; this.layout = d; this._build(); if (d.state === 'lobby' || d.state === 'full') this.panelData = null; else if (this.panelData) this._panel(this.panelData); this._paint(); } // a pause or resume rebuilds the page, so a private panel is put back
     else if (m.from !== this.screen) return;
     else if (d.t === 'panel') this._panel(d.panel);
     else if (d.t === 'rumble') this.vibrate(d.ms);
@@ -146,6 +146,7 @@
   // A private panel: a title and a list of choices that only this phone sees; the answer is the index. After a pick the others grey out until the next panel.
   P._panel = function (d) {
     var self = this, pn = this.panelEl;
+    this.panelData = d;
     if (!pn) return;
     pn.replaceChildren();
     if (!d) { pn.hidden = true; return; }

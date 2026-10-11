@@ -2,7 +2,7 @@
 // Protocol and widget set: docs/GAMES.md. A game registers itself with Games.register({...}) and is created with a ctx:
 //
 //   Games.register({id, name, players: {min, max}, widgets: [{type:'stick'|'dpad'|'buttons'|'pointer'|'tilt', names?}], orientation: 'any'|'portrait'|'landscape',
-//     create(ctx) -> {onJoin(p), onLeave(p), onButton(p, name, down), onPick(p, panelId, index), onPointer(p, x, y, down), tick(dt), render(g, w, h)}})
+//     create(ctx) -> {onJoin(p), onLeave(p), onHello(p) (a phone said hello again: reconnect or reload), onButton(p, name, down), onPick(p, panelId, index), onPointer(p, x, y, down), tick(dt), render(g, w, h)}})
 //   ctx: {players: () => connected players, send panel: panel(p, {id, title, items}) / panel(p, null), rumble(p, ms), audio: AudioContext|null, end()}
 //   a player p: {id, slot, name, color, away, stick: {x, y}, ptr: {x, y, down}, tilt: {b, g}, btn: {A: bool, ...}}
 'use strict';
@@ -51,7 +51,9 @@
         this.players.set(m.from, p);
         if (this.inst && this.inst.onJoin) this.inst.onJoin(p);
       } else { p.name = String(d.name || p.name).slice(0, 16); p.seq = {}; }
-      this._layout(p); this.onUpdate();
+      this._layout(p);
+      if (this.inst && this.state !== 'lobby' && this.inst.onHello) this.inst.onHello(p); // a game that keeps a private panel up sends it again
+      this.onUpdate();
       return;
     }
     if (!p) return;

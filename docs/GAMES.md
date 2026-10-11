@@ -88,6 +88,14 @@ Tests: `node scripts/dev/pong-unit.mjs` (rules without a browser: serve, walls, 
 
 Tests: `node scripts/dev/sumo-unit.mjs` (rules without a browser; breaking the collision impulse makes two checks fail) and a two-phone section in `game-test.mjs`. **Not yet played on real phones, and never with more than two.** Tuning values are the constants at the top of `create()`.
 
+## Imposter (pf-0fn.4), the hidden-role game
+
+`gameclient/imposter.js`. 3 to 7 players (the brief said 4 to 8; 7 is the room limit and 3 is the smallest that works), no stick or buttons: the phones are **private panels**. Everyone but one random player is told the same secret word (8 categories of 12, written for this project); the imposter is told only the category. Flow: everyone taps *Got it*; each player in a random order gets a *Done* button and says one word about it out loud (30 s, then skipped); *Talk it over* for 60 s or until all tap *Ready to vote*; everyone votes on their phone (the others as choices, 45 s); the votes are shown; the unique top vote is out, a tie or no votes means nobody is. A caught imposter gets four words (the real one and three from the category) and 20 s to pick: right means the imposter wins. Scores: crew win 1 each, imposter win 2. The first player gets *Next round* or *Stop*. The word and the imposter appear on the shared screen only on the result page; the unit test checks the shared screen never draws the word before that and that the imposter's panel never contains it.
+
+Panels: `ctx.panel(p, {id, title, items})` shows a panel on one phone, `ctx.panel(p, null)` clears it, and the phone answers with `{id, index}`; an answer to an old panel id is ignored, so a late or repeated tap cannot skip anyone. Two shell changes came with it: the pad **keeps its panel across a pause or resume** (those rebuild the page), and the console calls the game's optional **`onHello(p)`** when a phone says hello again (a reload or reconnect), so a game can send that phone its panel again.
+
+Tests: `node scripts/dev/imposter-unit.mjs` (every phase, the timers, stale and wrong-player answers, the tie rule, the guess, scoring, rounds, leaving, a phone returning, seven players; telling the imposter the word makes it fail) and a three-phone section in `game-test.mjs` (private panels arrive, the shared screen shows no word, a rebuilt and a reloaded phone keep their panel, the whole round through the votes and Stop; removing `onHello` makes the reload check fail). **Not yet played on real phones, and never with people talking.** Words and timers are constants at the top of `create()`.
+
 ## Build order (beads issues under pf-0fn)
 
 1. Console and controller shell: screen page (code, QR, lobby, wake lock, start button for audio), controller page (`roomBounce`, widget renderer, orientation, iOS motion tap), input protocol.
