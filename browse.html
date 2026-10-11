@@ -64,6 +64,7 @@ main{max-width:1100px;margin:0 auto;padding:10px 12px calc(40px + env(safe-area-
 .gen{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.gen span{padding:2px 10px;border:1px solid var(--ln);border-radius:12px;font-size:12px;color:var(--mut)}
 .desc{margin:8px 0;white-space:pre-line}.desc.clamp{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}.more-b{border:0;background:none;color:var(--ac);padding:0;font-weight:600;margin-bottom:4px}.cast{color:var(--mut);font-size:13px}
 .h3{font-size:16px;margin:18px 0 6px;display:flex;align-items:center;gap:8px}
+.tor .s .tier{color:var(--ac);font-weight:600}.allres{margin-top:4px}.allres>summary{cursor:pointer;color:var(--mut);font-size:12px;padding:8px 0;list-style-position:inside}
 .tor{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--ln)}.tor:last-child{border:0}
 .tor .m{flex:1;min-width:0}.tor .t{font-size:13px;word-break:break-word}.tor .s{color:var(--mut);font-size:12px;display:flex;gap:10px;align-items:center}
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--bad)}.dot.g{background:var(--ok)}.dot.a{background:var(--warn)}
@@ -211,7 +212,15 @@ function tor(label,sub,hash,name,seeds,sz,file,ep){const mg=magnet(hash,name);if
    h('button',{class:'btn ghost',title:'Copy magnet link','aria-label':'Copy magnet link',text:'Copy',onclick:ev=>{const b=ev.currentTarget;(navigator.clipboard?navigator.clipboard.writeText(mg):Promise.reject()).then(()=>{b.textContent='Copied'},()=>{b.textContent='Select';prompt('Magnet link',mg)});setTimeout(()=>b.textContent='Copy',1500)}}),
    pb,
    h('a',{class:(bt?'btn ghost':'btn'),href:mg,text:'Magnet'})))}
-const torRows=(arr,fn,empty)=>{const r=arr.map(fn).filter(Boolean);return r.length?r:[h('div',{class:'note',text:empty})]};
+// Rows for a list of results: the best of each tier, then "All results (N)" folded (open again if the person had it open: lists redraw as more results arrive). items: [{t, n, make}], make() builds the row.
+function torTiers(items,empty,o={}){
+ const opened=!!(o.host&&o.host.querySelector&&o.host.querySelector('details.allres[open]'));
+ const all=items.map(x=>({x,row:x.make()})).filter(r=>r.row);
+ if(!all.length)return [h('div',{class:'note',text:empty})];
+ const best=pickBest(all.map(r=>r.x),o).map(b=>{const row=b.item.make();const s=row&&row.querySelector('.s');if(s)s.prepend(h('span',{class:'tier',text:tierLabel(b.tier,b.src)}));return row}).filter(Boolean);
+ if(!best.length||all.length<=best.length)return best.length?best:all.map(r=>r.row);
+ const d=h('details',{class:'allres'},h('summary',{text:'All results ('+all.length+')'}),...all.map(r=>r.row));if(opened)d.open=true;
+ return [...best,d]}
 function heroFor(m,bd){return h('div',{class:'hero'},bd&&okUrl(bd)?img(bd,'bd',''):null,h('div',{class:'hi'},poster(m),h('div',{},h('h1',{text:m.name}),factsFor(m))))}
 function factsFor(m){const f=[];if(m.rating)f.push(h('b',{text:'★ '+m.rating}));if(m.year)f.push(m.year);if(m.runtime)f.push(m.runtime);if(m.type==='anime'){if(m.format)f.push(m.format.replace('_',' '));if(m.eps)f.push(m.eps+' eps');if(m.status)f.push(m.status.replace('_',' ').toLowerCase())}else if(m.status)f.push(m.status);return h('div',{class:'facts'},f.map(x=>x.nodeType?x:h('span',{text:x})))}
 function descBlock(t){const d=h('div',{class:'desc'+(t.length>260?' clamp':''),text:t});if(t.length<=260)return d;const b=h('button',{class:'more-b',text:'More',onclick:()=>{const c=d.classList.toggle('clamp');b.textContent=c?'More':'Less'}});return h('div',{},d,b)}
@@ -222,7 +231,7 @@ async function openMovie(id,rid){const m=await cmMeta('movies',id);if(rid!==S.si
  let yt,tio; // undefined while loading, null when the source did not answer
  const draw=()=>{if(rid!==S.sid)return;const ys=(yt||[]).slice().sort((a,b)=>qrank(b.q)-qrank(a.q)||b.n-a.n),have=new Set(ys.map(t=>String(t.h).toLowerCase())),
    ts=(tio||[]).filter(t=>!have.has(t.h)).sort((a,b)=>qrank(b.t)-qrank(a.t)||b.n-a.n),fin=yt!==undefined&&tio!==undefined,down=[yt===null&&'YTS',tio===null&&'Torrentio'].filter(Boolean);
-  tl.replaceChildren(...torRows([...ys.map(t=>[t.q+' · '+t.ty,t.codec,t.h,m.name+' '+t.q,t.n,size(t.z)]),...ts.map(t=>[t.t,t.src,t.h,t.t,t.n,size(t.z),t.f])],a=>tor(...a),fin?'No torrents for this title':'Looking for torrents…'),
+  tl.replaceChildren(...torTiers([...ys.map(t=>({t:t.q+' '+t.ty+' '+t.codec,n:t.n,make:()=>tor(t.q+' · '+t.ty,t.codec,t.h,m.name+' '+t.q,t.n,size(t.z))})),...ts.map(t=>({t:t.t,n:t.n,make:()=>tor(t.t,t.src,t.h,t.t,t.n,size(t.z),t.f)}))],fin?'No torrents for this title':'Looking for torrents…',{host:tl}),
    ...(down.length?[h('div',{class:'note'},down.join(' and ')+' did not answer',h('button',{text:'Retry',onclick:load}))]:[]))};
  const load=()=>{yt=tio=undefined;draw();ytFor(id).then(r=>{yt=r},()=>{yt=null}).then(draw);tioFor('movie/'+id).then(r=>{tio=r},()=>{tio=null}).then(draw)};load()}
 async function openSeries(id,rid){const m=await cmMeta('series',id);if(rid!==S.sid)return;
@@ -237,7 +246,7 @@ async function openSeries(id,rid){const m=await cmMeta('series',id);if(rid!==S.s
    const fill=()=>{const k=v.s+':'+v.e;let st=tio.get(k);if(!st&&!fut){st={done:false,err:false,list:[]};tio.set(k,st);tioFor('series/'+id+':'+k).then(l=>{st.list=l},()=>{st.err=true}).then(()=>{st.done=true;st.cb&&st.cb()})}
     if(st)st.cb=()=>{if(rid===S.sid&&el.isConnected&&el.classList.contains('open'))fill()};
     const have=new Set(counts(v.s,v.e).map(x=>String(x.h).toLowerCase())),t=[...counts(v.s,v.e),...(st?st.list:[]).filter(x=>!have.has(x.h))].sort((a,b)=>qrank(b.t)-qrank(a.t)||b.n-a.n);
-    tl.replaceChildren(...torRows(t,x=>tor(x.t,x.src||'',x.h,x.t,x.n,size(x.z),x.f,{s:v.s,e:v.e}),fut?'Not aired yet':(!ezDone&&!ezErr)||(st&&!st.done)?'Looking for torrents…':'No torrents found'))};
+    tl.replaceChildren(...torTiers(t.map(x=>({t:x.t,n:x.n,make:()=>tor(x.t,x.src||'',x.h,x.t,x.n,size(x.z),x.f,{s:v.s,e:v.e})})),fut?'Not aired yet':(!ezDone&&!ezErr)||(st&&!st.done)?'Looking for torrents…':'No torrents found',{host:tl,episode:true}))};
    el.append(h('button',{class:'eh','aria-expanded':'false',onclick:()=>{el.classList.toggle('open');el.firstChild.setAttribute('aria-expanded',el.classList.contains('open'));fill()}},
      h('div',{class:'th'},v.th?img(v.th,'',''):null),h('div',{class:'em'},h('div',{class:'en',text:(v.e+'. ')+(v.n||'Episode '+v.e)}),h('div',{class:'ed',text:v.d?new Date(v.d).toLocaleDateString(undefined,{year:'numeric',month:'short',day:'numeric'}):''})),h('span',{class:'badge'+(ts.length?' has':''),text:ts.length||(ezDone||fut?'–':'…')})),tl);
    if(open.has(String(v.e))){el.classList.add('open');fill()}return el}));
@@ -253,7 +262,7 @@ async function kitsuFor(al){return cached('ku:'+al,7*DAY,async()=>{const d=await
  const it=(((d.data||[])[0]||{}).relationships||{}).item;const k=it&&it.data&&it.data.id;if(!/^\d+$/.test(k||''))throw new Error('no Kitsu entry');return k})}
 async function openAnime(id,rid){const m=await alOne(id);if(rid!==S.sid)return;const movie=m.format==='MOVIE',max=m.eps||9999,tl=h('div',{}),inp=h('input',{value:m.romaji||m.name,'aria-label':'Search Nyaa',maxlength:'100',autocomplete:'off'});let filt='',items=[],ep=1,seq=0;
  const fc=h('div',{class:'scrollx chips'},[['','All'],['1080','1080p'],['720','720p'],['batch','Batch']].map(([k,l])=>h('button',{class:'chip'+(k===''?' on':''),text:l,onclick:ev=>{filt=k;fc.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));ev.currentTarget.classList.add('on');draw()}})));
- const draw=()=>{const f=items.filter(t=>!filt||(filt==='batch'?/batch|complete|\d+\s*[-~]\s*\d+/i.test(t.title):t.title.toLowerCase().includes(filt)));tl.replaceChildren(...torRows(f.slice(0,80),t=>tor(t.title,t.src||'',t.hash,t.title,t.seeds,t.size,t.file,movie?null:{s:null,e:ep}),'No torrents'))};
+ const draw=()=>{const f=items.filter(t=>!filt||(filt==='batch'?/batch|complete|\d+\s*[-~]\s*\d+/i.test(t.title):t.title.toLowerCase().includes(filt)));tl.replaceChildren(...torTiers(f.slice(0,80).map(t=>({t:t.title,n:t.seeds,make:()=>tor(t.title,t.src||'',t.hash,t.title,t.seeds,t.size,t.file,movie?null:{s:null,e:ep})})),'No torrents',{host:tl,episode:!movie}))};
  // the default lookup runs in this page (Kitsu id, then Torrentio); the Nyaa box below is the only thing that asks the box
  const loadTio=()=>{const my=++seq;tl.replaceChildren(h('div',{class:'note',text:'Looking for torrents…'}));
   kitsuFor(id).then(k=>tioFor(movie?'movie/kitsu:'+k:'series/kitsu:'+k+':'+ep)).then(l=>{if(rid!==S.sid||my!==seq)return;items=l.map(x=>({title:x.t,hash:x.h,seeds:x.n,size:size(x.z),src:x.src,file:x.f})).sort((a,b)=>b.seeds-a.seeds);draw()})
@@ -344,6 +353,31 @@ function stopPlayer(){BT.timers.forEach(clearInterval);BT.timers=[];if(BT.audio)
 function closePlayer(fromPop){if(!playerEl.classList.contains('open'))return;stopPlayer();pv.replaceChildren();ppick.hidden=true;playerEl.classList.remove('open');playerEl.inert=true;document.body.classList.toggle('lock',sheet.classList.contains('open'));if(!fromPop&&history.state&&history.state.player)history.back()}
 window.addEventListener('popstate',()=>{if(playerEl.classList.contains('open'))closePlayer(true)});
 $('#pclose').addEventListener('click',()=>closePlayer());
+// <result-tiers>
+// The torrent lists show the best guess first, one result per tier: by resolution when the release name gives one (2160, 1080, 720, 576/540/512, 480 and below), and for names that give none by where it
+// comes from (WEB, DVD, BR). Showing one per tier is also the de-duplication: the same release listed by two indexes, or three near-identical sizes, collapse to the one with the most seeds. "All results"
+// stays folded underneath with the whole list as it always was. Best = most seeds, weighted by source (BluRay and WEB-DL over DVD and TV, a camera copy only if nothing else) and, in an episode list, a single
+// episode over a whole pack unless the pack is far healthier. Pure: scripts/dev/resulttiers-unit.mjs runs it on realistic release names.
+const TIER_RE=[[2160,/(^|[^a-z0-9])(2160[pi]?|4k|uhd)([^a-z0-9]|$)/i],[1080,/1080[pi]|(^|[^a-z0-9])fhd([^a-z0-9]|$)/i],[720,/720[pi]/i],[576,/576[pi]|540p|512p?/i],[480,/480[pi]|360p|(^|[^a-z0-9])(sd|xvid|divx)([^a-z0-9]|$)/i]];
+const tierOf=t=>{for(const [r,re] of TIER_RE)if(re.test(t))return r;return 0}; // 0: the name does not say
+function sourceOf(t){
+ if(/(^|[^a-z0-9])(cam|hdcam|telesync|telecine|hdts|hdtc|scr|screener|dvdscr)([^a-z0-9]|$)/i.test(t))return 'CAM';
+ if(/blu-?ray|bdrip|brrip|remux|(^|[^a-z0-9])bd([^a-z0-9]|$)/i.test(t))return 'BR';
+ if(/web-?dl|web-?rip|(^|[^a-z0-9])(web|amzn|nf|dsnp|hmax|atvp|hulu)([^a-z0-9]|$)/i.test(t))return 'WEB';
+ if(/dvd/i.test(t))return 'DVD';
+ if(/hdtv|pdtv|dsr/i.test(t))return 'TV';
+ return ''}
+const SRC_WEIGHT={BR:1,WEB:1,TV:.85,DVD:.8,'':.75,CAM:.05};
+const TIER_ORDER=[2160,1080,720,576,480,'web','dvd','br','other'];
+const tierKey=(t,src)=>{const r=tierOf(t);return r||(src==='WEB'?'web':src==='DVD'?'dvd':src==='BR'?'br':'other')};
+const tierLabel=(k,src)=>typeof k==='number'?(k===480?'SD':k+'p')+(src?' · '+src:''):({web:'WEB',dvd:'DVD',br:'BR',other:'?'})[k];
+// items: [{t: release name, n: seeds}]. Returns the chosen ones, best tier first: [{item, tier, src}].
+function pickBest(items,o={}){
+ const rows=items.map(item=>{const src=sourceOf(item.t);return {item,src,tier:tierKey(item.t,src),score:((+item.n||0)+.5)*SRC_WEIGHT[src]*(o.episode&&packTitle(item.t)?.85:1)}}).sort((a,b)=>b.score-a.score);
+ const real=rows.filter(r=>r.src!=='CAM'),kept=[]; // a camera copy only if there is nothing else
+ for(const r of (real.length?real:rows))if(!kept.some(k=>k.tier===r.tier))kept.push(r);
+ return kept.sort((a,b)=>TIER_ORDER.indexOf(a.tier)-TIER_ORDER.indexOf(b.tier))}
+// </result-tiers>
 // <season-packs>
 // Season packs: one torrent holding many episodes. The episode that was asked for is found by reading season and episode out of the file names; the rest are listed in order, and while playing the top bar has
 // Previous / Next (an episode that ends moves on by itself). A pure block: scripts/dev/seasonpack-unit.mjs runs it against made-up file lists.
