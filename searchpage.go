@@ -163,6 +163,9 @@ func searchAPIView(m *searchMgr) map[string]any {
 }
 
 func handleSearchAPI(w http.ResponseWriter, r *http.Request, path string) {
+	if (path == "search/web" || path == "search/nyaa") && kidsNoSearch(w) {
+		return
+	}
 	m := searchMgrG
 	if m == nil {
 		writeJSON(w, 200, map[string]any{"available": false})

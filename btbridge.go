@@ -586,6 +586,9 @@ func handleBTAPIWith(m *btMgr, w http.ResponseWriter, r *http.Request, path stri
 		writeJSON(w, 200, map[string]any{"available": false})
 		return
 	}
+	if !kidsBridgeOK(w, r, path) {
+		return
+	}
 	switch {
 	case path == "bt" && r.Method == http.MethodGet:
 		writeJSON(w, 200, m.view())

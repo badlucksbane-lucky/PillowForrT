@@ -10,6 +10,10 @@ package main
 //   set the first PIN     any signed-in session (while Kids mode is off there is nothing to protect)
 //   change the PIN        a session that is unlocked, or that sends the current PIN; every other unlock is dropped
 //   add a kids' device    any signed-in session; REMOVE one: unlocked
+// While Kids mode is on the server also enforces it, so the page cannot be bypassed: the torrent bridge (/api/bt/peers, /conn, /mux) answers only a session that has had a title CLEARED (POST /api/kids/clear:
+// the box looks up the title's rating and only an allowed one clears; the clearance names the torrent's info-hash and lasts 6 hours, in memory), and the free-text Web and Nyaa searches are refused. What
+// this does not do: the box cannot tell which title an info-hash really belongs to, so a determined person could clear a harmless title and play another hash; and a magnet link opened outside the page
+// is outside all of this.
 // The control for all of it lives on the /ui page (the "kiosk"). Browse, Play, Retro and the phone pages have none, and the PIN is what stops anything else that holds a session from using this API.
 // Wrong PINs are counted for the whole house, not per session or address: five in a row lock the PIN for 5 minutes, then 10, 20, 40, at most 60, and a right PIN starts the count again.
 // The unlock windows are per session and only in memory: a restart of the program locks everything again.
@@ -34,6 +38,8 @@ const (
 	kidsLockBase  = 5 * time.Minute
 	kidsLockMax   = 60 * time.Minute
 	kidsMaxDevs   = 32
+	kidsClearFor  = 6 * time.Hour
+	kidsMaxClear  = 64 // titles cleared per session at once
 )
 
 var kidsPinRe = regexp.MustCompile(`^[0-9]{4,8}$`)
@@ -74,14 +80,15 @@ type kidsMgr struct {
 	st       kidsState
 	now      func() time.Time
 	emit     func(evt)
-	unlocked map[string]time.Time // session id -> until (memory only)
+	unlocked map[string]time.Time            // session id -> until (memory only)
+	cleared  map[string]map[string]time.Time // session id -> info-hash -> until (memory only)
 	cost     int
 }
 
 var kidsMgrG *kidsMgr
 
 func newKidsMgr(path string) *kidsMgr {
-	m := &kidsMgr{path: path, now: time.Now, unlocked: map[string]time.Time{}, cost: bcryptCost,
+	m := &kidsMgr{path: path, now: time.Now, unlocked: map[string]time.Time{}, cleared: map[string]map[string]time.Time{}, cost: bcryptCost,
 		emit: func(e evt) {
 			if events != nil {
 				events.Add([]evt{e})
@@ -295,6 +302,101 @@ func (m *kidsMgr) SetDevices(sid string, macs []string) error {
 	return nil
 }
 
+// ---- clearing titles for the torrent bridge ----
+
+// Clear records that this session may play this torrent (the caller has checked the title's rating).
+func (m *kidsMgr) Clear(sid, hash string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c := m.cleared[sid]
+	if c == nil {
+		c = map[string]time.Time{}
+		m.cleared[sid] = c
+	}
+	now := m.now()
+	for h, u := range c {
+		if !now.Before(u) {
+			delete(c, h)
+		}
+	}
+	if len(c) >= kidsMaxClear { // the oldest goes
+		var oh string
+		var ou time.Time
+		for h, u := range c {
+			if oh == "" || u.Before(ou) {
+				oh, ou = h, u
+			}
+		}
+		delete(c, oh)
+	}
+	c[hash] = now.Add(kidsClearFor)
+}
+
+// IsCleared says whether this session may play this torrent. With Kids mode off everything is.
+func (m *kidsMgr) IsCleared(sid, hash string) bool {
+	if m == nil {
+		return true
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.st.On {
+		return true
+	}
+	u, ok := m.cleared[sid][hash]
+	return ok && m.now().Before(u)
+}
+
+// AnyCleared says whether this session has any title cleared now (the bridge's connections carry no info-hash). With Kids mode off it is always true.
+func (m *kidsMgr) AnyCleared(sid string) bool {
+	if m == nil {
+		return true
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.st.On {
+		return true
+	}
+	for _, u := range m.cleared[sid] {
+		if m.now().Before(u) {
+			return true
+		}
+	}
+	return false
+}
+
+var kidsRefusal = map[string]any{"error": "Kids mode is on: this title is not cleared", "kids": true}
+
+// kidsBridgeOK is the gate in front of the torrent bridge: peers needs this torrent cleared, the connections need any clearance. A script token has no session and is refused while Kids mode is on.
+func kidsBridgeOK(w http.ResponseWriter, r *http.Request, path string) bool {
+	m := kidsMgrG
+	if m == nil || !m.On() {
+		return true
+	}
+	sid := kidsSID(r)
+	ok := false
+	switch path {
+	case "bt/peers":
+		ok = sid != "" && m.IsCleared(sid, strings.ToLower(r.URL.Query().Get("h")))
+	case "bt/conn", "bt/mux":
+		ok = sid != "" && m.AnyCleared(sid)
+	default:
+		return true
+	}
+	if !ok {
+		writeJSON(w, 403, kidsRefusal)
+	}
+	return ok
+}
+
+// kidsNoSearch refuses the free-text searches (the Web tab and Nyaa) while Kids mode is on.
+func kidsNoSearch(w http.ResponseWriter) bool {
+	if kidsMgrG != nil && kidsMgrG.On() {
+		writeJSON(w, 403, map[string]any{"error": "Search is off while Kids mode is on", "kids": true})
+		return true
+	}
+	return false
+}
+
 // ---- what the page sees ----
 
 type kidsView struct {
@@ -372,6 +474,9 @@ func handleKidsAPI(w http.ResponseWriter, r *http.Request, path string) {
 		Current string    `json:"current"`
 		On      *bool     `json:"on"`
 		Devices *[]string `json:"devices"`
+		Kind    string    `json:"kind"`
+		ID      string    `json:"id"`
+		Hash    string    `json:"hash"`
 	}
 	if json.NewDecoder(r.Body).Decode(&b) != nil {
 		writeJSON(w, 400, map[string]string{"error": "bad request"})
@@ -406,6 +511,23 @@ func handleKidsAPI(w http.ResponseWriter, r *http.Request, path string) {
 			}
 		}
 		writeJSON(w, 200, m.View(sid))
+	case "kids/clear": // the page is about to play a torrent: is its title allowed?
+		h := strings.ToLower(b.Hash)
+		if !validHash(h) || (b.Kind != "movie" && b.Kind != "series" && b.Kind != "anime") {
+			writeJSON(w, 400, map[string]string{"error": "kind and a 40-character hash are needed"})
+			return
+		}
+		if !m.On() {
+			writeJSON(w, 200, map[string]any{"cleared": true, "kids": false})
+			return
+		}
+		ok, why := ratingMgrG.Allowed(r.Context(), b.Kind, b.ID)
+		if !ok {
+			writeJSON(w, 403, map[string]any{"error": "hidden by Kids mode", "why": why, "kids": true})
+			return
+		}
+		m.Clear(sid, h)
+		writeJSON(w, 200, map[string]any{"cleared": true, "kids": true})
 	case "kids/pin":
 		if err := m.SetPin(sid, b.PIN, b.Current); err != nil {
 			kidsFail(w, err)

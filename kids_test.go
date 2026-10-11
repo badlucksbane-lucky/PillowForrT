@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -435,5 +436,205 @@ func TestKidsAPIGuards(t *testing.T) {
 	k.h(raw, req)
 	if strings.Contains(raw.Body.String(), "$2a$") || strings.Contains(raw.Body.String(), "2468") || strings.Contains(raw.Body.String(), "pin_hash") {
 		t.Errorf("the state must not leak the PIN or the hash: %s", raw.Body.String())
+	}
+}
+
+// ---- clearing titles, and the server-side gates ----
+
+func TestKidsClearances(t *testing.T) {
+	m, now, _ := testKids(t)
+	h1, h2 := strings.Repeat("a", 40), strings.Repeat("b", 40)
+	if !m.IsCleared("s", h1) || !m.AnyCleared("s") {
+		t.Error("with Kids mode off everything is cleared")
+	}
+	m.SetPin("s", "1234", "")
+	m.SetOn("s", true)
+	if m.IsCleared("s", h1) || m.AnyCleared("s") {
+		t.Fatal("with Kids mode on nothing is cleared until it is")
+	}
+	m.Clear("s", h1)
+	if !m.IsCleared("s", h1) || m.IsCleared("s", h2) || !m.AnyCleared("s") {
+		t.Error("exactly the cleared hash")
+	}
+	if m.IsCleared("other", h1) || m.AnyCleared("other") {
+		t.Error("another session is not cleared by it")
+	}
+	*now = now.Add(kidsClearFor - time.Second)
+	if !m.IsCleared("s", h1) {
+		t.Error("still good just before 6 hours")
+	}
+	*now = now.Add(2 * time.Second)
+	if m.IsCleared("s", h1) || m.AnyCleared("s") {
+		t.Error("a clearance ends after 6 hours")
+	}
+	for i := 0; i < kidsMaxClear+5; i++ {
+		*now = now.Add(time.Second)
+		m.Clear("s", fmt.Sprintf("%040d", i))
+	}
+	if n := len(m.cleared["s"]); n != kidsMaxClear {
+		t.Errorf("at most %d titles cleared per session, got %d", kidsMaxClear, n)
+	}
+	if m.IsCleared("s", fmt.Sprintf("%040d", 0)) || !m.IsCleared("s", fmt.Sprintf("%040d", kidsMaxClear+4)) {
+		t.Error("the oldest clearance goes first")
+	}
+	m.SetPin("s", "4321", "1234")
+	_ = m
+	var nilMgr *kidsMgr
+	if !nilMgr.IsCleared("s", h1) || !nilMgr.AnyCleared("s") {
+		t.Error("a nil manager gates nothing")
+	}
+}
+
+func TestKidsBridgeGate(t *testing.T) {
+	k, m, _ := newKidsHTTP(t)
+	h1, h2 := strings.Repeat("a", 40), strings.Repeat("b", 40)
+	call := func(path, q string, withSession bool) (bool, int, string) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/api/"+path+q, nil)
+		if withSession {
+			req.AddCookie(&http.Cookie{Name: sessionCookie, Value: k.sid})
+		}
+		ok := kidsBridgeOK(rec, req, path)
+		return ok, rec.Code, rec.Body.String()
+	}
+	for _, p := range []string{"bt/peers", "bt/conn", "bt/mux", "bt", "bt/set"} {
+		if ok, _, _ := call(p, "?h="+h1, true); !ok {
+			t.Errorf("%s is open while Kids mode is off", p)
+		}
+	}
+	m.SetPin(k.sid, "1234", "")
+	m.SetOn(k.sid, true)
+	for _, p := range []string{"bt/peers", "bt/conn", "bt/mux"} {
+		if ok, code, body := call(p, "?h="+h1, true); ok || code != 403 || !strings.Contains(body, `"kids":true`) {
+			t.Errorf("%s with nothing cleared must be refused: %v %d %s", p, ok, code, body)
+		}
+	}
+	for _, p := range []string{"bt", "bt/set"} {
+		if ok, _, _ := call(p, "", true); !ok {
+			t.Errorf("%s (status, settings) is not part of the gate", p)
+		}
+	}
+	m.Clear(k.sid, h1)
+	if ok, _, _ := call("bt/peers", "?h="+strings.ToUpper(h1), true); !ok {
+		t.Error("peers for the cleared hash (any letter case) are allowed")
+	}
+	if ok, code, _ := call("bt/peers", "?h="+h2, true); ok || code != 403 {
+		t.Error("but not for another hash")
+	}
+	if ok, _, _ := call("bt/peers", "", true); ok {
+		t.Error("and not with no hash")
+	}
+	if ok, _, _ := call("bt/conn", "", true); !ok {
+		t.Error("a connection needs only that the session has something cleared")
+	}
+	if ok, _, _ := call("bt/mux", "", true); !ok {
+		t.Error("so does the multiplexed connection")
+	}
+	if ok, _, _ := call("bt/peers", "?h="+h1, false); ok {
+		t.Error("no session (the script token) is refused while Kids mode is on")
+	}
+	if ok, _, _ := call("bt/conn", "", false); ok {
+		t.Error("also for connections")
+	}
+}
+
+func TestKidsNoSearch(t *testing.T) {
+	k, m, _ := newKidsHTTP(t)
+	old := searchMgrG
+	searchMgrG = nil
+	defer func() { searchMgrG = old }()
+	get := func(p string) (int, string) {
+		rec := httptest.NewRecorder()
+		handleSearchAPI(rec, httptest.NewRequest("GET", "/api/"+p+"?q=cats", nil), p)
+		return rec.Code, rec.Body.String()
+	}
+	for _, p := range []string{"search/web", "search/nyaa"} {
+		if code, body := get(p); code == 403 || strings.Contains(body, "Kids") {
+			t.Errorf("%s is open while Kids mode is off: %d %s", p, code, body)
+		}
+	}
+	m.SetPin(k.sid, "1234", "")
+	m.SetOn(k.sid, true)
+	for _, p := range []string{"search/web", "search/nyaa"} {
+		if code, body := get(p); code != 403 || !strings.Contains(body, `"kids":true`) {
+			t.Errorf("%s must be refused in Kids mode: %d %s", p, code, body)
+		}
+	}
+	if code, body := get("search"); code == 403 || strings.Contains(body, "Kids") {
+		t.Errorf("the search status is not blocked: %d %s", code, body)
+	}
+}
+
+func TestKidsClearAPI(t *testing.T) {
+	k, m, _ := newKidsHTTP(t)
+	rm, f, _ := testRatings(t)
+	oldR := ratingMgrG
+	ratingMgrG = rm
+	defer func() { ratingMgrG = oldR }()
+	bm := newBTMgr(filepath.Join(t.TempDir(), "bt.json"))
+	oldB := btMgrG
+	btMgrG = bm
+	defer func() { btMgrG = oldB }()
+	f.titles["tt0000001"] = fakeTitle{id: 11, certs: []string{"PG"}}
+	f.titles["tt0000002"] = fakeTitle{id: 12, certs: []string{"R"}}
+	f.titles["tt0000003"] = fakeTitle{id: 13, certs: nil}
+	hOK, hR, hNone := strings.Repeat("1", 40), strings.Repeat("2", 40), strings.Repeat("3", 40)
+	body := func(kind, id, hash string) string {
+		return fmt.Sprintf(`{"kind":%q,"id":%q,"hash":%q}`, kind, id, hash)
+	}
+	if code, v := k.do("POST", "/api/kids/clear", body("movie", "tt0000002", hR), nil); code != 200 || v["kids"] != false {
+		t.Errorf("with Kids mode off, clearing is a no-op that says so (and asks TMDB nothing): %d %v", code, v)
+	}
+	if f.hits.Load() != 0 {
+		t.Error("nothing is looked up when Kids mode is off")
+	}
+	m.SetPin(k.sid, "1234", "")
+	m.SetOn(k.sid, true)
+	if code, v := k.do("POST", "/api/kids/clear", body("movie", "tt0000001", hOK), nil); code != 200 || v["cleared"] != true {
+		t.Fatalf("a PG title clears: %d %v", code, v)
+	}
+	if code, v := k.do("POST", "/api/kids/clear", body("movie", "tt0000002", hR), nil); code != 403 || v["why"] != "R" {
+		t.Errorf("an R title does not, and says why: %d %v", code, v)
+	}
+	if code, v := k.do("POST", "/api/kids/clear", body("movie", "tt0000003", hNone), nil); code != 403 || v["why"] != "no rating" {
+		t.Errorf("an unrated title does not: %d %v", code, v)
+	}
+	for _, bad := range []string{body("movie", "tt0000001", "xyz"), body("bogus", "tt0000001", hOK), body("movie", "tt0000001", ""), `{}`} {
+		if code, _ := k.do("POST", "/api/kids/clear", bad, nil); code != 400 {
+			t.Errorf("%s must be a 400: %d", bad, code)
+		}
+	}
+	peers := func(hash string) (int, string) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/api/bt/peers?h="+hash, nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookie, Value: k.sid})
+		k.h(rec, req)
+		return rec.Code, rec.Body.String()
+	}
+	if _, b := peers(hOK); strings.Contains(b, `"kids":true`) {
+		t.Errorf("the cleared title gets past the gate (whatever the bridge then says): %s", b)
+	}
+	for _, h := range []string{hR, hNone} {
+		if code, b := peers(h); code != 403 || !strings.Contains(b, `"kids":true`) {
+			t.Errorf("a title that did not clear is refused at the bridge: %d %s", code, b)
+		}
+	}
+	tok := filepath.Join(t.TempDir(), "ui.token")
+	os.WriteFile(tok, []byte("script-secret"), 0o600)
+	old := uiTokenFile
+	uiTokenFile = tok
+	defer func() { uiTokenFile = old }()
+	viaToken := func(r *http.Request) {
+		r.Header.Del("Cookie")
+		r.Header.Del("X-CSRF-Token")
+		r.Header.Set("X-UI-Token", "script-secret")
+	}
+	if code, _ := k.do("POST", "/api/kids/clear", body("movie", "tt0000001", hOK), viaToken); code != 403 {
+		t.Errorf("the script token cannot clear a title: %d", code)
+	}
+	// no ratings manager at all: nothing clears
+	ratingMgrG = nil
+	if code, v := k.do("POST", "/api/kids/clear", body("movie", "tt0000001", strings.Repeat("4", 40)), nil); code != 403 {
+		t.Errorf("without a ratings service nothing is allowed: %d %v", code, v)
 	}
 }
