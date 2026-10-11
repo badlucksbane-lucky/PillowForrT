@@ -155,6 +155,14 @@ func TestRoomServeForJS(t *testing.T) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		io.WriteString(w, roomTestHTML)
 	})
+	for path, body := range map[string]string{"/play": gamePlayHTML, "/pad": gamePadHTML} { // the game pages, for scripts/dev/game-test.mjs
+		body := body
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			io.WriteString(w, body)
+		})
+	}
+	mux.HandleFunc("/game/", gameScript)
 	// a stand-in for the box's sign-in: a SameSite=Strict cookie like the real one, to see what a link from another site does to it
 	hasSess := func(r *http.Request) bool { c, err := r.Cookie("sess"); return err == nil && c.Value == "1" }
 	mux.HandleFunc("/fake-login", func(w http.ResponseWriter, r *http.Request) {
@@ -187,7 +195,7 @@ func TestRoomServeForJS(t *testing.T) {
 	fmt.Printf("{\"url\":%q}\n", srv.URL)
 	select {
 	case <-quit:
-	case <-time.After(2 * time.Minute):
+	case <-time.After(5 * time.Minute):
 	}
 }
 

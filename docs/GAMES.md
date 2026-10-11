@@ -19,7 +19,7 @@ A game declares the widgets it uses; the controller page builds itself from that
 4. **Private panel**: the screen sends a list, cards or text to one phone; the phone returns a choice index. Covers every hidden-information game.
 5. **Canvas input**: strokes and text entry (used by Draw & Guess, later).
 
-Optional sensors, off unless a game asks: tilt (`DeviceMotion`, needs a tap on iOS) and vibration (not on iOS).
+Optional sensors, off unless a game asks: tilt (`deviceorientation`, beta and gamma in degrees; iOS asks permission from a tap, so the phone shows an "Enable tilt" button) and vibration (not on iOS). The canvas-input widget (strokes, text) is **not built yet**; it comes with Draw & Guess.
 
 ## Wire rules
 
@@ -27,7 +27,9 @@ Optional sensors, off unless a game asks: tilt (`DeviceMotion`, needs a tap on i
 - Discrete events (buttons, choices) go on the **reliable** channel.
 - Input is capped at about 30 messages a second per phone, so 7 phones stay under the box relay's 100 msg/s fallback.
 - The screen sends state on the reliable channel and private views to one phone only.
-- A game that loses a controller **pauses**, it does not end (the room grace period is 60 s).
+- A game that loses a controller **pauses**, it does not end (the room grace period is 60 s). A controller counts as away when the box says so **or when the screen has heard nothing from it for 4 s** (the phone sends a heartbeat every second): a closed tab's data channel can look open for half a minute. "Continue without" drops the player.
+- A stick is let go if it goes quiet for 600 ms while held (a lost release on the unordered channel must not leave it stuck); a release goes on both channels; a touch or release is sent at once, moves at most every 33 ms.
+- Coordinates: stick x right and y down, -1 to 1 (dead zone 0.12; d-pad mode gives -1, 0 or 1); pointer 0 to 1 inside its area. Each input kind has its own sequence number and a `hello` resets it.
 
 ## Game module contract (sketch)
 
@@ -64,6 +66,15 @@ Optional sensors, off unless a game asks: tilt (`DeviceMotion`, needs a tap on i
 | Private panel, cards | Card table, Memory Pairs |
 | Canvas input | Draw & Guess, Telephone |
 | Gestures | Stacker, Fruit-slice swipe |
+
+## What is built (pf-0fn.1, the shell)
+
+- `/play` (`play.html`, `gameclient/console.js`): the screen. Room code, QR, player chips, game picker, Start (a tap, so the audio context may start), fullscreen, wake lock, pause overlay with "Continue without", Menu back to the lobby, "New room" if the box forgot the room.
+- `/pad` (`pad.html`, `gameclient/pad.js`): the phone. Name and code (a scanned `#CODE` fills it in, a tap joins; a reload returns to the same place), builds the widgets from the game's list (stick, d-pad, buttons, pointer, tilt, private panel), portrait layout with thumbs at the bottom, status overlay, vibration, wake lock.
+- `/game/<file>.js` serves `gameclient/*.js` (embedded, plain file names only). Both pages call `roomBounce` when there is no session (`game.go`).
+- `gameclient/padtest.js`: a throwaway game that exercises every widget. Real games register the same way: `Games.register({id, name, players, widgets, orientation, create(ctx)})`; add the file in `gameclient/` and a script tag in `play.html`.
+- Tests: `node scripts/dev/game-test.mjs` (screen plus phone-sized pages in headless Chromium against the real room server; about 15 s; checks join, every widget, two touches at once, panels, out-of-order and lost input, a full room, pause and the same place back, and that a deliberately broken ordering or heartbeat rule fails) and `go test -run TestGame .`. **Not yet tried on a real phone, and not deployed to the box.**
+- Found while testing: a tab behind the others in headless Chromium never answers a touch and has its timers held back, so the test brings each page to the front first; Chromium has `DeviceOrientationEvent.requestPermission` and fires one empty orientation event when a listener is added, which the pad ignores.
 
 ## Build order (beads issues under pf-0fn)
 

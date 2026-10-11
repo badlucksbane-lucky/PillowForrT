@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Play</title>
+<style>
+:root{--bg:#16140f;--fg:#f1ebde;--mut:#9b9384;--card:#201d16;--line:#352f23;--bad:#ff8a80;--acc:#d9b27a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,sans-serif;overflow:hidden}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#lobby,#pause{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;background:rgba(22,20,15,.94)}
+#lobby[hidden],#pause[hidden]{display:none}
+#code{font-size:min(14vw,120px);font-weight:800;letter-spacing:.2em;margin-right:-.2em}
+#qr{background:#fff;border-radius:14px;padding:8px;line-height:0}
+#qr svg{width:min(38vh,260px);height:auto}
+.row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.chip{display:flex;align-items:center;gap:8px;padding:8px 14px;border:1px solid var(--line);border-radius:999px;background:var(--card)}
+.chip i{width:12px;height:12px;border-radius:50%;display:inline-block}
+.chip small{color:var(--mut)}
+.chip.away{opacity:.5}
+button{padding:12px 22px;border:0;border-radius:12px;background:var(--acc);color:var(--bg);font:inherit;font-weight:700}
+button.g{background:var(--card);color:var(--fg);border:1px solid var(--line)}
+button.sel{outline:3px solid var(--acc);outline-offset:2px}
+button:disabled{opacity:.35}
+#menu{position:fixed;top:10px;right:10px;padding:8px 12px;opacity:.55}
+#menu[hidden]{display:none}
+.mut{color:var(--mut)}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="lobby">
+  <div id="code">····</div>
+  <div id="qr"></div>
+  <div class="row" id="players"></div>
+  <div class="row" id="games"></div>
+  <div class="row"><button id="start" disabled>Start</button><button class="g" id="full">Fullscreen</button></div>
+  <div class="mut" id="stat"></div>
+  <button class="g" id="fresh" hidden>New room</button>
+</div>
+<div id="pause" hidden><div style="font-size:32px;font-weight:800" id="pwho"></div><button class="g" id="skip">Continue without</button></div>
+<button class="g" id="menu" hidden>Menu</button>
+<script src="/room/room.js"></script>
+<script src="/room/qr.js"></script>
+<script src="/game/console.js"></script>
+<script src="/game/padtest.js"></script>
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+let gc=null,shownUrl='';
+function chip(p){
+  const c=document.createElement('div');c.className='chip'+(p.away?' away':'');
+  const d=document.createElement('i');d.style.background=p.color;
+  const n=document.createElement('span');n.textContent=p.name;
+  c.append(d,n);return c;
+}
+function draw(){
+  if(!gc)return;
+  const r=gc.room,lobby=gc.state==='lobby';
+  $('#lobby').hidden=!lobby;$('#menu').hidden=lobby;$('#pause').hidden=gc.state!=='paused';
+  if(r.code)$('#code').textContent=r.code;
+  if(r.code&&r.lan!==undefined){const u=gc.joinUrl();if(u!==shownUrl){shownUrl=u;$('#qr').innerHTML=QR.svg(u,{scale:6});}} // our own markup: this page's origin and a 4-letter code
+  $('#players').replaceChildren(...Array.from(gc.players.values()).map(chip));
+  const gl=$('#games');
+  if(!gl.children.length)Object.values(Games.list).forEach(g=>{const b=document.createElement('button');b.className='g';b.textContent=g.name;b.dataset.id=g.id;b.onclick=()=>gc.select(g.id);gl.append(b)});
+  Array.from(gl.children).forEach(b=>b.classList.toggle('sel',!!gc.game&&gc.game.id===b.dataset.id));
+  $('#start').disabled=!gc.canStart();
+  $('#stat').textContent=gc.closed?gc.closed:r.status!=='online'?r.status:gc.game?gc.game.players.min+' to '+gc.game.players.max+' players':'';
+  $('#pwho').textContent=gc.awayPlayers().map(p=>p.name).join(', ')+' …';
+  $('#fresh').hidden=!gc.closed;
+}
+$('#fresh').onclick=()=>{try{sessionStorage.removeItem('room:last')}catch(e){}location.href='/play'}; // a room the box has forgotten (it restarted): start a new one
+$('#start').onclick=()=>gc.start();
+$('#menu').onclick=()=>gc.stop();
+$('#skip').onclick=()=>gc.awayPlayers().forEach(p=>gc.drop(p.id));
+$('#full').onclick=()=>{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>{})};
+gc=new GameConsole({canvas:$('#cv'),onUpdate:draw});window.gc=gc; // window.gc is for the tests and for poking at from the console
+draw();
+</script>
+</body>
+</html>
