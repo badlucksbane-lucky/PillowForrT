@@ -83,6 +83,11 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 #tabs .in{max-width:760px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
 #tabs button{border:0;background:none;border-radius:12px;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:12px;color:var(--mut);position:relative}
 #tabs button.on{color:var(--ac);font-weight:600}#tabs button.on::before{content:"";position:absolute;top:-6px;width:34px;height:3px;border-radius:2px;background:var(--ac)}
+.mod{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:60}.mod[hidden]{display:none}
+.pinbox{background:var(--card);border:1px solid var(--ln);border-radius:16px;padding:20px;width:min(320px,100%);display:flex;flex-direction:column;gap:12px;align-items:center}.pinbox h3{margin:0;font-size:16px;text-align:center}
+.pdots{display:flex;gap:10px;min-height:16px}.pdots i{width:14px;height:14px;border-radius:50%;border:2px solid var(--ac)}.pdots i.f{background:var(--ac)}.pdots.bad{animation:pshake .3s}@keyframes pshake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+.ppad{display:grid;grid-template-columns:repeat(3,64px);gap:10px}.ppad button{height:54px;font-size:20px;border-radius:14px;padding:0}.pok{width:100%;min-height:44px}.pmsg{min-height:18px;font-size:13px;color:var(--bad);text-align:center}
+@media(prefers-reduced-motion:reduce){.pdots.bad{animation:none}}
 </style></head><body><main>
 <div class="brand"><img class="mark" src="/favicon.svg" alt=""><div><h1>PillowForrT <span class="mut" id="ver"></span></h1><div class="tag mut">a watchman for your hotspot</div></div></div>
 <div class="row" style="margin-bottom:6px"><form method="post" action="/logout" style="margin:0"><button>Sign out</button></form></div>
@@ -146,6 +151,7 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 <div class="card"><h2>Top asked</h2><table id="tq"></table></div>
 <div class="card"><h2>Recent</h2><table id="rc"></table></div>
 <div class="sec">Devices</div>
+<div class="card" id="c-kids"><h2>Kids mode <span id="kmbadge"></span></h2><div id="km" class="mut">loading</div><div id="kmmsg" class="msg"></div></div>
 <div class="card" id="c-wifi"><h2>Wi-Fi <span id="wibadge"></span></h2><div id="wifi" class="mut">loading</div><div id="wmsg" class="msg"></div></div>
 <div class="card"><h2>Blocked devices <span id="blbadge"></span></h2><div id="blk" class="mut">loading</div><div id="bmsg" class="msg"></div></div>
 <div class="card"><h2>Internet schedules <span id="fwbadge"></span></h2><div id="fws" class="mut">loading</div><div id="fmsg" class="msg"></div></div>
@@ -167,7 +173,9 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 <div class="card"><h2>Messages</h2><div id="sms" class="mut">loading</div></div>
 <div class="card"><h2>Node</h2><table id="node"></table></div>
 <div class="card"><h2>Account</h2><div class="row"><input id="oldpw" type="password" autocomplete="current-password" placeholder="current password"><input id="newpw" type="password" autocomplete="new-password" placeholder="new password (10+)"><button onclick="chpw()">Change password</button></div><div id="amsg" class="msg"></div></div>
-</main><script>
+</main>
+<div id="kmpad" class="mod" hidden role="dialog" aria-modal="true" aria-label="Parent PIN"></div>
+<script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let CSRF='';
@@ -1011,7 +1019,71 @@ async function psave(){const hrs=parseFloat($('p_l').value);if(!(hrs>0)){$('pmsg
  if(!confirm('Restart DHCP and DNS (a few seconds) to use '+$('p_a').value+' to '+$('p_b').value+', leases '+hrs+' h? A backup of the stock config is saved first, and the old pool comes back if dnsmasq does not.'))return;
  const r=await apost('dhcp/pool/set',{start:$('p_a').value.trim(),end:$('p_b').value.trim(),lease_secs:Math.round(hrs*3600)});$('pmsg').textContent=r.j.error||r.j.status||'';setTimeout(()=>{Pl=null;pload();dload()},5000)}
 let tickN=0;
-async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();dnsPath(V.own);vrender(V);node(await rc.json());if(tickN++%3===0){wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Tc)tcload();if(tickN%3===0||!Dx)dxload();if(tickN%3===0||!La)laload();if(tickN%3===0||!Df)dfload();if(tickN%3===0||!Dm)dmload();if(tickN%3===0||!Tt)ttload();if(tickN%3===0||!At)atload();if(tickN%3===0||!St)stload();if(tickN%6===0||!Rb)rbload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%6===5||!Se)seload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===3||!Xp)xpload();if(tickN%3===2||!Tw)twload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
+// <kids-card>
+// Kids mode (kids.go): the switch, the parent PIN pad, the kids' devices. Turning it ON needs only a PIN to exist; turning it OFF, removing a device and changing the PIN need the PIN (the server decides, this only asks).
+// The unlock lasts 10 minutes and is counted down here; a wrong PIN says how many tries are left, and a lockout says for how long.
+let Km=null,KmAt=0,KmDevs=[],KmPad=null;
+const kmfmt=s=>Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+const kmsince=()=>Math.floor((Date.now()-KmAt)/1000);
+const kmLeft=()=>Km&&Km.unlocked?Math.max(0,Km.unlock_left-kmsince()):0;
+const kmLock=()=>Km&&Km.locked_for?Math.max(0,Km.locked_for-kmsince()):0;
+const kmname=mac=>{const d=KmDevs.find(x=>x.mac===mac);return d?(d.label||d.name||d.hostname||d.ip||mac):mac};
+function kmerr(r){const j=r.j||{};if(j.locked_for)return 'Locked: try again in '+Math.max(1,Math.ceil(j.locked_for/60))+' min';if(j.tries_left!==undefined)return 'Wrong PIN, '+j.tries_left+' left';return j.error||'Something went wrong'}
+function kmrender(force){const el=$('km');if(!Km||guard(el,force))return;
+ const left=kmLeft(),lock=kmLock(),free=KmDevs.filter(d=>!Km.devices.includes(d.mac));
+ $('kmbadge').innerHTML=Km.on?'<span style="color:var(--ac);text-transform:none;letter-spacing:0">&bull; on</span>':'';
+ el.innerHTML='<div class="row">'+seg('Kids mode',[['0','Off'],['1','On']],Km.on?'1':'0',v=>"kmswitch("+(v==='1')+")")+'<span style="flex:1"></span>'+
+  (lock?chip('PIN locked <span id="kmlock">'+kmfmt(lock)+'</span>','bad','too many wrong PINs'):left?chip('Unlocked <span id="kmleft">'+kmfmt(left)+'</span>','ok','the PIN settings are open for a few minutes')+'<button type="button" onclick="kmlockNow()">Lock now</button>':chip(Km.has_pin?'PIN locked':'No PIN yet','',Km.has_pin?'enter the PIN to change Kids mode':'set a PIN to use Kids mode'))+'</div>'+
+  '<div class="chips" style="margin-top:12px">'+Km.devices.map(m=>'<button type="button" class="chip" aria-label="Remove '+esc(kmname(m))+' from the kids\' devices" onclick="kmdevdel(\''+esc(m)+'\')">'+esc(kmname(m))+' &times;</button>').join('')+
+   (free.length?'<select id="km_add" aria-label="Add a kids\' device" onchange="kmdevadd(this.value)"><option value="">+ Add device</option>'+free.map(d=>'<option value="'+esc(d.mac)+'">'+esc(d.label||d.name||d.hostname||d.ip||d.mac)+'</option>').join('')+'</select>':'')+'</div>'+
+  '<div class="row" style="margin-top:12px"><button type="button" onclick="kmpin()">'+(Km.has_pin?'Change PIN':'Set PIN')+'</button></div>'}
+async function kmload(){try{const [a,b]=await Promise.all([api('/api/kids'),api('/api/devices')]);Km=await a.json();KmAt=Date.now();KmDevs=(await b.json()).devices||[];kmrender()}catch(e){}}
+const kmsay=r=>{$('kmmsg').textContent=r.ok?'':(r.j&&r.j.error)||''};
+async function kmpost(p,b){const r=await apost('kids/'+p,b);kmsay(r);await kmload();return r}
+async function kmswitch(on){
+ if(on&&!Km.has_pin){kmpin(()=>kmswitch(true));return}
+ if(!on&&!kmLeft()){kmunlock(()=>kmswitch(false));return}
+ await kmpost('set',{on})}
+async function kmlockNow(){await kmpost('lock',{})}
+async function kmdevadd(mac){if(!mac)return;await kmpost('set',{devices:[...Km.devices,mac]})}
+async function kmdevdel(mac){if(!kmLeft()){kmunlock(()=>kmdevdel(mac));return}await kmpost('set',{devices:Km.devices.filter(x=>x!==mac)})}
+// the PIN pad: kmpad(title, submit) where submit(pin) resolves to {done, after} to close, {next:{title,submit}} for another step, or {msg} to stay with a message
+function kmpad(title,submit,msg){KmPad={title,submit,pin:'',msg:msg||'',bad:false,busy:false};kmpadDraw()}
+function kmpadDraw(){const m=$('kmpad'),p=KmPad;if(!p){m.hidden=true;m.innerHTML='';return}
+ const n=Math.max(4,p.pin.length);
+ m.hidden=false;m.innerHTML='<div class="pinbox"><h3>'+esc(p.title)+'</h3><div class="pdots'+(p.bad?' bad':'')+'">'+Array.from({length:n},(_,i)=>'<i class="'+(i<p.pin.length?'f':'')+'"></i>').join('')+'</div><div class="pmsg" role="status">'+esc(p.msg)+'</div>'+
+  '<div class="ppad">'+[1,2,3,4,5,6,7,8,9].map(d=>'<button type="button" onclick="kmkey(\''+d+'\')">'+d+'</button>').join('')+'<button type="button" aria-label="Cancel" onclick="kmpadClose()">&#10005;</button><button type="button" onclick="kmkey(\'0\')">0</button><button type="button" aria-label="Delete" onclick="kmkey(\'Backspace\')">&#9003;</button></div>'+
+  '<button type="button" class="on pok" onclick="kmkey(\'Enter\')"'+(p.pin.length>=4?'':' disabled')+'>OK</button></div>'}
+function kmpadClose(){KmPad=null;kmpadDraw()}
+async function kmkey(k){const p=KmPad;if(!p||p.busy)return;
+ if(/^[0-9]$/.test(k)){if(p.pin.length<8){p.pin+=k;p.msg='';p.bad=false}kmpadDraw();return}
+ if(k==='Backspace'){p.pin=p.pin.slice(0,-1);kmpadDraw();return}
+ if(k==='Escape'){kmpadClose();return}
+ if(k!=='Enter'||p.pin.length<4)return;
+ p.busy=true;let res;try{res=await p.submit(p.pin)}catch(e){res={msg:'Something went wrong'}}p.busy=false;
+ if(res&&res.done){kmpadClose();if(res.after)await res.after();return}
+ if(res&&res.next){KmPad={title:res.next.title,submit:res.next.submit,pin:'',msg:res.msg||'',bad:false,busy:false}}else{p.pin='';p.msg=(res&&res.msg)||'';p.bad=true}
+ kmpadDraw()}
+document.addEventListener('keydown',e=>{if(!KmPad||e.ctrlKey||e.metaKey||e.altKey)return;if(/^[0-9]$/.test(e.key)||['Backspace','Enter','Escape'].includes(e.key)){e.preventDefault();kmkey(e.key)}});
+// ask for the PIN, then carry on with `after` (the unlock lasts 10 minutes)
+function kmunlock(after){kmpad('Parent PIN',async pin=>{const r=await apost('kids/unlock',{pin});if(r.ok){await kmload();return {done:true,after}}await kmload();return {msg:kmerr(r)}})}
+// set the first PIN, or change it: [the current PIN unless unlocked], the new one, the new one again
+function kmpin(after){
+ const needCur=Km&&Km.has_pin&&!kmLeft();
+ const choose=cur=>async p1=>({next:{title:'Repeat the PIN',submit:async p2=>{
+  if(p2!==p1)return {next:{title:'Choose a PIN (4 to 8 digits)',submit:choose(cur)},msg:'The PINs differ, try again'};
+  const r=await apost('kids/pin',{pin:p1,current:cur});
+  await kmload();
+  if(r.ok)return {done:true,after};
+  if(needCur&&(r.j.tries_left!==undefined||r.j.needs_pin))return {next:{title:'Current PIN',submit:cur0},msg:kmerr(r)}; // the current PIN was wrong: ask for it again
+  return {msg:kmerr(r)}}}});
+ const cur0=async cur=>({next:{title:'Choose a PIN (4 to 8 digits)',submit:choose(cur)}});
+ if(needCur)kmpad('Current PIN',cur0);else kmpad('Choose a PIN (4 to 8 digits)',choose(''))}
+setInterval(()=>{if(!Km||document.hidden)return;const l=kmLeft(),k=kmLock(),a=$('kmleft'),b=$('kmlock');
+ if(a)a.textContent=kmfmt(l);if(b)b.textContent=kmfmt(k);
+ if((Km.unlocked&&!l)||(Km.locked_for&&!k))kmload()},1000);
+// </kids-card>
+async function tick(){try{const [ra,rb,rc]=await Promise.all([api('/api/dns'),api('/api/vpn'),api('/status.json')]);render(await ra.json());V=await rb.json();dnsPath(V.own);vrender(V);node(await rc.json());if(tickN++%3===0){kmload();wload();dload();if(!Pl)pload();bload();fload();cload();yload();kload();dvload();shload();if(tickN%3===0||!Cn)cnload();if(tickN%3===0||!Rd)rdload();if(tickN%3===0||!Ar)arload();if(tickN%3===0||!Mc)mcload();if(tickN%3===0||!Dc)dcload();if(tickN%3===0||!Dg2)dg2load();if(tickN%3===0||!Bc)bcload();if(tickN%3===0||!Tb2)tb2load();if(tickN%3===0||!Ts)tsload();if(tickN%3===0||!Tc)tcload();if(tickN%3===0||!Dx)dxload();if(tickN%3===0||!La)laload();if(tickN%3===0||!Df)dfload();if(tickN%3===0||!Dm)dmload();if(tickN%3===0||!Tt)ttload();if(tickN%3===0||!At)atload();if(tickN%3===0||!St)stload();if(tickN%6===0||!Rb)rbload();if(tickN%6===4||!Lh)lhload();if(tickN%3===1||!Tr)trload();if(tickN%6===2||!Sp)spload();if(tickN%3===2||!Ac)acload();if(tickN%6===5||!Se)seload();if(tickN%3===1||!Ev)evload();if(tickN%2===1||!Gr)grefetch();if(tickN%6===1||!Ct)ctload();if(tickN%6===3||!Xp)xpload();if(tickN%3===2||!Tw)twload();if(tickN%6===1||!Sm)smload()}}catch(e){if(e.message!=='login')$('msg').textContent='unreachable'}}
 
 (function(){
  let st={};try{st=JSON.parse(localStorage.getItem('cc')||'{}')}catch(e){}
