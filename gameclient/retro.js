@@ -4,7 +4,7 @@
 'use strict';
 Games.register({
   id: 'retro', name: 'Retro', players: { min: 1, max: 4 }, orientation: 'landscape',
-  widgets: [{ type: 'dpad' }, { type: 'buttons', names: ['A', 'B', 'Select', 'Start'] }],
+  widgets: [{ type: 'dpad' }, { type: 'buttons', names: ['A', 'B', 'L', 'R', 'Select', 'Start'] }],
   create: function (ctx) {
     // libretro joypad ids (RETRO_DEVICE_ID_JOYPAD_*): the face buttons are named by position on a SNES pad, so NES/GB "A" is id 8 and "B" is id 0
     var BIT = { B: 0, Y: 1, Select: 2, Start: 3, Up: 4, Down: 5, Left: 6, Right: 7, A: 8, X: 9, L: 10, R: 11 };
