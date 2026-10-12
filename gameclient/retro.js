@@ -89,6 +89,28 @@ Games.register({
         one.length = 0;
       };
       h.reset = function () { M._retro_reset(); };
+      h.saveState = function () { // retro_serialize: a core with no save support reports size 0
+        var n = M._retro_serialize_size(); if (!n) return null;
+        var p = M._malloc(n), ok = M._retro_serialize(p, n), out = ok ? new Uint8Array(M.HEAPU8.buffer.slice(p, p + n)) : null;
+        M._free(p); return out;
+      };
+      h.loadState = function (buf) {
+        if (!buf || !buf.length || !M._retro_serialize_size()) return false;
+        var p = M._malloc(buf.length); M.HEAPU8.set(buf, p);
+        var ok = !!M._retro_unserialize(p, buf.length); M._free(p); return ok;
+      };
+      var SRAM = 0; // RETRO_MEMORY_SAVE_RAM: the battery-backed save, not a savestate
+      h.saveSram = function () {
+        var n = M._retro_get_memory_size(SRAM); if (!n) return null;
+        var p = M._retro_get_memory_data(SRAM); if (!p) return null;
+        return new Uint8Array(M.HEAPU8.buffer.slice(p, p + n));
+      };
+      h.loadSram = function (buf) {
+        if (!buf || !buf.length) return false;
+        var n = M._retro_get_memory_size(SRAM); if (!n) return false;
+        var p = M._retro_get_memory_data(SRAM); if (!p) return false;
+        M.HEAPU8.set(buf.subarray(0, Math.min(buf.length, n)), p); return true;
+      };
       h.close = function () {
         try { if (h.loaded) M._retro_unload_game(); M._retro_deinit(); } catch (e) { /* a core that fails to close is dropped anyway */ }
         fns.forEach(function (p) { try { M.removeFunction(p); } catch (e) { /* gone */ } });
@@ -113,11 +135,29 @@ Games.register({
       };
     }
 
+    function defaultStore() { // one IndexedDB store, keyed by "sram:<file>" and "state:<file>"; no-op outside a browser
+      if (typeof indexedDB === 'undefined') return { get: function () { return Promise.resolve(null); }, set: function () { return Promise.resolve(); } };
+      var dbp = new Promise(function (res, rej) {
+        var rq = indexedDB.open('retro-saves', 1);
+        rq.onupgradeneeded = function () { rq.result.createObjectStore('saves'); };
+        rq.onsuccess = function () { res(rq.result); }; rq.onerror = function () { rej(rq.error); };
+      });
+      function tx(mode, run) { return dbp.then(function (db) { return new Promise(function (res) { run(db.transaction('saves', mode).objectStore('saves'), res); }); }, function () { return null; }); }
+      return {
+        get: function (key) { return tx('readonly', function (st, res) { var rq = st.get(key); rq.onsuccess = function () { res(rq.result || null); }; rq.onerror = function () { res(null); }; }); },
+        set: function (key, val) { return tx('readwrite', function (st, res) { var rq = st.put(val, key); rq.onsuccess = function () { res(); }; rq.onerror = function () { res(); }; }); }
+      };
+    }
+
     // ---- the game ----
     var loader = ctx.retro || defaultLoader();
-    var s = { phase: 'menu', list: [], cur: 0, msg: 'Looking for games…', title: '', sound: false };
-    var core = null, hs = null, acc = 0, frame = null, canvas = null, node = null, navAt = 0, navDir = 0, gone = false;
+    var store = (ctx.retro && ctx.retro.store) || defaultStore();
+    var PAUSE_ITEMS = ['Resume', 'Save State', 'Load State', 'Quit'];
+    var SRAM_PERIOD = 3; // seconds between battery-save autosaves while running
+    var s = { phase: 'menu', list: [], cur: 0, pcur: 0, pmsg: '', msg: 'Looking for games…', title: '', file: '', sound: false };
+    var core = null, hs = null, acc = 0, sramAcc = 0, frame = null, canvas = null, node = null, navAt = 0, navDir = 0, navAt2 = 0, navDir2 = 0, gone = false;
     var makeCanvas = ctx.makeCanvas || function () { return document.createElement('canvas'); };
+    function saveSram() { if (!hs || !s.file) return; var buf = hs.saveSram(); if (buf && buf.length) store.set('sram:' + s.file, buf); }
 
     loader.index().then(function (ix) {
       if (gone) return;
@@ -136,7 +176,7 @@ Games.register({
       }, function () { /* no worklet: no sound */ });
     }
     function play(item) {
-      s.phase = 'loading'; s.title = item.name;
+      s.phase = 'loading'; s.title = item.name; s.file = item.file;
       var ext = (item.file.split('.').pop() || '').toLowerCase();
       Promise.all([loader.core(item.core), loader.rom(item.file)]).then(function (r) {
         if (gone) return;
@@ -147,9 +187,21 @@ Games.register({
           log: function (t) { if (typeof console !== 'undefined') console.log('[retro] ' + t); }
         });
         if (!hs.load(r[1], ext)) throw new Error('The core would not load ' + item.file);
-        if (node) node.port.postMessage({ rate: hs.rate }); else sink();
-        acc = 0; s.phase = 'run';
+        return store.get('sram:' + item.file).then(function (buf) {
+          if (gone) return;
+          if (buf && buf.length) hs.loadSram(buf);
+          if (node) node.port.postMessage({ rate: hs.rate }); else sink();
+          acc = 0; sramAcc = 0; s.phase = 'run';
+        });
       }).catch(function (e) { if (gone) return; if (hs) { hs.close(); hs = null; } s.phase = 'menu'; s.msg = String(e && e.message || e); });
+    }
+    function pauseAction(item) {
+      if (item === 'Resume') { s.phase = 'run'; return; }
+      if (item === 'Quit') { saveSram(); if (hs) { hs.close(); hs = null; } s.phase = 'menu'; s.msg = ''; return; }
+      if (item === 'Save State') { var buf = hs && hs.saveState(); s.pmsg = buf ? 'Saved' : 'This core has no savestate support'; if (buf) store.set('state:' + s.file, buf); return; }
+      if (item === 'Load State') {
+        store.get('state:' + s.file).then(function (buf) { if (gone || s.phase !== 'pause') return; s.pmsg = (buf && hs && hs.loadState(buf)) ? 'Loaded' : 'No save'; });
+      }
     }
 
     function maskFor(p) {
@@ -166,24 +218,44 @@ Games.register({
         if (d && s.list.length && (d !== navDir || now - navAt > 220)) { s.cur = (s.cur + d + s.list.length) % s.list.length; navAt = now; }
         navDir = d; return;
       }
+      if (s.phase === 'pause') { // same stick-repeat nav as the ROM menu, over the pause items instead
+        var pp = lead(), pd = pp && pp.stick.y < -0.5 ? -1 : pp && pp.stick.y > 0.5 ? 1 : 0, pnow = Date.now();
+        if (pd && (pd !== navDir2 || pnow - navAt2 > 220)) { s.pcur = (s.pcur + pd + PAUSE_ITEMS.length) % PAUSE_ITEMS.length; navAt2 = pnow; }
+        navDir2 = pd; return;
+      }
       if (s.phase !== 'run' || !hs) return;
       var m = [0, 0, 0, 0]; ctx.players().forEach(function (q) { if (q.slot < 4) m[q.slot] = maskFor(q); }); hs.mask = m;
       acc += dt; var spf = 1 / hs.fps, n = 0;
       while (acc >= spf && n < MAXFRAMES) { hs.run(); acc -= spf; n++; }
       if (acc > spf * MAXFRAMES) acc = 0;
+      sramAcc += dt; if (sramAcc >= SRAM_PERIOD) { sramAcc = 0; saveSram(); }
     }
     function onButton(p, name, down) {
-      if (!down || s.phase !== 'menu' || !s.list.length) return;
-      if (name === 'A' && lead() === p) play(s.list[s.cur]);
+      if (!down || lead() !== p) return;
+      if (s.phase === 'menu') { if (name === 'A' && s.list.length) play(s.list[s.cur]); return; }
+      if (s.phase === 'run') { if (name === 'Select') { s.phase = 'pause'; s.pcur = 0; s.pmsg = ''; } return; }
+      if (s.phase === 'pause') {
+        if (name === 'Select') { s.phase = 'run'; return; }
+        if (name === 'A') pauseAction(PAUSE_ITEMS[s.pcur]);
+      }
     }
     function render(g, w, h) {
       g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
       g.textAlign = 'center';
-      if (s.phase === 'run' && frame) {
+      if ((s.phase === 'run' || s.phase === 'pause') && frame) {
         if (!canvas) canvas = makeCanvas();
         if (frame.fresh) { canvas.width = frame.w; canvas.height = frame.h; canvas.getContext('2d').putImageData(new ImageData(frame.px, frame.w, frame.h), 0, 0); frame.fresh = false; }
         var asp = hs && hs.aspect > 0 ? hs.aspect : frame.w / frame.h, dh = Math.min(h, w / asp), dw = dh * asp;
         g.imageSmoothingEnabled = false; g.drawImage(canvas, (w - dw) / 2, (h - dh) / 2, dw, dh);
+        if (s.phase === 'pause') {
+          g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillRect(0, 0, w, h);
+          g.fillStyle = '#f1ebde'; g.font = '800 30px system-ui, sans-serif'; g.fillText('Paused', w / 2, h / 2 - 70);
+          PAUSE_ITEMS.forEach(function (it, i) {
+            var sel = i === s.pcur;
+            g.fillStyle = sel ? '#d9b27a' : '#9b9384'; g.font = (sel ? '700 ' : '500 ') + '20px system-ui, sans-serif'; g.fillText(it, w / 2, h / 2 - 20 + i * 34);
+          });
+          if (s.pmsg) { g.fillStyle = '#9b9384'; g.font = '500 16px system-ui, sans-serif'; g.fillText(s.pmsg, w / 2, h / 2 + 120); }
+        }
         return;
       }
       g.fillStyle = '#f1ebde'; g.font = '800 40px system-ui, sans-serif'; g.fillText('Retro', w / 2, 70);
@@ -199,7 +271,7 @@ Games.register({
       }
       if (s.list.length) { g.fillStyle = '#9b9384'; g.font = '500 16px system-ui, sans-serif'; g.fillText('Stick: choose   A: play', w / 2, h - 24); }
     }
-    function destroy() { gone = true; if (hs) { hs.close(); hs = null; } if (node) { try { node.disconnect(); } catch (e) { /* gone */ } node = null; } }
+    function destroy() { gone = true; saveSram(); if (hs) { hs.close(); hs = null; } if (node) { try { node.disconnect(); } catch (e) { /* gone */ } node = null; } }
 
     return {
       s: s, host: host, maskFor: maskFor, tick: tick, render: render, onButton: onButton, destroy: destroy,

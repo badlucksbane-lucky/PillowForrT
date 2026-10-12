@@ -35,6 +35,11 @@ function fakeCore(o = {}) {
       if (o.single) table[cb.a1](o.single[0], o.single[1]);
     },
     _retro_reset: () => M.calls.push('reset'), _retro_unload_game: () => M.calls.push('unload'), _retro_deinit: () => M.calls.push('deinit'),
+    _retro_serialize_size: () => o.stateSize ?? 4,
+    _retro_serialize: (p, n) => { M.calls.push('serialize'); for (let i = 0; i < n; i++) HEAPU8[p + i] = o.stateByte ?? 7; return o.serializeOk === false ? 0 : 1; },
+    _retro_unserialize: (p, n) => { M.calls.push('unserialize'); M.lastUnserialize = HEAPU8.slice(p, p + n); return o.unserializeOk === false ? 0 : 1; },
+    _retro_get_memory_size: id => id === 0 ? (o.sramSize ?? 0) : 0,
+    _retro_get_memory_data: id => { if (id !== 0 || !(o.sramSize ?? 0)) return 0; if (!M.sramPtr) M.sramPtr = M._malloc(o.sramSize); return M.sramPtr; },
     env: (cmd, v) => { const d = M._malloc(64); if (v) v(dv, d); const r = table[cb.env](cmd, d); return { r, d }; }, dv
   });
   return M;
@@ -83,18 +88,30 @@ const hostOf = (M, io = {}) => { let h; new Function('Games', src)({ register: g
   h.close();
   check('closing unloads, deinits and frees every callback', M.calls.slice(-2).join() === 'unload,deinit' && M.table.filter(Boolean).length === 0 && before > 5, [M.calls, before]);
 }
+{ // savestates and battery saves
+  const M = fakeCore({ stateSize: 4, stateByte: 7, sramSize: 4 }); const h = hostOf(M); h.load(new Uint8Array(4), 'x');
+  const st = h.saveState();
+  check('a savestate is read out at its serialize size', st && st.length === 4 && Array.from(st).every(b => b === 7), st);
+  check('a savestate is restored by unserialize', h.loadState(new Uint8Array([9, 9, 9, 9])) === true && Array.from(M.lastUnserialize).join() === '9,9,9,9', M.lastUnserialize);
+  check('sram starts out zeroed at its memory size', (() => { const e = h.saveSram(); return e && e.length === 4 && e.every(b => b === 0); })());
+  check('sram is written back by get_memory_data', h.loadSram(new Uint8Array([1, 2, 3, 4])) === true && Array.from(h.saveSram()).join() === '1,2,3,4', h.saveSram());
+  const none = hostOf(fakeCore({ stateSize: 0, sramSize: 0 })); none.load(new Uint8Array(4), 'x');
+  check('no serialize support (size 0) reports null, and nothing is freed twice', none.saveState() === null && none.loadState(new Uint8Array([1])) === false, none.saveState());
+  check('no memory support (size 0) reports null/false', none.saveSram() === null && none.loadSram(new Uint8Array([1])) === false, none.saveSram());
+}
 
 // ---- the game around it ----
 const players = [0, 1].map(i => ({ id: 'p' + i, slot: i, name: 'P' + i, stick: { x: 0, y: 0 }, btn: {} }));
 const mk = (coreOpts, loaderOver = {}) => {
-  const M = fakeCore(coreOpts), log = { cores: [], roms: [] };
+  const M = fakeCore(coreOpts), log = { cores: [], roms: [] }, saves = {}, setLog = [];
+  const store = { get: k => Promise.resolve(saves[k] ?? null), set: (k, v) => { saves[k] = v; setLog.push(k); return Promise.resolve(); } };
   const loader = {
     index: () => Promise.resolve({ cores: [{ id: 'fake', name: 'Fake' }], roms: [{ file: 'a.nes', core: 'fake', name: 'a' }, { file: 'b.gb', core: 'fake', name: 'b' }, { file: 'c.gb', core: 'fake', name: 'c' }] }),
-    core: id => { log.cores.push(id); return Promise.resolve(M); }, rom: f => { log.roms.push(f); return Promise.resolve(new Uint8Array(8)); }, ...loaderOver
+    core: id => { log.cores.push(id); return Promise.resolve(M); }, rom: f => { log.roms.push(f); return Promise.resolve(new Uint8Array(8)); }, store, ...loaderOver
   };
   players.forEach(p => { p.stick.x = p.stick.y = 0; p.btn = {}; });
   const inst = game.create({ players: () => players, retro: loader, audio: null, rumble() {}, panel() {}, end() {} });
-  return { M, inst, log, s: inst.s };
+  return { M, inst, log, s: inst.s, saves, setLog };
 };
 const now = Date.now; let clock = 1000; Date.now = () => clock;
 {
@@ -134,6 +151,41 @@ const now = Date.now; let clock = 1000; Date.now = () => clock;
   g.inst.destroy();
   check('leaving the game closes the core', g.M.calls.slice(-2).join() === 'unload,deinit', g.M.calls);
   g.M.calls.length = 0; g.inst.tick(1); check('and nothing runs afterwards', !g.M.calls.includes('run'), g.M.calls);
+}
+{ // battery saves, savestates and the pause menu
+  const g = mk({ fps: 60, sramSize: 4 }); await tick();
+  g.saves['sram:a.nes'] = new Uint8Array([5, 6, 7, 8]);
+  g.inst.onButton(players[0], 'A', true); await tick(); await tick(); await tick();
+  check('a stored battery save is restored into sram on load', g.s.phase === 'run' && Array.from(g.M.HEAPU8.slice(g.M.sramPtr, g.M.sramPtr + 4)).join() === '5,6,7,8', g.s.phase);
+
+  g.setLog.length = 0; for (let i = 0; i < 4; i++) g.inst.tick(1); // SRAM_PERIOD is 3s, so four 1s ticks cross it once
+  check('sram autosaves periodically while running', g.setLog.filter(k => k === 'sram:a.nes').length === 1 && g.saves['sram:a.nes'].join() === '5,6,7,8', g.setLog);
+
+  g.inst.onButton(players[0], 'Select', true);
+  check('Select opens the pause menu over the running frame', g.s.phase === 'pause' && g.s.pcur === 0, g.s.phase);
+  players[0].stick.y = 1; g.inst.tick(0.016);
+  check('the pause menu is navigated by stick like the ROM menu', g.s.pcur === 1, g.s.pcur); // 1: Save State
+  players[0].stick.y = 0; g.inst.tick(0.016);
+  g.inst.onButton(players[0], 'A', true);
+  check('Save State writes a state entry and reports it', g.s.pmsg === 'Saved' && g.saves['state:a.nes'] && g.saves['state:a.nes'].length === 4, [g.s.pmsg, g.saves['state:a.nes']]);
+  players[0].stick.y = 1; g.inst.tick(0.016); players[0].stick.y = 0; g.inst.tick(0.016); // 2: Load State
+  check('moved to Load State', g.s.pcur === 2, g.s.pcur);
+  g.inst.onButton(players[0], 'A', true); await tick();
+  check('Load State restores the saved state and reports it', g.s.pmsg === 'Loaded' && g.M.lastUnserialize && Array.from(g.M.lastUnserialize).every(b => b === 7), g.M.lastUnserialize);
+  g.inst.onButton(players[0], 'Select', true);
+  check('Select again resumes the game', g.s.phase === 'run', g.s.phase);
+
+  g.inst.onButton(players[0], 'Select', true);
+  for (let i = 0; i < 3; i++) { players[0].stick.y = 1; g.inst.tick(0.016); players[0].stick.y = 0; g.inst.tick(0.016); } // Resume -> Save -> Load -> Quit
+  check('navigated to Quit', g.s.pcur === 3, g.s.pcur);
+  g.setLog.length = 0; g.inst.onButton(players[0], 'A', true);
+  check('Quit closes the core, saves sram once more and returns to the menu', g.s.phase === 'menu' && g.inst.hs === null && g.setLog.includes('sram:a.nes'), g.s.phase);
+}
+{ // destroy() also flushes a final battery save
+  const g = mk({ fps: 60, sramSize: 4 }); await tick();
+  g.inst.onButton(players[0], 'A', true); await tick(); await tick(); await tick();
+  g.inst.destroy();
+  check('destroy() saves sram one last time', g.saves['sram:a.nes'] && g.saves['sram:a.nes'].length === 4, g.saves);
 }
 {
   const g = mk({ reject: true }); await tick();
